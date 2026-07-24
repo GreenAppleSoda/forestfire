@@ -8,9 +8,13 @@ korea_mountains.json(전국 산 정보) → mountain_data / mountain_location CS
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
 import json
 import re
-from pathlib import Path
 
 import pandas as pd
 

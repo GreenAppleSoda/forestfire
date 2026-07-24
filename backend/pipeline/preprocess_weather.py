@@ -10,10 +10,14 @@ ASOS 일자료 전처리 + 관측지점→시군구 매핑 + 시군구×일 기�
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
 import json
 import math
 import re
-from pathlib import Path
 
 import pandas as pd
 

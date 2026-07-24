@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
 import pandas as pd
 
 from paths import DATA_RAW, RAW_ASOS_DAILY, RAW_ASOS_PARTS, ensure_dirs

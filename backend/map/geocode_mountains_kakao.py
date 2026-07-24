@@ -12,10 +12,15 @@
   python backend/geocode_mountains_kakao.py --limit 20   # 테스트
   python backend/geocode_mountains_kakao.py --force      # 캐시 무시 재조회
 
-환경변수: KAKAO_REST_API_KEY (frontend/.env.local 에서도 읽음)
+환경변수: KAKAO_REST_API_KEY (ml-service/.env 또는 frontend/.env.local)
 """
 
 from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import argparse
 import json
@@ -24,7 +29,6 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from pathlib import Path
 
 import pandas as pd
 from pyproj import Transformer
@@ -32,6 +36,7 @@ from pyproj import Transformer
 from paths import (
     DATA_PROCESSED,
     FRONTEND_ENV_LOCAL,
+    ML_SERVICE_ENV,
     MOUNTAIN_DATA,
     ROOT,
     ensure_dirs,
@@ -57,14 +62,15 @@ def _load_api_key() -> str:
     key = (os.environ.get("KAKAO_REST_API_KEY") or "").strip()
     if key:
         return key
-    env_path = FRONTEND_ENV_LOCAL
-    if env_path.exists():
+    for env_path in (ML_SERVICE_ENV, FRONTEND_ENV_LOCAL):
+        if not env_path.exists():
+            continue
         for line in env_path.read_text(encoding="utf-8").splitlines():
             line = line.strip()
             if line.startswith("KAKAO_REST_API_KEY="):
                 return line.split("=", 1)[1].strip().strip('"').strip("'")
     raise RuntimeError(
-        "KAKAO_REST_API_KEY 없음. frontend/.env.local 에 KAKAO_REST_API_KEY=... 를 넣어 주세요."
+        "KAKAO_REST_API_KEY 없음. ml-service/.env 에 KAKAO_REST_API_KEY=... 를 넣어 주세요."
     )
 
 

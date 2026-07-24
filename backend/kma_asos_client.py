@@ -15,7 +15,7 @@ from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from paths import FRONTEND_ENV_LOCAL
+from paths import FRONTEND_ENV_LOCAL, ML_SERVICE_ENV
 
 KST = ZoneInfo("Asia/Seoul")
 
@@ -26,6 +26,16 @@ DAILY_URL = "https://apihub.kma.go.kr/api/typ01/url/kma_sfcdd.php"
 MISS = {-9, -9.0, -99, -99.0, -999, -999.0}
 
 
+def _read_env_key(env_path: Path, name: str = "KMA_API_AUTH_KEY") -> str:
+    if not env_path.exists():
+        return ""
+    for line in env_path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if line.startswith(f"{name}="):
+            return line.split("=", 1)[1].strip().strip('"').strip("'")
+    return ""
+
+
 def _auth_key() -> str:
     key = (
         os.environ.get("KMA_API_AUTH_KEY")
@@ -33,17 +43,11 @@ def _auth_key() -> str:
         or ""
     ).strip()
     if not key:
-        # frontend/.env.local 에서 읽기 시도
-        env_path = FRONTEND_ENV_LOCAL
-        if env_path.exists():
-            for line in env_path.read_text(encoding="utf-8").splitlines():
-                line = line.strip()
-                if line.startswith("KMA_API_AUTH_KEY="):
-                    key = line.split("=", 1)[1].strip().strip('"').strip("'")
-                    break
+        # ml-service/.env 우선, 하위 호환으로 frontend/.env.local
+        key = _read_env_key(ML_SERVICE_ENV) or _read_env_key(FRONTEND_ENV_LOCAL)
     if not key:
         raise RuntimeError(
-            "KMA_API_AUTH_KEY 가 없습니다. frontend/.env.local 에 "
+            "KMA_API_AUTH_KEY 가 없습니다. ml-service/.env 에 "
             "KMA_API_AUTH_KEY=발급키 를 넣어 주세요."
         )
     return key

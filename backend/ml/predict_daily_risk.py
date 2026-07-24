@@ -3,13 +3,13 @@
 
 사용 예:
   # 기상청 ASOS 실시간(시간자료) → 당일 예측 (기본)
-  python backend/predict_daily_risk.py --kma
+  python backend/ml/predict_daily_risk.py --kma
 
   # 특정 날짜 (기상 CSV에 있으면 그 값 사용)
-  python backend/predict_daily_risk.py --date 2025-03-15
+  python backend/ml/predict_daily_risk.py --date 2025-03-15
 
   # 날씨 직접 입력 (전국 동일 기상 + 지역별 이력 feature)
-  python backend/predict_daily_risk.py --date 2026-07-23 \\
+  python backend/ml/predict_daily_risk.py --date 2026-07-23 \\
     --temp-avg 28 --temp-min 22 --temp-max 33 \\
     --humidity-avg 45 --humidity-min 28 \\
     --wind-avg 3.5 --wind-max 6 --precip 0
@@ -19,12 +19,16 @@
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
 import argparse
 import json
 import math
 import urllib.parse
 import urllib.request
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -429,8 +433,86 @@ def resolve_weather(
     )
 
 
-def main() -> None:
+def run_daily_predict(
+    *,
+    date: str | None = None,
+    cli_weather: dict | None = None,
+    use_kma: bool = False,
+    use_open_meteo: bool = False,
+    write_file: bool = True,
+) -> dict:
+    """당일 시군구 산불 위험 예측. Flask / CLI 공통 진입점."""
     ensure_dirs()
+    if not WILDFIRE_XGB_MODEL.exists():
+        raise FileNotFoundError(
+            f"{WILDFIRE_XGB_MODEL} 없음. 먼저 python backend/train_wildfire_xgb.py 실행"
+        )
+    if not SIGUNGU_HIST_STATE.exists():
+        raise FileNotFoundError(str(SIGUNGU_HIST_STATE))
+
+    req_date = date or pd.Timestamp.now(tz="Asia/Seoul").strftime("%Y-%m-%d")
+    # 기본: 날씨 인자 없으면 기상청 ASOS
+    if cli_weather is not None:
+        use_kma = False
+    elif not use_kma and not use_open_meteo:
+        use_kma = True
+
+    pred_date, weather_by_code, source = resolve_weather(
+        req_date, cli_weather, use_kma, use_open_meteo
+    )
+
+    hist = load_hist()
+    feats = build_features_for_day(pred_date, weather_by_code, hist)
+    feats = feats.dropna(subset=FEATURE_COLS)
+
+    model = XGBClassifier()
+    model.load_model(str(WILDFIRE_XGB_MODEL))
+    proba = model.predict_proba(feats[FEATURE_COLS])[:, 1]
+    feats = feats.copy()
+    feats["y_prob"] = proba
+
+    mn, mx = float(feats["y_prob"].min()), float(feats["y_prob"].max())
+    feats["ml_risk_norm"] = (feats["y_prob"] - mn) / (mx - mn + 1e-12)
+
+    bundle = {}
+    if WILDFIRE_XGB_BUNDLE.exists():
+        bundle = json.loads(WILDFIRE_XGB_BUNDLE.read_text(encoding="utf-8"))
+
+    sample_code = "11110" if "11110" in weather_by_code else next(iter(weather_by_code))
+    sample_wx = weather_by_code[sample_code]
+
+    payload = {
+        "predict_date": pred_date,
+        "weather_source": source,
+        "sample_weather": {
+            k: round(float(v), 2) if v == v else None for k, v in sample_wx.items()
+        },
+        "model_metrics": bundle.get("metrics", {}),
+        "n_regions": int(len(feats)),
+        "note": "y_prob=당일 산불 발생 예측확률 · ml_risk_norm=지도 색용 정규화",
+        "regions": [
+            {
+                "code": str(r["sigungu_code"]),
+                "name": r["sigungu_name"],
+                "province": r["province"],
+                "ml_risk": round(float(r["y_prob"]), 6),
+                "ml_risk_norm": round(float(r["ml_risk_norm"]), 4),
+                "humidity_min": round(float(r["humidity_min"]), 1),
+                "temp_avg": round(float(r["temp_avg"]), 1),
+                "precip": round(float(r["precip"]), 1),
+            }
+            for _, r in feats.sort_values("y_prob", ascending=False).iterrows()
+        ],
+    }
+    if write_file:
+        DAILY_ML_RISK.parent.mkdir(parents=True, exist_ok=True)
+        DAILY_ML_RISK.write_text(
+            json.dumps(payload, ensure_ascii=False), encoding="utf-8"
+        )
+    return payload
+
+
+def main() -> None:
     parser = argparse.ArgumentParser(description="당일 산불 위험 예측")
     parser.add_argument(
         "--date",
@@ -462,79 +544,28 @@ def main() -> None:
     if args.no_open_meteo:
         args.open_meteo = False
 
-    if not WILDFIRE_XGB_MODEL.exists():
-        raise FileNotFoundError(
-            f"{WILDFIRE_XGB_MODEL} 없음. 먼저 python backend/train_wildfire_xgb.py 실행"
-        )
-    if not SIGUNGU_HIST_STATE.exists():
-        raise FileNotFoundError(SIGUNGU_HIST_STATE)
-
-    date = args.date
     cli_wx = weather_from_cli(args)
-    # 기본: 날씨 인자 없으면 기상청 ASOS
     use_kma = bool(args.kma) or (cli_wx is None and not args.open_meteo)
     if cli_wx is not None:
         use_kma = False
-    print(f"요청일: {date}")
-    date, weather_by_code, source = resolve_weather(
-        date, cli_wx, use_kma, args.open_meteo
+
+    print(f"요청일: {args.date}")
+    payload = run_daily_predict(
+        date=args.date,
+        cli_weather=cli_wx,
+        use_kma=use_kma,
+        use_open_meteo=bool(args.open_meteo),
+        write_file=True,
     )
-    print(f"예측일: {date}")
-    print(f"기상 출처: {source} / 시군구 {len(weather_by_code)}개")
-
-    hist = load_hist()
-    feats = build_features_for_day(date, weather_by_code, hist)
-    feats = feats.dropna(subset=FEATURE_COLS)
-    print(f"feature 행: {len(feats)}")
-
-    model = XGBClassifier()
-    model.load_model(str(WILDFIRE_XGB_MODEL))
-    proba = model.predict_proba(feats[FEATURE_COLS])[:, 1]
-    feats = feats.copy()
-    feats["y_prob"] = proba
-
-    # 정규화 (지도 색용)
-    mn, mx = float(feats["y_prob"].min()), float(feats["y_prob"].max())
-    feats["ml_risk_norm"] = (feats["y_prob"] - mn) / (mx - mn + 1e-12)
-
-    bundle = {}
-    if WILDFIRE_XGB_BUNDLE.exists():
-        bundle = json.loads(WILDFIRE_XGB_BUNDLE.read_text(encoding="utf-8"))
-
-    # 샘플 기상 (대표: 서울 종로 또는 첫 행)
-    sample_code = "11110" if "11110" in weather_by_code else next(iter(weather_by_code))
-    sample_wx = weather_by_code[sample_code]
-
-    payload = {
-        "predict_date": date,
-        "weather_source": source,
-        "sample_weather": {k: round(float(v), 2) if v == v else None for k, v in sample_wx.items()},
-        "model_metrics": bundle.get("metrics", {}),
-        "n_regions": int(len(feats)),
-        "note": "y_prob=당일 산불 발생 예측확률 · ml_risk_norm=지도 색용 정규화",
-        "regions": [
-            {
-                "code": str(r["sigungu_code"]),
-                "name": r["sigungu_name"],
-                "province": r["province"],
-                "ml_risk": round(float(r["y_prob"]), 6),
-                "ml_risk_norm": round(float(r["ml_risk_norm"]), 4),
-                "humidity_min": round(float(r["humidity_min"]), 1),
-                "temp_avg": round(float(r["temp_avg"]), 1),
-                "precip": round(float(r["precip"]), 1),
-            }
-            for _, r in feats.sort_values("y_prob", ascending=False).iterrows()
-        ],
-    }
-    DAILY_ML_RISK.parent.mkdir(parents=True, exist_ok=True)
-    DAILY_ML_RISK.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    print(f"예측일: {payload['predict_date']}")
+    print(f"기상 출처: {payload['weather_source']} / 시군구 {payload['n_regions']}개")
     print(f"저장: {DAILY_ML_RISK}")
     print("상위 8개:")
-    print(
-        feats.sort_values("y_prob", ascending=False)
-        .head(8)[["sigungu_name", "province", "y_prob", "humidity_min", "temp_avg"]]
-        .to_string(index=False)
-    )
+    for r in payload["regions"][:8]:
+        print(
+            f"  {r['name']} ({r['province']}) "
+            f"prob={r['ml_risk']:.4f} humid_min={r['humidity_min']} temp={r['temp_avg']}"
+        )
 
 
 if __name__ == "__main__":

@@ -204,7 +204,7 @@ export function KoreaSvgMap({ mapData, layers, mlScores, dailyRisk }: Props) {
     setPredictError(null);
     const job = (async () => {
       try {
-        const res = await fetch("/api/predict", {
+        const res = await fetch("/api/predict/daily", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ source: "kma", force }),

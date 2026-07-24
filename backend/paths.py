@@ -2,9 +2,12 @@
 
 구조
 ----
-  frontend/   Next.js UI (+ public/data 서빙용 JSON)
-  backend/    Python ETL · ML · 예측 스크립트
-  db/         원본·전처리·분석 산출물 (파일 기반 데이터 저장소)
+  frontend/     Next.js UI
+  server/       Express 공개 API
+  ml-service/   Flask 예측
+  backend/      오프라인 ETL · 분석 · 학습
+    pipeline/ analyze/ map/ ml/
+  db/           원본·전처리·분석 산출물
 """
 
 from pathlib import Path
@@ -16,6 +19,8 @@ BACKEND = ROOT / "backend"
 FRONTEND = ROOT / "frontend"
 FRONTEND_PUBLIC_DATA = FRONTEND / "public" / "data"
 FRONTEND_ENV_LOCAL = FRONTEND / ".env.local"
+ML_SERVICE_ENV = ROOT / "ml-service" / ".env"
+SERVER_ENV = ROOT / "server" / ".env"
 
 DB = ROOT / "db"
 DATA_RAW = DB / "raw"

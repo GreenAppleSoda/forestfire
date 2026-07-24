@@ -1,15 +1,20 @@
 import { KoreaSvgMap } from "@/components/KoreaSvgMap";
 import type { AdminLayer, DailyMlRisk, MapData, SigunguMlScores } from "@/lib/types";
-import { readFile } from "fs/promises";
-import path from "path";
 
 export const dynamic = "force-dynamic";
 
-async function loadJson<T>(file: string): Promise<T | null> {
+const EXPRESS_URL = process.env.EXPRESS_URL || "http://localhost:4000";
+
+async function fetchApi<T>(path: string): Promise<T | null> {
   try {
-    const full = path.join(process.cwd(), "public", "data", file);
-    const raw = await readFile(full, "utf-8");
-    return JSON.parse(raw) as T;
+    const res = await fetch(`${EXPRESS_URL}${path}`, {
+      cache: "no-store",
+      next: { revalidate: 0 },
+    });
+    if (!res.ok) return null;
+    const json = (await res.json()) as { ok?: boolean; data?: T };
+    if (json && "data" in json) return json.data ?? null;
+    return json as T;
   } catch {
     return null;
   }
@@ -17,16 +22,18 @@ async function loadJson<T>(file: string): Promise<T | null> {
 
 export default async function HomePage() {
   const [mapData, sido, sigungu, emd, mlScores, dailyRisk] = await Promise.all([
-    loadJson<MapData>("map-data.json"),
-    loadJson<AdminLayer>("admin-sido.json"),
-    loadJson<AdminLayer>("admin-sigungu.json"),
-    loadJson<AdminLayer>("admin-emd.json"),
-    loadJson<SigunguMlScores>("sigungu_ml_scores.json"),
-    loadJson<DailyMlRisk>("daily_ml_risk.json"),
+    fetchApi<MapData>("/api/map/data"),
+    fetchApi<AdminLayer>("/api/map/admin/sido"),
+    fetchApi<AdminLayer>("/api/map/admin/sigungu"),
+    fetchApi<AdminLayer>("/api/map/admin/emd"),
+    fetchApi<SigunguMlScores>("/api/map/ml-scores"),
+    fetchApi<DailyMlRisk>("/api/map/daily-risk"),
   ]);
 
   if (!mapData || !sido || !sigungu || !emd) {
-    throw new Error("필수 지도 데이터가 없습니다.");
+    throw new Error(
+      "필수 지도 데이터를 불러오지 못했습니다. Express(server)가 실행 중인지 확인하세요.",
+    );
   }
 
   return (

@@ -18,7 +18,7 @@ export function DailyPredictForm({ onPredicted }: Props) {
     setError(null);
     setMeta(null);
     try {
-      const res = await fetch("/api/predict", {
+      const res = await fetch("/api/predict/daily", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ source: "kma", force }),
