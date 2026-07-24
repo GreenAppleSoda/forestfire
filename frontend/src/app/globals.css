@@ -1,0 +1,40 @@
+@import "tailwindcss";
+
+:root {
+  --background: #c5d4e4;
+  --foreground: #1c1917;
+  --safe: #2563eb;
+  --danger: #dc2626;
+  --panel: #f7f5f1;
+  --header: #f4efe6;
+  --sea: #c5d4e4;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-sans);
+  --font-display: var(--font-display);
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), "Apple SD Gothic Neo", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* 지도 영역에서 트랙패드/휠 기본 페이지 스크롤 방지 */
+.map-stage {
+  touch-action: none;
+  overscroll-behavior: none;
+}
