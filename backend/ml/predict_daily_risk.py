@@ -497,10 +497,11 @@ def run_daily_predict(
                 "province": r["province"],
                 "ml_risk": round(float(r["y_prob"]), 6),
                 "ml_risk_norm": round(float(r["ml_risk_norm"]), 4),
-                "humidity_min": round(float(r["humidity_min"]), 1),
-                "temp_avg": round(float(r["temp_avg"]), 1),
-                "precip": round(float(r["precip"]), 1),
-            }
+                        "humidity_min": round(float(r["humidity_min"]), 1),
+                        "temp_avg": round(float(r["temp_avg"]), 1),
+                        "precip": round(float(r["precip"]), 1),
+                        "wind_avg": round(float(r["wind_avg"]), 1),
+                    }
             for _, r in feats.sort_values("y_prob", ascending=False).iterrows()
         ],
     }

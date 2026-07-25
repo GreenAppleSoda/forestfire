@@ -1,6 +1,6 @@
 "use client";
 
-import type { AdminRegion, MountainInfo, RegionStat } from "@/lib/types";
+import type { AdminRegion, MountainInfo, RegionStat, RiskMode } from "@/lib/types";
 import { MountainDetail } from "./MountainDetail";
 
 type Props = {
@@ -10,7 +10,7 @@ type Props = {
   historyProb?: number | null;
   mlRiskNorm?: number | null;
   mlRiskRaw?: number | null;
-  riskMode: "history" | "daily";
+  riskMode: RiskMode;
   predictDate?: string;
   weatherSource?: string;
   predictLoading?: boolean;
@@ -42,12 +42,16 @@ export function MountainSearchResult({
     mapRegion?.province;
 
   const display =
-    riskMode === "daily"
+    riskMode === "daily" || riskMode === "scenario"
       ? (mlRiskRaw ?? mlRiskNorm)
       : historyProb ?? (mapRegion ? mapRegion.risk_score / 100 : null);
 
   const modeLabel =
-    riskMode === "daily" ? "당일 예측 " : "이력 기반 확률 ";
+    riskMode === "daily"
+      ? "당일 예측 "
+      : riskMode === "scenario"
+        ? "시나리오 예측 "
+        : "이력 기반 확률 ";
 
   return (
     <div className="flex h-full flex-col bg-[#F7F4EF]">
@@ -88,12 +92,15 @@ export function MountainSearchResult({
                   {display != null ? `${(display * 100).toFixed(1)}%` : "—"}
                 </span>
               </p>
-              {riskMode === "daily" && predictLoading && (
+              {(riskMode === "daily" || riskMode === "scenario") &&
+                predictLoading && (
                 <p className="mt-0.5 text-[11px] text-[#78716c]">
-                  기상청 관측 조회 중…
+                  {riskMode === "scenario" ? "시나리오 예측 중…" : "기상청 관측 조회 중…"}
                 </p>
               )}
-              {riskMode === "daily" && predictDate && !predictLoading && (
+              {(riskMode === "daily" || riskMode === "scenario") &&
+                predictDate &&
+                !predictLoading && (
                 <p className="mt-0.5 text-[11px] text-[#a8a29e]">
                   예측일 {predictDate}
                   {weatherSource ? ` · ${weatherSource}` : ""}
@@ -106,7 +113,8 @@ export function MountainSearchResult({
                 {historyProb != null && (
                   <p>이력 확률 {(historyProb * 100).toFixed(1)}%</p>
                 )}
-                {riskMode === "daily" && mlRiskRaw != null && (
+                {(riskMode === "daily" || riskMode === "scenario") &&
+                  mlRiskRaw != null && (
                   <p>모델 발생 확률 {(mlRiskRaw * 100).toFixed(1)}%</p>
                 )}
                 {mapRegion && (

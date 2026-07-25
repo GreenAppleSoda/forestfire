@@ -128,7 +128,10 @@ export type GeoFeatureCollection = {
 
 export type AdminLevel = "sido" | "sigungu" | "emd" | "li";
 
-export type RiskMode = "history" | "daily";
+export type RiskMode = "history" | "daily" | "scenario";
+
+/** 행정구역 코로플레스(SVG) ↔ 카카오 위성 */
+export type MapDisplayMode = "choropleth" | "satellite";
 
 export type SigunguMlRegion = {
   code: string;
@@ -140,6 +143,7 @@ export type SigunguMlRegion = {
   humidity_min?: number;
   temp_avg?: number;
   precip?: number;
+  wind_avg?: number;
 };
 
 export type SigunguMlScores = {
@@ -170,5 +174,6 @@ export type DailyMlRisk = SigunguMlScores & {
   weather_source: string;
   sample_weather?: Record<string, number | null>;
   n_regions?: number;
+  scenario_summary?: string;
 };
 

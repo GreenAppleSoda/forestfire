@@ -80,7 +80,10 @@ npm run dev
 |------|-----|------|
 | `ml-service/.env` | `KMA_API_AUTH_KEY` | 기상청 API (서버 전용) |
 | `server/.env` | `FRONTEND_ORIGIN`, `ML_SERVICE_URL` | CORS · Flask URL |
-| `frontend/.env.local` | `NEXT_PUBLIC_KAKAO_MAP_KEY`, `EXPRESS_URL` | 공개 키 · API 주소 |
+| `frontend/.env.local` | `NEXT_PUBLIC_KAKAO_MAP_KEY`, `EXPRESS_URL` | 카카오 지도 JS 키 · Express 주소 |
+
+`frontend/.env.local.example` 을 복사해 `.env.local` 을 만들고 키를 넣으세요.  
+카카오 개발자 콘솔에서 **JavaScript 키**를 쓰고, Web 플랫폼에 `http://localhost:3000` 을 등록해야 위성 지도가 표시됩니다.
 
 `KMA_API_AUTH_KEY` / `KAKAO_REST_API_KEY` 는 프론트 `.env.local`에 두지 마세요.
 
@@ -93,11 +96,15 @@ npm run dev
 - `GET /api/map/daily-risk`
 - `GET /api/mountains?q=`
 - `POST /api/predict/daily` — body: `{ source, force, date?, weather? }`
+- `GET /api/predict/scenario/defaults?year=&month=`
+- `POST /api/predict/scenario` — body: `{ year, month, weather: { temp_avg, humidity_avg, wind_avg, precip } }`
 
 ## Flask API (내부)
 
 - `GET /health`
 - `POST /predict/daily` — Express만 호출
+- `GET /predict/scenario/defaults`
+- `POST /predict/scenario` — Express만 호출
 
 ## 배치 파이프라인 (오프라인)
 

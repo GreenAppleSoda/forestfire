@@ -50,11 +50,12 @@ function publicWeatherSource(raw) {
   return "unknown";
 }
 
-/** 브라우저로 내보낼 당일 예측 DTO (화이트리스트) */
+/** 브라우저로 내보낼 당일/시나리오 예측 DTO (화이트리스트) */
 function whitelistDailyRisk(raw) {
   if (!raw || typeof raw !== "object") return null;
   const metrics = raw.model_metrics || raw.metrics || {};
   const sample = raw.sample_weather || {};
+  const isScenario = Boolean(raw.scenario_summary);
   return {
     predict_date: raw.predict_date ?? null,
     weather_source: publicWeatherSource(raw.weather_source),
@@ -69,7 +70,10 @@ function whitelistDailyRisk(raw) {
       humidity_min: sample.humidity_min ?? null,
     },
     n_regions: raw.n_regions ?? (Array.isArray(raw.regions) ? raw.regions.length : 0),
-    note: "당일 시군구 산불 발생 예측 확률 (지도 색은 정규화 점수)",
+    note: isScenario
+      ? String(raw.note || "가정 시나리오 예측 확률 (실제 예보 아님)")
+      : "당일 시군구 산불 발생 예측 확률 (지도 색은 정규화 점수)",
+    scenario_summary: isScenario ? String(raw.scenario_summary) : undefined,
     model_metrics:
       metrics.roc_auc != null || metrics.pr_auc != null
         ? {
@@ -87,6 +91,7 @@ function whitelistDailyRisk(raw) {
           humidity_min: r.humidity_min,
           temp_avg: r.temp_avg,
           precip: r.precip,
+          wind_avg: r.wind_avg,
         }))
       : [],
   };
@@ -160,6 +165,41 @@ async function callFlaskPredict(body) {
   });
   const json = await r.json().catch(() => ({}));
   return { status: r.status, json };
+}
+
+async function callFlaskScenario(body) {
+  const r = await fetch(`${ML_SERVICE_URL}/predict/scenario`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(120_000),
+  });
+  const json = await r.json().catch(() => ({}));
+  return { status: r.status, json };
+}
+
+async function runPredictScenario(body) {
+  const year = Number(body.year);
+  const month = Number(body.month);
+  if (!Number.isFinite(year) || !Number.isFinite(month)) {
+    return { ok: false, error: "연도와 월을 입력해 주세요.", status: 400 };
+  }
+  const { status, json } = await callFlaskScenario({
+    year,
+    month,
+    weather: body.weather,
+    preset: body.preset,
+  });
+  if (!json.ok || status >= 400) {
+    console.error("[predict/scenario] ml-service error", status, json?.error, json?.detail);
+    return {
+      ok: false,
+      error: "시나리오 예측에 실패했습니다. 잠시 후 다시 시도해 주세요.",
+      status: 502,
+    };
+  }
+  const data = whitelistDailyRisk(json.data);
+  return { ok: true, data, cached: false, status: 200 };
 }
 
 async function runPredictDaily(body) {
@@ -318,6 +358,46 @@ app.post("/api/predict/daily", async (req, res) => {
     return res.json({ ok: true, data: result.data, cached: result.cached });
   } catch (e) {
     console.error("[predict/daily]", e);
+    return res.status(502).json({
+      ok: false,
+      error: "예측 서버에 연결할 수 없습니다.",
+    });
+  }
+});
+
+app.get("/api/predict/scenario/defaults", async (req, res) => {
+  try {
+    const qs = new URLSearchParams();
+    if (req.query.year) qs.set("year", String(req.query.year));
+    if (req.query.month) qs.set("month", String(req.query.month));
+    const url = `${ML_SERVICE_URL}/predict/scenario/defaults${qs.toString() ? `?${qs}` : ""}`;
+    const r = await fetch(url, { signal: AbortSignal.timeout(10_000) });
+    const json = await r.json().catch(() => ({}));
+    if (!json.ok || r.status >= 400) {
+      return res.status(502).json({ ok: false, error: "기본값을 불러오지 못했습니다." });
+    }
+    return res.json({ ok: true, data: json.data });
+  } catch (e) {
+    console.error("[predict/scenario/defaults]", e);
+    return res.status(502).json({
+      ok: false,
+      error: "예측 서버에 연결할 수 없습니다.",
+    });
+  }
+});
+
+app.post("/api/predict/scenario", async (req, res) => {
+  try {
+    const result = await runPredictScenario(req.body || {});
+    if (!result.ok) {
+      return res.status(result.status || 502).json({
+        ok: false,
+        error: result.error,
+      });
+    }
+    return res.json({ ok: true, data: result.data, cached: result.cached });
+  } catch (e) {
+    console.error("[predict/scenario]", e);
     return res.status(502).json({
       ok: false,
       error: "예측 서버에 연결할 수 없습니다.",

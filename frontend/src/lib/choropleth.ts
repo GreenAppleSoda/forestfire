@@ -1,14 +1,17 @@
-/** 파랑(안전) → 노랑 → 주황 → 빨강. HSL 보간으로 초록 구간을 피함. */
+/** 초록(낮음) → 연두 → 노랑 → 주황(높음). */
 
 type HslStop = { t: number; h: number; s: number; l: number };
 
 export const RISK_STOPS: HslStop[] = [
-  { t: 0, h: 224, s: 76, l: 48 },
-  { t: 0.22, h: 199, s: 89, l: 58 },
-  { t: 0.48, h: 45, s: 93, l: 52 },
-  { t: 0.72, h: 25, s: 95, l: 50 },
-  { t: 1, h: 0, s: 72, l: 46 },
+  { t: 0, h: 142, s: 55, l: 38 },
+  { t: 0.28, h: 98, s: 52, l: 46 },
+  { t: 0.55, h: 55, s: 78, l: 50 },
+  { t: 0.78, h: 36, s: 90, l: 50 },
+  { t: 1, h: 24, s: 92, l: 48 },
 ];
+
+/** 이 절대 확률 이상이면 색 스케일 최댓값(주황). 낮은 구간을 더 촘촘히 펼침. */
+export const ABS_COLOR_FOCUS = 0.4;
 
 function hslToRgb(h: number, s: number, l: number): [number, number, number] {
   const sn = s / 100;
@@ -59,13 +62,33 @@ function interpolateStops(t: number): string {
   return rgbToHex(r, g, b);
 }
 
-/** 확률(0~1) → 지도·범례 공통 색상 */
-export function probToColor(prob: number): string {
-  return interpolateStops(prob);
+/**
+ * 절대 확률(0~1) → 색 위치(0~1).
+ * 전국 min-max 상대 정규화가 아니라, 낮은 절대값 구간을 색으로 더 펼침.
+ * 예: 25% ≈ 스케일 중간~주황 쪽, 40%+ ≈ 최고색.
+ */
+export function densifyAbsoluteProb(
+  prob: number,
+  focusHigh = ABS_COLOR_FOCUS,
+): number {
+  const p = Math.max(0, Math.min(1, Number(prob) || 0));
+  if (p >= focusHigh) return 1;
+  const u = p / focusHigh;
+  // 0.65: 중·저구간 대비를 조금 더 살림
+  return Math.pow(u, 0.65);
 }
 
-/** 범례용 CSS linear-gradient */
+/** 확률(0~1) → 지도·범례 공통 색상 (절대값 + 낮은 구간 강조) */
+export function probToColor(prob: number): string {
+  return interpolateStops(densifyAbsoluteProb(prob));
+}
+
+/** 범례용 CSS linear-gradient — 바는 0%~40%+ 절대 확률 구간 */
 export function riskLegendGradient(): string {
-  const parts = RISK_STOPS.map((s) => `${interpolateStops(s.t)} ${Math.round(s.t * 100)}%`);
+  const absTicks = [0, 0.08, 0.15, 0.22, 0.3, 0.4];
+  const parts = absTicks.map((p, i) => {
+    const barPct = Math.round((i / (absTicks.length - 1)) * 100);
+    return `${probToColor(p)} ${barPct}%`;
+  });
   return `linear-gradient(to right, ${parts.join(", ")})`;
 }
