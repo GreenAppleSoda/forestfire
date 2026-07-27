@@ -1,11 +1,12 @@
 """
 ASOS 일자료 전처리 + 관측지점→시군구 매핑 + 시군구×일 기상표 생성.
 
-입력: db/raw/weather/asos_daily_2011_2026.csv (cp949)
+입력: db-archive/raw/weather/asos_daily_2011_2026.csv (cp949)
 출력:
-  db/processed/weather_daily_asos.csv          # 지점 일자료(정리)
-  db/processed/asos_station_sigungu_map.csv    # 지점↔대표 시군구
-  db/processed/weather_daily_sigungu.csv       # 시군구×일 (지도/ML용)
+  db-archive/processed/weather_daily_asos.csv       # 지점 일자료(정리)
+  db-archive/processed/asos_station_sigungu_map.csv # 지점↔대표 시군구
+  db/processed/weather_daily_sigungu.csv            # 시군구×일 (예측 런타임)
+  db/processed/sigungu_asos_station.csv             # 시군구→지점 (예측 런타임)
 """
 
 from __future__ import annotations
@@ -23,17 +24,21 @@ import pandas as pd
 
 from paths import (
     ADMIN_SIGUNGU_JSON,
-    DATA_PROCESSED,
+    ASOS_STATION_SIGUNGU_MAP,
+    DATA_PROCESSED_ETL,
     DATA_RAW,
     RAW_ASOS_DAILY,
     ROOT,
+    SIGUNGU_ASOS_STATION,
+    WEATHER_DAILY_ASOS,
+    WEATHER_DAILY_SIGUNGU,
     ensure_dirs,
 )
 
 RAW_ASOS = RAW_ASOS_DAILY
-OUT_ASOS = DATA_PROCESSED / "weather_daily_asos.csv"
-OUT_MAP = DATA_PROCESSED / "asos_station_sigungu_map.csv"
-OUT_SIGUNGU = DATA_PROCESSED / "weather_daily_sigungu.csv"
+OUT_ASOS = WEATHER_DAILY_ASOS
+OUT_MAP = ASOS_STATION_SIGUNGU_MAP
+OUT_SIGUNGU = WEATHER_DAILY_SIGUNGU
 ADMIN_SIGUNGU = ADMIN_SIGUNGU_JSON
 
 # 지점명 → 매칭용 시군구/도시 키 (관측소명이 행정명과 다를 때)
@@ -296,10 +301,9 @@ def main() -> None:
     sig_stn = assign_nearest_station(sig, stn_map)
     # 매핑 저장: 지점 대표 + 시군구별 배정
     stn_map.to_csv(OUT_MAP, index=False, encoding="utf-8-sig")
-    sig_assign_path = DATA_PROCESSED / "sigungu_asos_station.csv"
-    sig_stn.to_csv(sig_assign_path, index=False, encoding="utf-8-sig")
+    sig_stn.to_csv(SIGUNGU_ASOS_STATION, index=False, encoding="utf-8-sig")
     print(f"   {OUT_MAP.name} (지점→대표 시군구)")
-    print(f"   {sig_assign_path.name} (시군구→사용 지점) {len(sig_stn)}개")
+    print(f"   {SIGUNGU_ASOS_STATION.name} (시군구→사용 지점) {len(sig_stn)}개")
 
     print("3) 시군구×일 기상표…")
     daily = build_sigungu_daily(asos, sig_stn)
@@ -313,8 +317,8 @@ def main() -> None:
 
     # 임시 파일 정리
     for tmp in [
-        DATA_PROCESSED / "_asos_stations_tmp.json",
-        DATA_PROCESSED / "_sigungu_tmp.json",
+        DATA_PROCESSED_ETL / "_asos_stations_tmp.json",
+        DATA_PROCESSED_ETL / "_sigungu_tmp.json",
     ]:
         if tmp.exists():
             tmp.unlink()

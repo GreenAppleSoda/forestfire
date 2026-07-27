@@ -1,9 +1,9 @@
 """
 산 주소 → 카카오 로컬(지오코딩) → 위경도 + SVG 좌표
 
-- 입력: db/processed/mountain_data.csv
-- 캐시: db/processed/mountain_geocode_cache.json  (재실행 시 스킵)
-- 출력: db/processed/mountain_coords.csv
+- 입력: db-archive/processed/mountain_data.csv
+- 캐시: db-archive/processed/mountain_geocode_cache.json  (재실행 시 스킵)
+- 출력: db-archive/processed/mountain_coords.csv
 
 사용:
   python etl/map/geocode_mountains_kakao.py
@@ -32,16 +32,17 @@ import pandas as pd
 from pyproj import Transformer
 
 from paths import (
-    DATA_PROCESSED,
     FRONTEND_ENV_LOCAL,
     ML_SERVICE_ENV,
+    MOUNTAIN_COORDS,
     MOUNTAIN_DATA,
+    MOUNTAIN_GEOCODE_CACHE,
     ROOT,
     ensure_dirs,
 )
 
-CACHE_PATH = DATA_PROCESSED / "mountain_geocode_cache.json"
-OUT_CSV = DATA_PROCESSED / "mountain_coords.csv"
+CACHE_PATH = MOUNTAIN_GEOCODE_CACHE
+OUT_CSV = MOUNTAIN_COORDS
 
 ADDRESS_URL = "https://dapi.kakao.com/v2/local/search/address.json"
 KEYWORD_URL = "https://dapi.kakao.com/v2/local/search/keyword.json"

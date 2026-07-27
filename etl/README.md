@@ -2,6 +2,10 @@
 
 런타임 API는 `backend/`(Express) · `ml-service/`(Flask) 를 쓰세요.
 
+데이터 경로 (`etl/paths.py`):
+- `db/` — 서버 배포용 XGBoost 예측 런타임
+- `db-archive/` — 원본·중간 산출물·분석 결과 보관
+
 ```
 etl/
 ├── paths.py           # 경로 상수 (단일 출처)

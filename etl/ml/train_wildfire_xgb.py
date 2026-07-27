@@ -6,10 +6,12 @@
 3) 시군구별 ML 위험점수 저장
 
 출력:
-  db/processed/ml_train_sigungu_daily.parquet (또는 csv 샘플)
-  db/output/wildfire_xgb_metrics.json
-  db/output/sigungu_ml_risk_scores.csv
-  db/output/wildfire_xgb_feature_importance.csv
+  db-archive/processed/ml_train_sigungu_daily_sample.csv
+  db-archive/output/wildfire_xgb_metrics.json
+  db-archive/output/sigungu_ml_risk_scores.csv
+  db-archive/output/wildfire_xgb_feature_importance.csv
+  db/output/wildfire_xgb_model.json · wildfire_xgb_bundle.json
+  db/processed/sigungu_hist_state.csv · weather_recent_tail.csv
   frontend/public/data/sigungu_ml_scores.json  (지도 연동용)
 """
 
@@ -35,8 +37,7 @@ from xgboost import XGBClassifier
 
 from paths import (
     ADMIN_SIGUNGU_JSON,
-    DATA_OUTPUT,
-    DATA_PROCESSED,
+    DATA_PROCESSED_ETL,
     REFINED_WILDFIRE,
     ROOT,
     SIGUNGU_HIST_STATE,
@@ -44,16 +45,19 @@ from paths import (
     WEATHER_DAILY_SIGUNGU,
     WEATHER_RECENT_TAIL,
     WILDFIRE_XGB_BUNDLE,
+    WILDFIRE_XGB_IMPORTANCE,
+    WILDFIRE_XGB_METRICS,
     WILDFIRE_XGB_MODEL,
+    SIGUNGU_ML_RISK_SCORES,
     ensure_dirs,
 )
 
 ADMIN_SIGUNGU = ADMIN_SIGUNGU_JSON
-OUT_METRICS = DATA_OUTPUT / "wildfire_xgb_metrics.json"
-OUT_SCORES = DATA_OUTPUT / "sigungu_ml_risk_scores.csv"
-OUT_IMP = DATA_OUTPUT / "wildfire_xgb_feature_importance.csv"
+OUT_METRICS = WILDFIRE_XGB_METRICS
+OUT_SCORES = SIGUNGU_ML_RISK_SCORES
+OUT_IMP = WILDFIRE_XGB_IMPORTANCE
 OUT_WEB = SIGUNGU_ML_SCORES_WEB
-OUT_TRAIN_SAMPLE = DATA_PROCESSED / "ml_train_sigungu_daily_sample.csv"
+OUT_TRAIN_SAMPLE = DATA_PROCESSED_ETL / "ml_train_sigungu_daily_sample.csv"
 
 TEST_START = "2025-01-01"
 FEATURE_COLS = [

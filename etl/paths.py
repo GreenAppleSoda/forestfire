@@ -6,8 +6,8 @@
   backend/      Express 공개 API
   ml-service/   Flask 예측
   etl/          오프라인 ETL · 분석 · 학습
-    pipeline/ analyze/ map/ ml/
-  db/           원본·전처리·분석 산출물
+  db/           서버 배포용 (XGBoost 예측 런타임)
+  db-archive/   ETL·분석 원본·중간 산출물 보관
 """
 
 from pathlib import Path
@@ -26,50 +26,57 @@ BACKEND_ENV = ROOT / "backend" / ".env"
 BACKEND = ETL
 SERVER_ENV = BACKEND_ENV
 
+# 서버 배포용 (예측 런타임)
 DB = ROOT / "db"
-DATA_RAW = DB / "raw"
 DATA_PROCESSED = DB / "processed"
 DATA_OUTPUT = DB / "output"
+
+# ETL·분석 보관
+DB_ARCHIVE = ROOT / "db-archive"
+DATA_RAW = DB_ARCHIVE / "raw"
+DATA_PROCESSED_ETL = DB_ARCHIVE / "processed"
+DATA_OUTPUT_ETL = DB_ARCHIVE / "output"
 GEO_DIR = DATA_RAW / "geo"
 
-# 원본
+# 원본 (archive)
 RAW_WILDFIRE = DATA_RAW / "wildfire_2011_2026.json"
 KOREA_MOUNTAINS_JSON = DATA_RAW / "korea_mountains.json"
 
-# 전처리·수집
-REFINED_WILDFIRE = DATA_PROCESSED / "refined_wildfire_data.csv"
-MOUNTAIN_DATA = DATA_PROCESSED / "mountain_data.csv"
-MOUNTAIN_LOCATION = DATA_PROCESSED / "mountain_location.csv"
-MOUNTAIN_COORDS = DATA_PROCESSED / "mountain_coords.csv"
-MOUNTAIN_GEOCODE_CACHE = DATA_PROCESSED / "mountain_geocode_cache.json"
+# 전처리·수집 (archive)
+REFINED_WILDFIRE = DATA_PROCESSED_ETL / "refined_wildfire_data.csv"
+MOUNTAIN_DATA = DATA_PROCESSED_ETL / "mountain_data.csv"
+MOUNTAIN_LOCATION = DATA_PROCESSED_ETL / "mountain_location.csv"
+MOUNTAIN_COORDS = DATA_PROCESSED_ETL / "mountain_coords.csv"
+MOUNTAIN_GEOCODE_CACHE = DATA_PROCESSED_ETL / "mountain_geocode_cache.json"
 
-# 기상 (ASOS) — 2011~어제 통합본
+# 기상 (ASOS)
 RAW_ASOS_DAILY = DATA_RAW / "weather" / "asos_daily_2011_2026.csv"
-WEATHER_DAILY_ASOS = DATA_PROCESSED / "weather_daily_asos.csv"
+WEATHER_DAILY_ASOS = DATA_PROCESSED_ETL / "weather_daily_asos.csv"
+ASOS_STATION_SIGUNGU_MAP = DATA_PROCESSED_ETL / "asos_station_sigungu_map.csv"
+# 예측 런타임에 필요 → db/
 WEATHER_DAILY_SIGUNGU = DATA_PROCESSED / "weather_daily_sigungu.csv"
-ASOS_STATION_SIGUNGU_MAP = DATA_PROCESSED / "asos_station_sigungu_map.csv"
 SIGUNGU_ASOS_STATION = DATA_PROCESSED / "sigungu_asos_station.csv"
 
-# 분석 결과
-PROVINCE_RISK = DATA_OUTPUT / "province_wildfire_risk.csv"
-CITY_RISK = DATA_OUTPUT / "city_wildfire_risk.csv"
-TOWN_RISK = DATA_OUTPUT / "town_wildfire_risk.csv"
-WILDFIRE_ML_SUMMARY = DATA_OUTPUT / "wildfire_ml_summary.json"
-WILDFIRE_DETAIL_SUMMARY = DATA_OUTPUT / "wildfire_detail_summary.json"
+# 분석 결과 (archive)
+PROVINCE_RISK = DATA_OUTPUT_ETL / "province_wildfire_risk.csv"
+CITY_RISK = DATA_OUTPUT_ETL / "city_wildfire_risk.csv"
+TOWN_RISK = DATA_OUTPUT_ETL / "town_wildfire_risk.csv"
+WILDFIRE_ML_SUMMARY = DATA_OUTPUT_ETL / "wildfire_ml_summary.json"
+WILDFIRE_DETAIL_SUMMARY = DATA_OUTPUT_ETL / "wildfire_detail_summary.json"
 
-WILDFIRE_MOUNTAIN_CITY = DATA_OUTPUT / "wildfire_mountain_city.csv"
-WILDFIRE_MOUNTAIN_TOWN = DATA_OUTPUT / "wildfire_mountain_town.csv"
-WILDFIRE_MOUNTAIN_SUMMARY = DATA_OUTPUT / "wildfire_mountain_summary.json"
+WILDFIRE_MOUNTAIN_CITY = DATA_OUTPUT_ETL / "wildfire_mountain_city.csv"
+WILDFIRE_MOUNTAIN_TOWN = DATA_OUTPUT_ETL / "wildfire_mountain_town.csv"
+WILDFIRE_MOUNTAIN_SUMMARY = DATA_OUTPUT_ETL / "wildfire_mountain_summary.json"
 
-WILDFIRE_MOUNTAIN_EVENTS = DATA_OUTPUT / "wildfire_mountain_events.csv"
-WILDFIRE_WITH_MOUNTAINS = DATA_OUTPUT / "wildfire_with_mountains.csv"
-WILDFIRE_BY_MOUNTAIN = DATA_OUTPUT / "wildfire_by_mountain.csv"
-WILDFIRE_MOUNTAIN_EVENTS_SUMMARY = DATA_OUTPUT / "wildfire_mountain_events_summary.json"
+WILDFIRE_MOUNTAIN_EVENTS = DATA_OUTPUT_ETL / "wildfire_mountain_events.csv"
+WILDFIRE_WITH_MOUNTAINS = DATA_OUTPUT_ETL / "wildfire_with_mountains.csv"
+WILDFIRE_BY_MOUNTAIN = DATA_OUTPUT_ETL / "wildfire_by_mountain.csv"
+WILDFIRE_MOUNTAIN_EVENTS_SUMMARY = DATA_OUTPUT_ETL / "wildfire_mountain_events_summary.json"
 
-# XGBoost 산불 발생 예측
-WILDFIRE_XGB_METRICS = DATA_OUTPUT / "wildfire_xgb_metrics.json"
-SIGUNGU_ML_RISK_SCORES = DATA_OUTPUT / "sigungu_ml_risk_scores.csv"
-WILDFIRE_XGB_IMPORTANCE = DATA_OUTPUT / "wildfire_xgb_feature_importance.csv"
+# XGBoost — 모델·번들은 서버용 db/, 학습 로그는 archive
+WILDFIRE_XGB_METRICS = DATA_OUTPUT_ETL / "wildfire_xgb_metrics.json"
+SIGUNGU_ML_RISK_SCORES = DATA_OUTPUT_ETL / "sigungu_ml_risk_scores.csv"
+WILDFIRE_XGB_IMPORTANCE = DATA_OUTPUT_ETL / "wildfire_xgb_feature_importance.csv"
 WILDFIRE_XGB_MODEL = DATA_OUTPUT / "wildfire_xgb_model.json"
 WILDFIRE_XGB_BUNDLE = DATA_OUTPUT / "wildfire_xgb_bundle.json"
 SIGUNGU_HIST_STATE = DATA_PROCESSED / "sigungu_hist_state.csv"
@@ -82,11 +89,19 @@ SIGUNGU_ML_SCORES_WEB = FRONTEND_PUBLIC_DATA / "sigungu_ml_scores.json"
 MAP_DATA_JSON = FRONTEND_PUBLIC_DATA / "map-data.json"
 KOREA_SIGUNGU_PATHS = FRONTEND_PUBLIC_DATA / "korea-sigungu-paths.json"
 
-# OpenAPI 산불 통계 증분 동기화
-WILDFIRE_OPENAPI_STATE = DATA_PROCESSED / "wildfire_openapi_sync_state.json"
-WILDFIRE_OPENAPI_RAW = DATA_PROCESSED / "wildfire_openapi_incremental.json"
+# OpenAPI 산불 통계 증분 동기화 (archive)
+WILDFIRE_OPENAPI_STATE = DATA_PROCESSED_ETL / "wildfire_openapi_sync_state.json"
+WILDFIRE_OPENAPI_RAW = DATA_PROCESSED_ETL / "wildfire_openapi_incremental.json"
 
 
 def ensure_dirs() -> None:
-    for d in (DATA_RAW, DATA_PROCESSED, DATA_OUTPUT, GEO_DIR, FRONTEND_PUBLIC_DATA):
+    for d in (
+        DATA_RAW,
+        DATA_PROCESSED,
+        DATA_OUTPUT,
+        DATA_PROCESSED_ETL,
+        DATA_OUTPUT_ETL,
+        GEO_DIR,
+        FRONTEND_PUBLIC_DATA,
+    ):
         d.mkdir(parents=True, exist_ok=True)

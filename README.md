@@ -42,7 +42,10 @@ ForestFire/
 │   ├── analyze/       통계·매칭
 │   ├── map/           지도 JSON 생성
 │   └── ml/            XGBoost 학습·CLI 예측
-├── db/                파일 데이터 저장소
+├── db/                서버 배포용 (XGBoost 예측 런타임)
+│   ├── processed/
+│   └── output/
+├── db-archive/        ETL·분석 원본·중간 산출물 보관
 │   ├── raw/
 │   ├── processed/
 │   └── output/

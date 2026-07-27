@@ -1,4 +1,4 @@
-"""산불 원본 전처리 → db/processed/refined_wildfire_data.csv
+"""산불 원본 전처리 → db-archive/processed/refined_wildfire_data.csv
 
 지원 입력:
   - JSON: { count, columns, items: [...] }  (산림청 OpenAPI 형태)
