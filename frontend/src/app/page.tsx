@@ -31,9 +31,7 @@ export default async function HomePage() {
   ]);
 
   if (!mapData || !sido || !sigungu || !emd) {
-    throw new Error(
-      "?꾩닔 吏???곗씠?곕? 遺덈윭?ㅼ? 紐삵뻽?듬땲?? Express(backend)媛 ?ㅽ뻾 以묒씤吏 ?뺤씤?섏꽭??",
-    );
+    throw new Error("API 요청에 실패했습니다.");
   }
 
   return (

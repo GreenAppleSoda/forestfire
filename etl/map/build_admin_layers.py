@@ -1,8 +1,8 @@
 """
-시도/시군구/읍면동/리 shapefile → 웹용 레이어 + 산불 확률 마커.
+시도/시군구/읍면동 shapefile → 웹용 레이어 + 산불 확률 마커.
 
 출력 (frontend/public/data/):
-  admin-sido.json, admin-sigungu.json, admin-emd.json, admin-li-markers.json
+  admin-sido.json, admin-sigungu.json, admin-emd.json
 """
 
 from __future__ import annotations
@@ -435,27 +435,10 @@ def main() -> None:
     (OUT_DIR / "admin-emd.json").write_text(json.dumps(emd, ensure_ascii=False), encoding="utf-8")
     print(f"  {len(emd['regions'])} paths / {len(emd['markers'])} markers")
 
-    print("리 (마커만)…")
-    li = process_level(
-        "리", "li", "li", "LI_CD", "LI_KOR_NM", 2.0, idx, False
-    )
-    li_out = {
-        "level": "li",
-        "viewBox": [WIDTH, HEIGHT],
-        "regions": [],
-        "markers": li["markers"],
-        "meta": li["meta"],
-    }
-    (OUT_DIR / "admin-li-markers.json").write_text(
-        json.dumps(li_out, ensure_ascii=False), encoding="utf-8"
-    )
-    print(f"  {len(li_out['markers'])} markers")
-
     for name in [
         "admin-sido.json",
         "admin-sigungu.json",
         "admin-emd.json",
-        "admin-li-markers.json",
     ]:
         p = OUT_DIR / name
         print(f"{name}: {p.stat().st_size / 1e6:.2f} MB")

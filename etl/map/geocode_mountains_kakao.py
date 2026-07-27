@@ -3,9 +3,7 @@
 
 - 입력: db/processed/mountain_data.csv
 - 캐시: db/processed/mountain_geocode_cache.json  (재실행 시 스킵)
-- 출력:
-    db/processed/mountain_coords.csv
-    db/processed/mountain_coords.json
+- 출력: db/processed/mountain_coords.csv
 
 사용:
   python etl/map/geocode_mountains_kakao.py
@@ -44,7 +42,6 @@ from paths import (
 
 CACHE_PATH = DATA_PROCESSED / "mountain_geocode_cache.json"
 OUT_CSV = DATA_PROCESSED / "mountain_coords.csv"
-OUT_JSON = DATA_PROCESSED / "mountain_coords.json"
 
 ADDRESS_URL = "https://dapi.kakao.com/v2/local/search/address.json"
 KEYWORD_URL = "https://dapi.kakao.com/v2/local/search/keyword.json"
@@ -332,41 +329,15 @@ def main() -> None:
 
     out_df = pd.DataFrame(out_rows)
     out_df.to_csv(OUT_CSV, index=False, encoding="utf-8-sig")
-    payload = {
-        "meta": {
-            "source": "kakao_local_api",
-            "n_total": int(len(out_df)),
-            "n_ok": int(out_df["ok"].sum()),
-            "n_fail": int((~out_df["ok"]).sum()),
-            "crs_wgs84": "EPSG:4326",
-            "crs_tm": "EPSG:5179",
-            "svg_viewBox": [WIDTH, HEIGHT],
-        },
-        "mountains": {
-            str(r["mntn_id"]): {
-                "id": str(r["mntn_id"]),
-                "name": r["mntn_nm"],
-                "address": r["mntn_add"],
-                "lon": r["lon"],
-                "lat": r["lat"],
-                "svg_x": r["svg_x"],
-                "svg_y": r["svg_y"],
-                "ok": bool(r["ok"]),
-                "method": r["method"],
-                "matched": r["matched"],
-            }
-            for _, r in out_df.iterrows()
-        },
-    }
-    OUT_JSON.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    n_ok = int(out_df["ok"].sum())
+    n_fail = int((~out_df["ok"]).sum())
 
     print(
-        f"완료: total={len(out_df)} ok={payload['meta']['n_ok']} "
-        f"fail={payload['meta']['n_fail']} new_calls~={n_new} skip={n_skip}"
+        f"완료: total={len(out_df)} ok={n_ok} "
+        f"fail={n_fail} new_calls~={n_new} skip={n_skip}"
     )
     print(f"캐시: {CACHE_PATH}")
     print(f"CSV:  {OUT_CSV}")
-    print(f"JSON: {OUT_JSON}")
 
 
 if __name__ == "__main__":

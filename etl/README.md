@@ -15,7 +15,6 @@ etl/
 
 ```powershell
 python etl/pipeline/preprocess.py
-python etl/pipeline/merge_asos_raw.py
 python etl/pipeline/preprocess_weather.py
 python etl/pipeline/load_korea_mountains.py
 python etl/analyze/analyze_wildfire_mountain_events.py

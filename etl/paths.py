@@ -34,8 +34,6 @@ GEO_DIR = DATA_RAW / "geo"
 
 # 원본
 RAW_WILDFIRE = DATA_RAW / "wildfire_2011_2026.json"
-RAW_WILDFIRE_SOURCE = DATA_RAW / "110101~260723.json"
-RAW_WILDFIRE_LEGACY_CSV = DATA_RAW / "산림청_산불통계데이터_20250911.csv"
 KOREA_MOUNTAINS_JSON = DATA_RAW / "korea_mountains.json"
 
 # 전처리·수집
@@ -43,15 +41,10 @@ REFINED_WILDFIRE = DATA_PROCESSED / "refined_wildfire_data.csv"
 MOUNTAIN_DATA = DATA_PROCESSED / "mountain_data.csv"
 MOUNTAIN_LOCATION = DATA_PROCESSED / "mountain_location.csv"
 MOUNTAIN_COORDS = DATA_PROCESSED / "mountain_coords.csv"
-MOUNTAIN_COORDS_JSON = DATA_PROCESSED / "mountain_coords.json"
 MOUNTAIN_GEOCODE_CACHE = DATA_PROCESSED / "mountain_geocode_cache.json"
 
 # 기상 (ASOS) — 2011~어제 통합본
 RAW_ASOS_DAILY = DATA_RAW / "weather" / "asos_daily_2011_2026.csv"
-RAW_ASOS_PARTS = (
-    DATA_RAW / "weather" / "parts" / "OBS_ASOS_DD_20260724095459.csv",
-    DATA_RAW / "weather" / "parts" / "OBS_ASOS_DD_20260724100405.csv",
-)
 WEATHER_DAILY_ASOS = DATA_PROCESSED / "weather_daily_asos.csv"
 WEATHER_DAILY_SIGUNGU = DATA_PROCESSED / "weather_daily_sigungu.csv"
 ASOS_STATION_SIGUNGU_MAP = DATA_PROCESSED / "asos_station_sigungu_map.csv"
