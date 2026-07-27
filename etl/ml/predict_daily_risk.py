@@ -3,13 +3,13 @@
 
 사용 예:
   # 기상청 ASOS 실시간(시간자료) → 당일 예측 (기본)
-  python backend/ml/predict_daily_risk.py --kma
+  python etl/ml/predict_daily_risk.py --kma
 
   # 특정 날짜 (기상 CSV에 있으면 그 값 사용)
-  python backend/ml/predict_daily_risk.py --date 2025-03-15
+  python etl/ml/predict_daily_risk.py --date 2025-03-15
 
   # 날씨 직접 입력 (전국 동일 기상 + 지역별 이력 feature)
-  python backend/ml/predict_daily_risk.py --date 2026-07-23 \\
+  python etl/ml/predict_daily_risk.py --date 2026-07-23 \\
     --temp-avg 28 --temp-min 22 --temp-max 33 \\
     --humidity-avg 45 --humidity-min 28 \\
     --wind-avg 3.5 --wind-max 6 --precip 0
@@ -445,7 +445,7 @@ def run_daily_predict(
     ensure_dirs()
     if not WILDFIRE_XGB_MODEL.exists():
         raise FileNotFoundError(
-            f"{WILDFIRE_XGB_MODEL} 없음. 먼저 python backend/train_wildfire_xgb.py 실행"
+            f"{WILDFIRE_XGB_MODEL} 없음. 먼저 python etl/ml/train_wildfire_xgb.py 실행"
         )
     if not SIGUNGU_HIST_STATE.exists():
         raise FileNotFoundError(str(SIGUNGU_HIST_STATE))

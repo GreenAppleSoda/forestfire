@@ -8,9 +8,9 @@
     db/processed/mountain_coords.json
 
 사용:
-  python backend/geocode_mountains_kakao.py
-  python backend/geocode_mountains_kakao.py --limit 20   # 테스트
-  python backend/geocode_mountains_kakao.py --force      # 캐시 무시 재조회
+  python etl/map/geocode_mountains_kakao.py
+  python etl/map/geocode_mountains_kakao.py --limit 20   # 테스트
+  python etl/map/geocode_mountains_kakao.py --force      # 캐시 무시 재조회
 
 환경변수: KAKAO_REST_API_KEY (ml-service/.env 또는 frontend/.env.local)
 """

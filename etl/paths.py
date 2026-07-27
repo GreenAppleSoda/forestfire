@@ -1,26 +1,30 @@
-"""프로젝트 경로 상수. 모든 백엔드 스크립트는 이 모듈을 통해 경로를 참조합니다.
+"""프로젝트 경로 상수. 모든 ETL 스크립트는 이 모듈을 통해 경로를 참조합니다.
 
 구조
 ----
   frontend/     Next.js UI
-  server/       Express 공개 API
+  backend/      Express 공개 API
   ml-service/   Flask 예측
-  backend/      오프라인 ETL · 분석 · 학습
+  etl/          오프라인 ETL · 분석 · 학습
     pipeline/ analyze/ map/ ml/
   db/           원본·전처리·분석 산출물
 """
 
 from pathlib import Path
 
-# dataProcess/ (프로젝트 루트)
+# ForestFire/ (프로젝트 루트)
 ROOT = Path(__file__).resolve().parent.parent
 
-BACKEND = ROOT / "backend"
+ETL = ROOT / "etl"
 FRONTEND = ROOT / "frontend"
 FRONTEND_PUBLIC_DATA = FRONTEND / "public" / "data"
 FRONTEND_ENV_LOCAL = FRONTEND / ".env.local"
 ML_SERVICE_ENV = ROOT / "ml-service" / ".env"
-SERVER_ENV = ROOT / "server" / ".env"
+BACKEND_ENV = ROOT / "backend" / ".env"
+
+# 하위 호환 별칭
+BACKEND = ETL
+SERVER_ENV = BACKEND_ENV
 
 DB = ROOT / "db"
 DATA_RAW = DB / "raw"
@@ -78,10 +82,16 @@ WILDFIRE_XGB_BUNDLE = DATA_OUTPUT / "wildfire_xgb_bundle.json"
 SIGUNGU_HIST_STATE = DATA_PROCESSED / "sigungu_hist_state.csv"
 WEATHER_RECENT_TAIL = DATA_PROCESSED / "weather_recent_tail.csv"
 DAILY_ML_RISK = FRONTEND_PUBLIC_DATA / "daily_ml_risk.json"
+ADMIN_SIDO_JSON = FRONTEND_PUBLIC_DATA / "admin-sido.json"
 ADMIN_SIGUNGU_JSON = FRONTEND_PUBLIC_DATA / "admin-sigungu.json"
+ADMIN_EMD_JSON = FRONTEND_PUBLIC_DATA / "admin-emd.json"
 SIGUNGU_ML_SCORES_WEB = FRONTEND_PUBLIC_DATA / "sigungu_ml_scores.json"
 MAP_DATA_JSON = FRONTEND_PUBLIC_DATA / "map-data.json"
 KOREA_SIGUNGU_PATHS = FRONTEND_PUBLIC_DATA / "korea-sigungu-paths.json"
+
+# OpenAPI 산불 통계 증분 동기화
+WILDFIRE_OPENAPI_STATE = DATA_PROCESSED / "wildfire_openapi_sync_state.json"
+WILDFIRE_OPENAPI_RAW = DATA_PROCESSED / "wildfire_openapi_incremental.json"
 
 
 def ensure_dirs() -> None:

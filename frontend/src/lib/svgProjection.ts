@@ -1,6 +1,6 @@
-/**
- * SVG viewBox ↔ WGS84 (EPSG:4326)
- * backend/map/build_admin_layers.py · geocode_mountains_kakao.py 와 동일 파라미터
+﻿/**
+ * SVG viewBox ??WGS84 (EPSG:4326)
+ * etl/map/build_admin_layers.py 쨌 geocode_mountains_kakao.py ? ?숈씪 ?뚮씪誘명꽣
  */
 import proj4 from "proj4";
 
@@ -53,7 +53,7 @@ export function wgs84ToSvg(lat: number, lng: number): [number, number] {
   return tmToSvg(tmX, tmY);
 }
 
-/** SVG path `d` (M/L/Z absolute) → SVG 좌표 링 목록 */
+/** SVG path `d` (M/L/Z absolute) ??SVG 醫뚰몴 留?紐⑸줉 */
 export function svgPathToRings(d: string): [number, number][][] {
   const rings: [number, number][][] = [];
   let ring: [number, number][] = [];
@@ -86,7 +86,7 @@ export function svgPathToLatLngRings(d: string): LatLng[][] {
   );
 }
 
-/** 변환된 view 의 화면 중심 (viewBox 좌표계 기준 SVG 콘텐츠 점) */
+/** 蹂?섎맂 view ???붾㈃ 以묒떖 (viewBox 醫뚰몴怨?湲곗? SVG 肄섑뀗痢??? */
 export function viewCenterSvg(
   view: SvgView,
   vbW = WIDTH,
@@ -110,8 +110,8 @@ export function viewFromCenterSvg(
 }
 
 /**
- * SVG scale ↔ 카카오 지도 level (1=최대확대, 14=전국)
- * scale 1 ≈ 전국, scale↑ ≈ 확대
+ * SVG scale ??移댁뭅??吏??level (1=理쒕??뺣?, 14=?꾧뎅)
+ * scale 1 ???꾧뎅, scale?????뺣?
  */
 export function scaleToKakaoLevel(scale: number): number {
   const s = Math.max(1, scale);

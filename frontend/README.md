@@ -8,6 +8,6 @@ npm run dev
 ```
 
 - `/api/*` 는 `next.config.ts` rewrite → Express (`EXPRESS_URL`, 기본 `http://localhost:4000`)
-- 서버 전용 키는 `ml-service/.env` / `server/.env` 에 둡니다.
+- 서버 전용 키는 `ml-service/.env` / `backend/.env` 에 둡니다.
 
 루트 `README.md`의 3-프로세스 실행 방법을 참고하세요.

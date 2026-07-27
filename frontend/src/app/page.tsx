@@ -1,4 +1,4 @@
-import { KoreaSvgMap } from "@/components/KoreaSvgMap";
+﻿import { KoreaSvgMap } from "@/components/KoreaSvgMap";
 import type { AdminLayer, DailyMlRisk, MapData, SigunguMlScores } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -32,7 +32,7 @@ export default async function HomePage() {
 
   if (!mapData || !sido || !sigungu || !emd) {
     throw new Error(
-      "필수 지도 데이터를 불러오지 못했습니다. Express(server)가 실행 중인지 확인하세요.",
+      "?꾩닔 吏???곗씠?곕? 遺덈윭?ㅼ? 紐삵뻽?듬땲?? Express(backend)媛 ?ㅽ뻾 以묒씤吏 ?뺤씤?섏꽭??",
     );
   }
 

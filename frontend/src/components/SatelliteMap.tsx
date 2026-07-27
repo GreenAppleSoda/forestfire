@@ -207,7 +207,7 @@ export function SatelliteMap({
     }, 150);
   }, [ready, syncKey, syncView]);
 
-  // 읍면동 포커스 시군구 (지도 중심 기준)
+  // 읍면동 포커스 시군구 — 커서 위치 기준(호버 즉시), idle 시 중심도 보조
   useEffect(() => {
     if (!ready || level !== "emd") {
       setFocusCode(null);
@@ -217,18 +217,41 @@ export function SatelliteMap({
     const maps = mapsRef.current;
     if (!map || !maps) return;
 
-    const update = () => {
-      const c = map.getCenter();
-      const hit = findFocusSigungu(outlineRegions, {
-        lat: c.getLat(),
-        lng: c.getLng(),
-      });
-      setFocusCode(hit?.code ?? null);
+    let raf = 0;
+    let lastCode: string | null = null;
+    let lastMoveAt = 0;
+
+    const applyFocus = (lat: number, lng: number) => {
+      const hit = findFocusSigungu(outlineRegions, { lat, lng });
+      const next = hit?.code ?? null;
+      if (next === lastCode) return;
+      lastCode = next;
+      setFocusCode(next);
     };
-    update();
-    maps.event.addListener(map, "idle", update);
+
+    const fromCenter = () => {
+      const c = map.getCenter();
+      applyFocus(c.getLat(), c.getLng());
+    };
+
+    const onMouseMove = (mouseEvent: { latLng: { getLat: () => number; getLng: () => number } }) => {
+      const now = performance.now();
+      if (now - lastMoveAt < 50) return;
+      lastMoveAt = now;
+      if (raf) cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        const ll = mouseEvent.latLng;
+        applyFocus(ll.getLat(), ll.getLng());
+      });
+    };
+
+    fromCenter();
+    maps.event.addListener(map, "mousemove", onMouseMove);
+    maps.event.addListener(map, "idle", fromCenter);
     return () => {
-      maps.event.removeListener(map, "idle", update);
+      if (raf) cancelAnimationFrame(raf);
+      maps.event.removeListener(map, "mousemove", onMouseMove);
+      maps.event.removeListener(map, "idle", fromCenter);
     };
   }, [ready, level, outlineRegions]);
 
@@ -292,7 +315,7 @@ export function SatelliteMap({
     polyRef.current = entries;
   }, [ready, displayRegions, level, selectedCode, paletteKey]);
 
-  // 시군구 외곽 (읍면동)
+  // 시군구 외곽 (읍면동) — 생성은 레이어 변경 시만
   useEffect(() => {
     const map = mapRef.current;
     const maps = mapsRef.current;
@@ -306,28 +329,47 @@ export function SatelliteMap({
     for (const region of outlineRegions) {
       if (!region.d) continue;
       const rings = svgPathToLatLngRings(region.d);
-      const isParent =
-        focusCode === region.code ||
-        (selectedCode != null && selectedCode.startsWith(region.code));
       for (const ring of rings) {
         if (ring.length < 3) continue;
         const path = ring.map((p) => new maps.LatLng(p.lat, p.lng));
-        polys.push(
-          new maps.Polygon({
-            map,
-            path,
-            strokeWeight: isParent ? 2.2 : 1.2,
-            strokeColor: isParent ? "#0f2744" : "#1e3a5f",
-            strokeOpacity: 0.95,
-            fillColor: "#000000",
-            fillOpacity: 0.01,
-            zIndex: 3,
-          }),
-        );
+        const polygon = new maps.Polygon({
+          map,
+          path,
+          strokeWeight: 1.2,
+          strokeColor: "#1e3a5f",
+          strokeOpacity: 0.95,
+          fillColor: "#000000",
+          fillOpacity: 0.01,
+          zIndex: 3,
+        });
+        (polygon as KakaoPolygon & { __sigunguCode?: string }).__sigunguCode =
+          region.code;
+        maps.event.addListener(polygon, "mouseover", () => {
+          setFocusCode(region.code);
+        });
+        polys.push(polygon);
       }
     }
     outlineRef.current = polys;
-  }, [ready, level, outlineRegions, focusCode, selectedCode]);
+  }, [ready, level, outlineRegions]);
+
+  // 시군구 외곽 강조 스타일만 갱신
+  useEffect(() => {
+    if (level !== "emd") return;
+    for (const polygon of outlineRef.current) {
+      const code = (polygon as KakaoPolygon & { __sigunguCode?: string })
+        .__sigunguCode;
+      if (!code) continue;
+      const isParent =
+        focusCode === code ||
+        (selectedCode != null && selectedCode.startsWith(code));
+      polygon.setOptions({
+        strokeWeight: isParent ? 2.2 : 1.2,
+        strokeColor: isParent ? "#0f2744" : "#1e3a5f",
+        zIndex: isParent ? 1 : 3,
+      });
+    }
+  }, [level, focusCode, selectedCode]);
 
   // 산 마커
   useEffect(() => {

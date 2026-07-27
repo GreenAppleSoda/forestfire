@@ -24,6 +24,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DailyPredictForm } from "./DailyPredictForm";
 import { ScenarioPredictForm } from "./ScenarioPredictForm";
 import { FireHistoryPanel } from "./FireHistoryPanel";
+import { HistorySyncControl } from "./HistorySyncControl";
 import { MapLegend } from "./MapLegend";
 import { MountainSearch } from "./MountainSearch";
 import { MountainSearchResult } from "./MountainSearchResult";
@@ -170,9 +171,16 @@ function pathBBox(d: string): {
   return { minX, minY, maxX, maxY };
 }
 
-export function KoreaSvgMap({ mapData, layers, mlScores, dailyRisk }: Props) {
+export function KoreaSvgMap({
+  mapData: mapDataProp,
+  layers: layersProp,
+  mlScores,
+  dailyRisk,
+}: Props) {
   const stageRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
+  const [mapData, setMapData] = useState<MapData>(mapDataProp);
+  const [layers, setLayers] = useState(layersProp);
   const [selected, setSelected] = useState<RegionStat | null>(null);
   const [selectedAdmin, setSelectedAdmin] = useState<AdminRegion | null>(null);
   const [hovered, setHovered] = useState<AdminRegion | null>(null);
@@ -212,6 +220,13 @@ export function KoreaSvgMap({ mapData, layers, mlScores, dailyRisk }: Props) {
   } | null>(null);
   const suppressClickRef = useRef(false);
   const [isPanning, setIsPanning] = useState(false);
+
+  useEffect(() => {
+    setMapData(mapDataProp);
+  }, [mapDataProp]);
+  useEffect(() => {
+    setLayers(layersProp);
+  }, [layersProp]);
 
   const fetchKmaPredict = useCallback(async (force = false) => {
     if (!force && predictInFlight.current) {
@@ -885,15 +900,9 @@ export function KoreaSvgMap({ mapData, layers, mlScores, dailyRisk }: Props) {
                       d={r.d}
                       fill={fill}
                       fillOpacity={active ? 0.95 : isEmd ? 0.88 : 0.82}
-                      stroke={active ? "#1c1917" : "#fffefb"}
-                      strokeWidth={
-                        active
-                          ? (isEmd ? emdStroke * 2.5 : strokeBase * 2.2)
-                          : isEmd
-                            ? emdStroke
-                            : strokeBase
-                      }
-                      strokeOpacity={isEmd && !active ? 0.55 : 1}
+                      stroke="#fffefb"
+                      strokeWidth={isEmd ? emdStroke : strokeBase}
+                      strokeOpacity={isEmd ? 0.55 : 1}
                       className={
                         isPanning
                           ? "cursor-grabbing"
@@ -931,6 +940,36 @@ export function KoreaSvgMap({ mapData, layers, mlScores, dailyRisk }: Props) {
                       />
                     );
                   })}
+
+                {/* 호버·선택 외곽: fill/시군구선 위에 따로 그려 굵기·색 균일 유지 */}
+                {(() => {
+                  const isEmd = level === "emd";
+                  const hlStroke = Math.max(
+                    0.35,
+                    (isEmd ? 2.4 : 2.8) / view.scale,
+                  );
+                  const seen = new Set<string>();
+                  const list: AdminRegion[] = [];
+                  for (const r of [selectedAdmin, hovered]) {
+                    if (r && !seen.has(r.code)) {
+                      seen.add(r.code);
+                      list.push(r);
+                    }
+                  }
+                  return list.map((r) => (
+                    <path
+                      key={`hl-${r.code}`}
+                      d={r.d}
+                      fill="none"
+                      stroke="#1c1917"
+                      strokeWidth={hlStroke}
+                      strokeOpacity={1}
+                      strokeLinejoin="round"
+                      strokeLinecap="round"
+                      className="pointer-events-none"
+                    />
+                  ));
+                })()}
 
                 {/* 읍면동 호버 중: 해당 시군구 이름 — 테두리 우상단 바깥 뱃지 */}
                 {hoverSigunguBadge && (() => {
@@ -1129,7 +1168,7 @@ export function KoreaSvgMap({ mapData, layers, mlScores, dailyRisk }: Props) {
                 {LEVEL_LABEL[level]}
                 <span className="ml-2 text-xs font-normal text-[#78716c]">
                   {mapMode === "satellite"
-                    ? `위성 · 줌 Lv.${satView.level}${level === "emd" ? " · 중심 시군구 읍면동" : ""}`
+                    ? `위성 · 줌 Lv.${satView.level}${level === "emd" ? " · 커서 위치 시군구 읍면동" : ""}`
                     : `줌 ${view.scale.toFixed(1)}× · 스크롤 확대 · 드래그 이동${level === "emd" ? " · 굵은 선=시군구" : ""}`}
                 </span>
               </p>
@@ -1212,6 +1251,14 @@ export function KoreaSvgMap({ mapData, layers, mlScores, dailyRisk }: Props) {
                   onPredicted={(data) => {
                     setScenario(data);
                     setPredictError(null);
+                  }}
+                />
+              )}
+              {riskMode === "history" && (
+                <HistorySyncControl
+                  onUpdated={({ mapData: nextMap, layers: nextLayers }) => {
+                    setMapData(nextMap);
+                    setLayers(nextLayers);
                   }}
                 />
               )}

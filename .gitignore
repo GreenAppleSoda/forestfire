@@ -16,12 +16,13 @@ frontend/tsconfig.tsbuildinfo
 frontend/.env.local
 
 # Express / Flask runtime
-server/node_modules/
-server/.env
+backend/node_modules/
+backend/dist/
+backend/.env
 ml-service/.env
 
-# Backend
-backend/__pycache__/
+# ETL
+etl/__pycache__/
 
 # OS / IDE
 .DS_Store

@@ -279,7 +279,7 @@ def main() -> None:
     ensure_dirs()
     if not PATHS_FILE.exists():
         raise FileNotFoundError(
-            f"{PATHS_FILE} 없음. 먼저 node backend/build_sigungu_paths.mjs 실행"
+            f"{PATHS_FILE} 없음. 먼저 node etl/map/build_sigungu_paths.mjs 실행"
         )
 
     paths = json.loads(PATHS_FILE.read_text(encoding="utf-8"))
