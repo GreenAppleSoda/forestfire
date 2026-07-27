@@ -110,29 +110,40 @@ export function viewFromCenterSvg(
 }
 
 /**
- * SVG scale ??移댁뭅??吏??level (1=理쒕??뺣?, 14=?꾧뎅)
- * scale 1 ???꾧뎅, scale?????뺣?
+ * SVG scale ↔ 카카오 지도 level
+ * - 카카오: level 작을수록 확대 (1=최대 확대, 14=전국)
+ * - SVG scale 1(전국) ≈ 카카오 level 13 (뷰포트에 한국이 비슷하게 차는 수준)
+ * - scale×2 ≈ Kakao level -1 (웹맵 표준 2배 줌)
  */
+const KAKAO_LEVEL_AT_SCALE_1 = 13;
+const LEVELS_PER_SCALE_DOUBLING = 1;
+
 export function scaleToKakaoLevel(scale: number): number {
   const s = Math.max(1, scale);
-  const level = Math.round(14 - 2.15 * Math.log2(s));
-  return Math.min(13, Math.max(3, level));
+  const level = Math.round(
+    KAKAO_LEVEL_AT_SCALE_1 - LEVELS_PER_SCALE_DOUBLING * Math.log2(s),
+  );
+  return Math.min(14, Math.max(3, level));
 }
 
 export function kakaoLevelToScale(level: number): number {
   const lv = Math.min(14, Math.max(1, level));
-  return Math.pow(2, (14 - lv) / 2.15);
+  return Math.pow(
+    2,
+    (KAKAO_LEVEL_AT_SCALE_1 - lv) / LEVELS_PER_SCALE_DOUBLING,
+  );
 }
 
 export function svgViewToKakao(
   view: SvgView,
   vbW = WIDTH,
   vbH = HEIGHT,
-): { center: LatLng; level: number } {
+): { center: LatLng; level: number; svgScale: number } {
   const [cx, cy] = viewCenterSvg(view, vbW, vbH);
   return {
     center: svgToWgs84(cx, cy),
     level: scaleToKakaoLevel(view.scale),
+    svgScale: view.scale,
   };
 }
 
@@ -141,9 +152,11 @@ export function kakaoToSvgView(
   level: number,
   vbW = WIDTH,
   vbH = HEIGHT,
+  svgScale?: number,
 ): SvgView {
   const [cx, cy] = wgs84ToSvg(center.lat, center.lng);
-  return viewFromCenterSvg(cx, cy, kakaoLevelToScale(level), vbW, vbH);
+  const scale = svgScale ?? kakaoLevelToScale(level);
+  return viewFromCenterSvg(cx, cy, scale, vbW, vbH);
 }
 
 export const SVG_VIEWBOX: [number, number] = [WIDTH, HEIGHT];

@@ -54,6 +54,26 @@ const INITIAL_VIEW: View = { scale: 1, tx: 0, ty: 0 };
 /** 이 픽셀 이상 움직이면 팬으로 간주 (클릭 아님) */
 const PAN_THRESHOLD_PX = 5;
 
+/**
+ * 지역 선택 시 나머지 흐림 세기 (0~1, 클수록 진함)
+ * 직접 숫자만 바꿔가며 조절하면 됨.
+ */
+const SELECT_DIM = {
+  /** 선택되지 않은 지역 fill */
+  fill: 0.58,
+  /** 읍면동 fill (조금 더 옅게) */
+  fillEmd: 0.52,
+  /** 선택 중 다른 지역에 호버했을 때 fill */
+  fillHover: 0.78,
+  /** 선택되지 않은 지역 stroke */
+  stroke: 0.55,
+  strokeEmd: 0.32,
+  strokeHover: 0.7,
+  /** 선택되지 않은 라벨 */
+  label: 0.55,
+  labelStroke: 0.5,
+} as const;
+
 function levelForScale(scale: number): AdminLevel {
   if (scale < 1.75) return "sido";
   if (scale < 3.5) return "sigungu";
@@ -890,19 +910,45 @@ export function KoreaSvgMap({
 
               <g transform={`translate(${view.tx} ${view.ty}) scale(${view.scale})`}>
                 {activeLayer.regions.map((r) => {
-                  const active =
-                    hovered?.code === r.code || selectedAdmin?.code === r.code;
+                  const isSelected = selectedAdmin?.code === r.code;
+                  const isHovered = hovered?.code === r.code;
+                  const active = isSelected || isHovered;
                   const fill = probToColor(colorProb(r, level));
                   const isEmd = level === "emd";
+                  const dimOthers = !!selectedAdmin && !isSelected;
                   return (
                     <path
                       key={r.code}
                       d={r.d}
                       fill={fill}
-                      fillOpacity={active ? 0.95 : isEmd ? 0.88 : 0.82}
+                      fillOpacity={
+                        isSelected
+                          ? 0.98
+                          : dimOthers
+                            ? isHovered
+                              ? SELECT_DIM.fillHover
+                              : isEmd
+                                ? SELECT_DIM.fillEmd
+                                : SELECT_DIM.fill
+                            : active
+                              ? 0.95
+                              : isEmd
+                                ? 0.88
+                                : 0.82
+                      }
                       stroke="#fffefb"
                       strokeWidth={isEmd ? emdStroke : strokeBase}
-                      strokeOpacity={isEmd ? 0.55 : 1}
+                      strokeOpacity={
+                        dimOthers
+                          ? isHovered
+                            ? SELECT_DIM.strokeHover
+                            : isEmd
+                              ? SELECT_DIM.strokeEmd
+                              : SELECT_DIM.stroke
+                          : isEmd
+                            ? 0.55
+                            : 1
+                      }
                       className={
                         isPanning
                           ? "cursor-grabbing"
@@ -1012,10 +1058,12 @@ export function KoreaSvgMap({
                 })()}
 
                 {activeLayer.regions.map((r) => {
+                  const isSelected = selectedAdmin?.code === r.code;
                   const active =
-                    hovered?.code === r.code || selectedAdmin?.code === r.code;
+                    isSelected || hovered?.code === r.code;
                   // 시도·시군구: 전체 라벨 / 읍면동: 호버·선택만
                   if (level === "emd" && !active) return null;
+                  const dimLabel = !!selectedAdmin && !isSelected;
                   const fs =
                     level === "emd"
                       ? emdLabelFs
@@ -1030,12 +1078,14 @@ export function KoreaSvgMap({
                       textAnchor="middle"
                       dominantBaseline="middle"
                       fill={active ? "#0c0a09" : "#292524"}
+                      fillOpacity={dimLabel ? SELECT_DIM.label : 1}
                       fontSize={fs}
                       fontWeight={active ? 700 : 500}
                       stroke="#F8FAFC"
                       strokeWidth={
                         level === "emd" ? emdLabelStroke : labelStroke
                       }
+                      strokeOpacity={dimLabel ? SELECT_DIM.labelStroke : 1}
                       paintOrder="stroke"
                       strokeLinejoin="round"
                       className="pointer-events-none"

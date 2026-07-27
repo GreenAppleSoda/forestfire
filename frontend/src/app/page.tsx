@@ -1,45 +1,110 @@
-﻿import { KoreaSvgMap } from "@/components/KoreaSvgMap";
+﻿"use client";
+
+import { KoreaSvgMap } from "@/components/KoreaSvgMap";
 import type { AdminLayer, DailyMlRisk, MapData, SigunguMlScores } from "@/lib/types";
+import { useEffect, useState } from "react";
 
-export const dynamic = "force-dynamic";
+type InitialData = {
+  mapData: MapData;
+  sido: AdminLayer;
+  sigungu: AdminLayer;
+  emd: AdminLayer;
+  mlScores: SigunguMlScores | null;
+  dailyRisk: DailyMlRisk | null;
+};
 
-const EXPRESS_URL = process.env.EXPRESS_URL || "http://localhost:4000";
+const EMPTY_EMD: AdminLayer = {
+  level: "emd",
+  viewBox: [800, 900],
+  regions: [],
+  markers: [],
+  meta: {
+    n_regions: 0,
+    n_markers: 0,
+    max_fire_count: 0,
+    prob_note: "",
+  },
+};
 
-async function fetchApi<T>(path: string): Promise<T | null> {
+async function fetchJson<T>(path: string, signal: AbortSignal): Promise<T | null> {
   try {
-    const res = await fetch(`${EXPRESS_URL}${path}`, {
-      cache: "no-store",
-      next: { revalidate: 0 },
-    });
+    const res = await fetch(path, { signal, cache: "default" });
     if (!res.ok) return null;
-    const json = (await res.json()) as { ok?: boolean; data?: T };
-    if (json && "data" in json) return json.data ?? null;
-    return json as T;
+    return (await res.json()) as T;
   } catch {
     return null;
   }
 }
 
-export default async function HomePage() {
-  const [mapData, sido, sigungu, emd, mlScores, dailyRisk] = await Promise.all([
-    fetchApi<MapData>("/api/map/data"),
-    fetchApi<AdminLayer>("/api/map/admin/sido"),
-    fetchApi<AdminLayer>("/api/map/admin/sigungu"),
-    fetchApi<AdminLayer>("/api/map/admin/emd"),
-    fetchApi<SigunguMlScores>("/api/map/ml-scores"),
-    fetchApi<DailyMlRisk>("/api/map/daily-risk"),
-  ]);
+export default function HomePage() {
+  const [data, setData] = useState<InitialData | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  if (!mapData || !sido || !sigungu || !emd) {
-    throw new Error("API 요청에 실패했습니다.");
+  useEffect(() => {
+    const controller = new AbortController();
+    const signal = controller.signal;
+
+    const load = async () => {
+      // 1차: 시도/시군구로 바로 지도 표시 (읍면동은 백그라운드)
+      const [mapData, sido, sigungu, mlScores, dailyRisk] = await Promise.all([
+        fetchJson<MapData>("/data/map-data.json", signal),
+        fetchJson<AdminLayer>("/data/admin-sido.json", signal),
+        fetchJson<AdminLayer>("/data/admin-sigungu.json", signal),
+        fetchJson<SigunguMlScores>("/data/sigungu_ml_scores.json", signal),
+        fetchJson<DailyMlRisk>("/data/daily_ml_risk.json", signal),
+      ]);
+
+      if (!mapData || !sido || !sigungu) {
+        setError("지도 데이터를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.");
+        return;
+      }
+
+      setData({
+        mapData,
+        sido,
+        sigungu,
+        emd: EMPTY_EMD,
+        mlScores,
+        dailyRisk,
+      });
+
+      // 2차: 고배율에서만 쓰는 읍면동 (가장 큰 파일)
+      const emd = await fetchJson<AdminLayer>("/data/admin-emd.json", signal);
+      if (emd) {
+        setData((prev) => (prev ? { ...prev, emd } : prev));
+      }
+    };
+
+    void load();
+    return () => controller.abort();
+  }, []);
+
+  if (error) {
+    return (
+      <main className="grid h-dvh place-items-center bg-[#c5d4e4] px-6 text-center">
+        <p className="max-w-md rounded-lg border border-[#d6d3d1] bg-white/95 px-4 py-3 text-sm text-[#44403c] shadow-sm">
+          {error}
+        </p>
+      </main>
+    );
+  }
+
+  if (!data) {
+    return (
+      <main className="grid h-dvh place-items-center bg-[#c5d4e4] px-6 text-center">
+        <p className="rounded-lg border border-[#d6d3d1] bg-white/95 px-4 py-3 text-sm text-[#44403c] shadow-sm">
+          지도를 불러오는 중입니다...
+        </p>
+      </main>
+    );
   }
 
   return (
     <KoreaSvgMap
-      mapData={mapData}
-      layers={{ sido, sigungu, emd }}
-      mlScores={mlScores}
-      dailyRisk={dailyRisk}
+      mapData={data.mapData}
+      layers={{ sido: data.sido, sigungu: data.sigungu, emd: data.emd }}
+      mlScores={data.mlScores}
+      dailyRisk={data.dailyRisk}
     />
   );
 }

@@ -115,15 +115,17 @@ export function SatelliteMap({
   const syncViewRef = useRef(syncView);
   syncViewRef.current = syncView;
   const suppressIdleRef = useRef(false);
+  /** 폴리곤 클릭 시 맵 click 도 같이 떠서 선택이 바로 풀리는 것 방지 */
+  const suppressMapClickRef = useRef(false);
   const lastAppliedSyncKey = useRef<number | null>(null);
 
   const displayRegions = useMemo(() => {
     if (level !== "emd") return regions;
+    // 선택 중이면 해당 시군구 읍면동을 고정 (주변 지역 하이라이트 유지)
     const focus =
-      focusCode ||
       (selectedCode && selectedCode.length >= 5
         ? selectedCode.slice(0, 5)
-        : null);
+        : null) || focusCode;
     if (!focus) return [];
     return regions.filter((r) => r.code.startsWith(focus));
   }, [level, regions, focusCode, selectedCode]);
@@ -164,7 +166,11 @@ export function SatelliteMap({
 
         maps.event.addListener(map, "idle", emitView);
         maps.event.addListener(map, "click", () => {
-          handlersRef.current.onMapClickEmpty?.();
+          // 폴리곤 click 과 동일 제스처에서 맵 click 이 연달아 옴 → 한 틱 뒤 확인
+          window.setTimeout(() => {
+            if (suppressMapClickRef.current) return;
+            handlersRef.current.onMapClickEmpty?.();
+          }, 0);
         });
       })
       .catch((e) => {
@@ -287,7 +293,11 @@ export function SatelliteMap({
           zIndex: selected ? 4 : 2,
         });
         maps.event.addListener(polygon, "click", () => {
+          suppressMapClickRef.current = true;
           handlersRef.current.onRegionClick(region);
+          window.setTimeout(() => {
+            suppressMapClickRef.current = false;
+          }, 50);
         });
         maps.event.addListener(polygon, "mouseover", () => {
           handlersRef.current.onRegionHover(region);
