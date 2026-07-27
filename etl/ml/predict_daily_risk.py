@@ -14,6 +14,10 @@
     --humidity-avg 45 --humidity-min 28 \\
     --wind-avg 3.5 --wind-max 6 --precip 0
 
+antecedent(precip_3d/7d·dry_spell):
+  예측일−오늘 ≤ 7일 → weather_recent_tail 실측
+  그 이상 → 작년 동일 달력일(weather_daily_sigungu)로 window 재구성
+
 출력: frontend/public/data/daily_ml_risk.json
 """
 
@@ -167,6 +171,91 @@ FEATURE_COLS = [
     "hist_fire_count_365",
 ]
 
+# precip_7d 기준: 예측일−오늘 ≤ 7일이면 실측 recent tail, 초과면 작년 동월 window
+NEAR_HORIZON_DAYS = 7
+ANTECEDENT_LOOKBACK = 13  # + 예측일 = 14일 window
+
+_weather_daily_cache: pd.DataFrame | None = None
+
+
+def predict_horizon_days(date: str | pd.Timestamp) -> int:
+    today = pd.Timestamp.now(tz="Asia/Seoul").tz_localize(None).normalize()
+    t = pd.Timestamp(date).normalize()
+    return int((t - today).days)
+
+
+def antecedent_mode_for_date(date: str | pd.Timestamp) -> tuple[str, int]:
+    """반환: (mode, horizon_days). mode=recent_obs | prior_year_month"""
+    h = predict_horizon_days(date)
+    if h <= NEAR_HORIZON_DAYS:
+        return "recent_obs", h
+    return "prior_year_month", h
+
+
+def _load_weather_daily() -> pd.DataFrame:
+    global _weather_daily_cache
+    if _weather_daily_cache is not None:
+        return _weather_daily_cache
+    if not WEATHER_DAILY_SIGUNGU.exists():
+        _weather_daily_cache = pd.DataFrame()
+        return _weather_daily_cache
+    df = pd.read_csv(WEATHER_DAILY_SIGUNGU, encoding="utf-8-sig")
+    df["sigungu_code"] = df["sigungu_code"].astype(str)
+    df["date"] = pd.to_datetime(df["date"]).dt.normalize()
+    _weather_daily_cache = df
+    return df
+
+
+def _wx_row(date: pd.Timestamp, code: str, w: dict) -> dict:
+    return {
+        "date": date,
+        "sigungu_code": code,
+        "precip": float(w.get("precip") or 0),
+        "temp_avg": float(w["temp_avg"]),
+        "temp_min": float(w["temp_min"]),
+        "temp_max": float(w["temp_max"]),
+        "wind_avg": float(w["wind_avg"]),
+        "wind_max": float(w["wind_max"]),
+        "humidity_avg": float(w["humidity_avg"]),
+        "humidity_min": float(w["humidity_min"]),
+    }
+
+
+def _synthetic_past(dt: pd.Timestamp, code: str, w: dict) -> pd.DataFrame:
+    """작년 동월 데이터가 없을 때: 시나리오 당일 기상으로 lookback 채움."""
+    rows = [
+        _wx_row(dt - pd.Timedelta(days=i), code, w)
+        for i in range(ANTECEDENT_LOOKBACK, 0, -1)
+    ]
+    return pd.DataFrame(rows)
+
+
+def _prior_year_hist_dates(dt: pd.Timestamp) -> list[pd.Timestamp]:
+    out: list[pd.Timestamp] = []
+    for i in range(ANTECEDENT_LOOKBACK, 0, -1):
+        d = (dt - pd.Timedelta(days=i) - pd.DateOffset(years=1)).normalize()
+        out.append(pd.Timestamp(d))
+    return out
+
+
+def _past_frame_for_code(
+    *,
+    dt: pd.Timestamp,
+    code: str,
+    w: dict,
+    mode: str,
+    recent_tail: pd.DataFrame,
+    prior_by_code: dict[str, pd.DataFrame],
+) -> pd.DataFrame:
+    if mode == "recent_obs":
+        past = recent_tail[recent_tail["sigungu_code"] == code].copy()
+        return past[past["date"] < dt]
+
+    hist = prior_by_code.get(code)
+    if hist is not None and len(hist) >= 3:
+        return hist.copy()
+    return _synthetic_past(dt, code, w)
+
 
 def fetch_open_meteo(lat: float, lon: float, date: str) -> dict | None:
     qs = urllib.parse.urlencode(
@@ -253,14 +342,49 @@ def build_features_for_day(
     date: str,
     weather_by_code: dict[str, dict],
     hist: pd.DataFrame,
-) -> pd.DataFrame:
-    dt = pd.Timestamp(date)
+) -> tuple[pd.DataFrame, dict]:
+    """시군구 feature 행렬 + antecedent 메타(mode, horizon_days).
+
+    near(≤7일): weather_recent_tail 실측
+    far(≥8일): 작년 동일 달력일 기상으로 precip_3d/7d·dry_spell 계산
+    """
+    dt = pd.Timestamp(date).normalize()
     month = int(dt.month)
     dow = int(dt.dayofweek)
+    mode, horizon = antecedent_mode_for_date(dt)
+    meta = {
+        "antecedent_weather_mode": mode,
+        "horizon_days": horizon,
+        "near_horizon_days": NEAR_HORIZON_DAYS,
+    }
 
-    tail = pd.read_csv(WEATHER_RECENT_TAIL, encoding="utf-8-sig")
-    tail["sigungu_code"] = tail["sigungu_code"].astype(str)
-    tail["date"] = pd.to_datetime(tail["date"])
+    recent_tail = pd.DataFrame()
+    prior_by_code: dict[str, pd.DataFrame] = {}
+    if mode == "recent_obs":
+        if WEATHER_RECENT_TAIL.exists():
+            recent_tail = pd.read_csv(WEATHER_RECENT_TAIL, encoding="utf-8-sig")
+            recent_tail["sigungu_code"] = recent_tail["sigungu_code"].astype(str)
+            recent_tail["date"] = pd.to_datetime(recent_tail["date"]).dt.normalize()
+    else:
+        daily = _load_weather_daily()
+        if len(daily):
+            hist_dates = _prior_year_hist_dates(dt)
+            sub = daily[daily["date"].isin(hist_dates)]
+            cols = [
+                "date",
+                "sigungu_code",
+                "precip",
+                "temp_avg",
+                "temp_min",
+                "temp_max",
+                "wind_avg",
+                "wind_max",
+                "humidity_avg",
+                "humidity_min",
+            ]
+            have = [c for c in cols if c in sub.columns]
+            for code, g in sub.groupby("sigungu_code"):
+                prior_by_code[str(code)] = g[have].sort_values("date")
 
     rows = []
     for _, h in hist.iterrows():
@@ -268,21 +392,15 @@ def build_features_for_day(
         w = weather_by_code.get(code)
         if not w:
             continue
-        # 과거 tail + 오늘
-        past = tail[tail["sigungu_code"] == code].copy()
-        today_row = {
-            "date": dt,
-            "sigungu_code": code,
-            "precip": float(w.get("precip") or 0),
-            "temp_avg": w["temp_avg"],
-            "temp_min": w["temp_min"],
-            "temp_max": w["temp_max"],
-            "wind_avg": w["wind_avg"],
-            "wind_max": w["wind_max"],
-            "humidity_avg": w["humidity_avg"],
-            "humidity_min": w["humidity_min"],
-        }
-        past = past[past["date"] < dt]
+        past = _past_frame_for_code(
+            dt=dt,
+            code=code,
+            w=w,
+            mode=mode,
+            recent_tail=recent_tail,
+            prior_by_code=prior_by_code,
+        )
+        today_row = _wx_row(dt, code, w)
         combo = pd.concat([past, pd.DataFrame([today_row])], ignore_index=True)
         combo = combo.sort_values("date").tail(14)
         precip = combo["precip"].fillna(0)
@@ -319,7 +437,7 @@ def build_features_for_day(
                 "hist_fire_count_365": float(h["hist_fire_count_365"]),
             }
         )
-    return pd.DataFrame(rows)
+    return pd.DataFrame(rows), meta
 
 
 def _map_station_weather(
@@ -462,7 +580,7 @@ def run_daily_predict(
     )
 
     hist = load_hist()
-    feats = build_features_for_day(pred_date, weather_by_code, hist)
+    feats, ant_meta = build_features_for_day(pred_date, weather_by_code, hist)
     feats = feats.dropna(subset=FEATURE_COLS)
 
     model = XGBClassifier()
@@ -484,6 +602,9 @@ def run_daily_predict(
     payload = {
         "predict_date": pred_date,
         "weather_source": source,
+        "antecedent_weather_mode": ant_meta["antecedent_weather_mode"],
+        "horizon_days": ant_meta["horizon_days"],
+        "near_horizon_days": ant_meta["near_horizon_days"],
         "sample_weather": {
             k: round(float(v), 2) if v == v else None for k, v in sample_wx.items()
         },

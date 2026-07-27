@@ -109,15 +109,25 @@ def predict_scenario():
         )
         out = dict(payload)
         out["weather_source"] = "manual"
-        out["scenario_summary"] = scenario["summary"]
-        out["note"] = (
-            "가정 시나리오 예측 확률 (실제 예보 아님) · " + scenario["summary"]
-        )
+        mode = str(payload.get("antecedent_weather_mode") or "")
+        if mode == "prior_year_month":
+            ant_note = "최근 3·7일 기상=작년 동월"
+        elif mode == "recent_obs":
+            ant_note = "최근 3·7일 기상=실측"
+        else:
+            ant_note = ""
+        summary = scenario["summary"]
+        if ant_note:
+            summary = f"{summary} · {ant_note}"
+        out["scenario_summary"] = summary
+        out["note"] = "가정 시나리오 예측 확률 (실제 예보 아님) · " + summary
         log.info(
-            "scenario ok date=%s n=%s summary=%s",
+            "scenario ok date=%s n=%s mode=%s horizon=%s summary=%s",
             out.get("predict_date"),
             out.get("n_regions"),
-            scenario["summary"],
+            mode,
+            payload.get("horizon_days"),
+            summary,
         )
         return jsonify({"ok": True, "data": out})
     except ValueError as e:

@@ -175,5 +175,9 @@ export type DailyMlRisk = SigunguMlScores & {
   sample_weather?: Record<string, number | null>;
   n_regions?: number;
   scenario_summary?: string;
+  /** recent_obs(≤7일) | prior_year_month(≥8일) */
+  antecedent_weather_mode?: string;
+  horizon_days?: number;
+  near_horizon_days?: number;
 };
 
