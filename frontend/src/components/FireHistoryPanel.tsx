@@ -239,37 +239,33 @@ export function FireHistoryPanel({
                         <p className="mt-1 text-sm text-[#44403c]">
                           {formatRegionPath(ev.region, legalDong)}
                         </p>
-                        {mountains.length > 0 ? (
-                          <div className="mt-2">
-                            <p className="text-[11px] font-medium text-[#78716c]">
-                              발생지 일치 산 · 클릭하면 지도 표시·상세
-                            </p>
-                            <div className="mt-1.5 flex flex-wrap gap-1">
-                              {mountains.map((m) => (
-                                <button
-                                  key={m.id || m.name}
-                                  type="button"
-                                  onClick={() => openMountain(m)}
-                                  className="rounded bg-[#1c1917] px-2 py-0.5 text-[12px] text-[#fafaf9] transition hover:bg-[#44403c]"
-                                  title={
-                                    m.height && m.height > 0
-                                      ? `${m.height}m · ${m.address}`
-                                      : m.address
-                                  }
-                                >
-                                  {m.name}
-                                  {m.height && m.height > 0
-                                    ? ` ${Math.round(m.height)}m`
-                                    : ""}
-                                </button>
-                              ))}
+                          {mountains.length > 0 && (
+                            <div className="mt-2">
+                              <p className="text-[11px] font-medium text-[#78716c]">
+                                발생지 일치 산 · 클릭하면 지도 표시·상세
+                              </p>
+                              <div className="mt-1.5 flex flex-wrap gap-1">
+                                {mountains.map((m) => (
+                                  <button
+                                    key={m.id || m.name}
+                                    type="button"
+                                    onClick={() => openMountain(m)}
+                                    className="rounded bg-[#1c1917] px-2 py-0.5 text-[12px] text-[#fafaf9] transition hover:bg-[#44403c]"
+                                    title={
+                                      m.height && m.height > 0
+                                        ? `${m.height}m · ${m.address}`
+                                        : m.address
+                                    }
+                                  >
+                                    {m.name}
+                                    {m.height && m.height > 0
+                                      ? ` ${Math.round(m.height)}m`
+                                      : ""}
+                                  </button>
+                                ))}
+                              </div>
                             </div>
-                          </div>
-                        ) : (
-                          <p className="mt-2 text-[13px] text-[#a8a29e]">
-                            이 건은 발생 읍면·시군구와 일치하는 산 없음
-                          </p>
-                        )}
+                          )}
                       </li>
                     );
                   })}
