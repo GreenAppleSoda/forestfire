@@ -25,6 +25,7 @@ from paths import (
     WILDFIRE_WITH_MOUNTAINS,
     ensure_dirs,
 )
+from pipeline.normalize_region_names import normalize_region_path_string
 
 OUT = MAP_DATA_JSON
 PATHS_FILE = KOREA_SIGUNGU_PATHS
@@ -71,7 +72,7 @@ def lerp_color(t: float) -> str:
     return "#DC2626"
 
 
-def snippet(text: object, limit: int = 220) -> str:
+def snippet(text: object, limit: int = 140) -> str:
     if text is None or (isinstance(text, float) and pd.isna(text)):
         return ""
     s = re.sub(r"\s+", " ", str(text)).strip()
@@ -98,8 +99,8 @@ def mountain_payload(
         "name": str(row.get("mntn_nm", "") or ""),
         "height": height_val,
         "address": str(row.get("mntn_add", "") or ""),
-        "details": snippet(row.get("mntn_details"), 280),
-        "notable": snippet(row.get("mntn_notable"), 220),
+        "details": snippet(row.get("mntn_details"), 140),
+        "notable": snippet(row.get("mntn_notable"), 100),
         "admin": str(row.get("mntn_admin", "") or ""),
         "admin_tel": str(row.get("mntn_admin_tel", "") or ""),
         "fire_count": int(fire_count),
@@ -108,12 +109,26 @@ def mountain_payload(
     lon, lat = c.get("lon"), c.get("lat")
     sx, sy = c.get("svg_x"), c.get("svg_y")
     if lon is not None and lat is not None and pd.notna(lon) and pd.notna(lat):
-        payload["lon"] = float(lon)
-        payload["lat"] = float(lat)
+        payload["lon"] = round(float(lon), 5)
+        payload["lat"] = round(float(lat), 5)
     if sx is not None and sy is not None and pd.notna(sx) and pd.notna(sy):
-        payload["svg_x"] = float(sx)
-        payload["svg_y"] = float(sy)
+        payload["svg_x"] = round(float(sx), 2)
+        payload["svg_y"] = round(float(sy), 2)
     return payload
+
+
+def catalog_payload(full: dict) -> dict:
+    """지역별 catalog/top 에는 검색·패널에 필요한 최소 필드만."""
+    out = {
+        "id": full.get("id", ""),
+        "name": full.get("name", ""),
+        "height": full.get("height"),
+        "fire_count": int(full.get("fire_count") or 0),
+    }
+    for k in ("lon", "lat", "svg_x", "svg_y"):
+        if k in full:
+            out[k] = full[k]
+    return out
 
 
 def load_coords_by_id() -> dict[str, dict]:
@@ -411,7 +426,7 @@ def main() -> None:
         catalog = []
         for mid in catalog_ids[:14]:
             if mid in mtn_meta.index:
-                catalog.append(mp(mtn_meta.loc[mid], fire_counts_mtn.get(mid, 0)))
+                catalog.append(catalog_payload(mp(mtn_meta.loc[mid], fire_counts_mtn.get(mid, 0))))
 
         # top mountains from events for these fires
         top_mountains = []
@@ -426,7 +441,7 @@ def main() -> None:
             for mid, cnt in vc.items():
                 if mid in mtn_meta.index:
                     top_mountains.append(
-                        mp(mtn_meta.loc[mid], int(cnt))
+                        catalog_payload(mp(mtn_meta.loc[mid], int(cnt)))
                     )
 
         regions_out.append(
@@ -532,21 +547,31 @@ def main() -> None:
                 hist.append(
                     {
                         "datetime": "" if pd.isna(r["datetime"]) else str(r["datetime"]),
-                        "region": str(r.get("fire_region", "") or ""),
+                        "region": normalize_region_path_string(
+                            str(r.get("fire_region", "") or "")
+                        ),
                         "city": str(r.get("fire_city", "") or ""),
                         "town": str(r.get("fire_town", "") or ""),
                         "village": str(r.get("fire_village", "") or ""),
                         "damage_area": float(r["damage_area"]) if pd.notna(r["damage_area"]) else 0,
                         "mountains": names_raw,
-                        "mountain_list": linked,
+                        "mountain_list": [
+                            {
+                                "id": m.get("id", ""),
+                                "name": m.get("name", ""),
+                                "fire_count": int(m.get("fire_count") or 0),
+                            }
+                            for m in linked
+                        ],
                         "match_level": str(r.get("match_level", "") or ""),
                     }
                 )
         history[code] = hist
 
         for m in top_mountains + catalog:
-            if m["id"]:
-                mountain_index[m["id"]] = m
+            mid = m.get("id")
+            if mid and mid in mtn_meta.index and mid not in mountain_index:
+                mountain_index[mid] = mp(mtn_meta.loc[mid], fire_counts_mtn.get(mid, 0))
 
     # 전체 산 카탈로그 + 지오코딩 좌표 병합 (검색용)
     for mid, row in mtn_meta.iterrows():
@@ -579,13 +604,17 @@ def main() -> None:
             "regions": len(regions_out),
             "regions_with_fires": matched_feature_fires,
         },
-        "provinces": regions_out,  # 호환: 프론트에서 regions로도 씀
+        # regions 와 동일 내용 중복 방지 (프론트는 regions 우선)
+        "provinces": [],
         "regions": regions_out,
         "history": history,
         "mountains": mountain_index,
     }
 
-    OUT.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    OUT.write_text(
+        json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
+        encoding="utf-8",
+    )
     size_mb = OUT.stat().st_size / 1e6
     with_fire = sum(1 for r in regions_out if r["fire_count"] > 0)
     print(

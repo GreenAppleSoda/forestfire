@@ -27,6 +27,7 @@ from map.build_admin_layers import (
     strip_admin,
 )
 from map.export_map_data import lerp_color
+from pipeline.normalize_region_names import normalize_region_path_string
 from paths import (
     ADMIN_EMD_JSON,
     ADMIN_SIDO_JSON,
@@ -57,21 +58,19 @@ def _patch_admin_layer(path: Path, by_code_count: dict[str, int]) -> int:
         return 0
     data = json.loads(path.read_text(encoding="utf-8"))
     updated = 0
-    for bucket in ("regions", "markers"):
-        for item in data.get(bucket) or []:
-            code = str(item.get("code") or "")
-            if not code:
-                continue
-            # 시군구 코드 정확 매칭, 읍면동은 자체 카운트 키를 다시 계산하기 어려워
-            # markers/regions 에 이미 있는 fire_count 를 by_code 로 덮어씀
-            if code in by_code_count:
-                c = int(by_code_count[code])
-                item["fire_count"] = c
-                apply_prob(item, prob_from_count(c))
-                if "fill" in item:
-                    item["fill"] = item["color"]
-                updated += 1
-    path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    for item in data.get("regions") or []:
+        code = str(item.get("code") or "")
+        if not code:
+            continue
+        if code in by_code_count:
+            c = int(by_code_count[code])
+            item["fire_count"] = c
+            apply_prob(item, prob_from_count(c))
+            updated += 1
+    path.write_text(
+        json.dumps(data, ensure_ascii=False, separators=(",", ":")),
+        encoding="utf-8",
+    )
     return updated
 
 
@@ -84,76 +83,73 @@ def _recount_admin_from_indexes(fires: pd.DataFrame) -> dict:
             return 0
         data = json.loads(path.read_text(encoding="utf-8"))
         n = 0
-        for bucket in ("regions", "markers"):
-            for item in data.get(bucket) or []:
-                name = str(item.get("name") or "")
-                prov = str(item.get("province") or item.get("province_name") or "")
-                # province 필드가 코드성 short 인 경우 대비
-                short = prov
-                for full, s in (
-                    ("서울특별시", "서울"),
-                    ("부산광역시", "부산"),
-                    ("대구광역시", "대구"),
-                    ("인천광역시", "인천"),
-                    ("광주광역시", "광주"),
-                    ("대전광역시", "대전"),
-                    ("울산광역시", "울산"),
-                    ("세종특별자치시", "세종"),
-                    ("경기도", "경기"),
-                    ("강원특별자치도", "강원"),
-                    ("강원도", "강원"),
-                    ("충청북도", "충북"),
-                    ("충청남도", "충남"),
-                    ("전북특별자치도", "전북"),
-                    ("전라북도", "전북"),
-                    ("전라남도", "전남"),
-                    ("경상북도", "경북"),
-                    ("경상남도", "경남"),
-                    ("제주특별자치도", "제주"),
-                ):
-                    if prov == full or full in prov:
-                        short = s
-                        break
-                key = strip_admin(name)
-                if level == "sido":
-                    # 시도명은 풀네임일 수 있음
-                    c = 0
-                    for sk, cnt in by_prov.items():
-                        if sk in name or name.startswith(sk) or key == strip_admin(sk):
-                            c += cnt
-                    if "전남" in name and "광주" in name:
-                        c = by_prov.get("전남", 0) + by_prov.get("광주", 0)
-                    elif not c:
-                        c = by_prov.get(short, 0) or by_prov.get(key, 0)
-                elif level == "sigungu":
-                    c = by_city.get(f"{short}|{key}", 0)
-                    if not c:
-                        # province short 재추정
-                        for sk, cnt in by_city.items():
-                            if sk.endswith(f"|{key}"):
-                                c = cnt
-                                break
-                else:  # emd
-                    c = by_town_name.get(f"{short}|{key}", 0)
-                    if not c:
-                        for sk, cnt in by_town_name.items():
-                            if sk.endswith(f"|{key}"):
-                                c = cnt
-                                break
-                item["fire_count"] = int(c)
-                apply_prob(item, prob_from_count(int(c)))
-                if "fill" in item:
-                    item["fill"] = item["color"]
-                n += 1
-        # roll-up 색 일치
-        if level == "emd":
-            pass
+        for item in data.get("regions") or []:
+            name = str(item.get("name") or "")
+            prov = str(item.get("province") or item.get("province_name") or "")
+            # province 필드가 코드성 short 인 경우 대비
+            short = prov
+            for full, s in (
+                ("서울특별시", "서울"),
+                ("부산광역시", "부산"),
+                ("대구광역시", "대구"),
+                ("인천광역시", "인천"),
+                ("광주광역시", "광주"),
+                ("대전광역시", "대전"),
+                ("울산광역시", "울산"),
+                ("세종특별자치시", "세종"),
+                ("경기도", "경기"),
+                ("강원특별자치도", "강원"),
+                ("강원도", "강원"),
+                ("충청북도", "충북"),
+                ("충청남도", "충남"),
+                ("전북특별자치도", "전북"),
+                ("전라북도", "전북"),
+                ("전라남도", "전남"),
+                ("경상북도", "경북"),
+                ("경상남도", "경남"),
+                ("제주특별자치도", "제주"),
+            ):
+                if prov == full or full in prov:
+                    short = s
+                    break
+            key = strip_admin(name)
+            if level == "sido":
+                # 시도명은 풀네임일 수 있음
+                c = 0
+                for sk, cnt in by_prov.items():
+                    if sk in name or name.startswith(sk) or key == strip_admin(sk):
+                        c += cnt
+                if "전남" in name and "광주" in name:
+                    c = by_prov.get("전남", 0) + by_prov.get("광주", 0)
+                elif not c:
+                    c = by_prov.get(short, 0) or by_prov.get(key, 0)
+            elif level == "sigungu":
+                c = by_city.get(f"{short}|{key}", 0)
+                if not c:
+                    # province short 재추정
+                    for sk, cnt in by_city.items():
+                        if sk.endswith(f"|{key}"):
+                            c = cnt
+                            break
+            else:  # emd
+                c = by_town_name.get(f"{short}|{key}", 0)
+                if not c:
+                    for sk, cnt in by_town_name.items():
+                        if sk.endswith(f"|{key}"):
+                            c = cnt
+                            break
+            item["fire_count"] = int(c)
+            apply_prob(item, prob_from_count(int(c)))
+            n += 1
         data["meta"] = data.get("meta") or {}
         data["meta"]["max_fire_count"] = int(
             max((r.get("fire_count") or 0 for r in data.get("regions") or []), default=0)
         )
         data["meta"]["synced_at"] = datetime.now().isoformat(timespec="seconds")
-        path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+        path.write_text(
+            json.dumps(data, ensure_ascii=False, separators=(",", ":")),
+            encoding="utf-8",
+        )
         return n
 
     counts = {
@@ -162,43 +158,38 @@ def _recount_admin_from_indexes(fires: pd.DataFrame) -> dict:
         "emd": patch_file(ADMIN_EMD_JSON, "emd"),
     }
 
-    # 하위→상위 평균 (기존 build_admin_layers 와 동일)
+    # 하위→상위 평균 (regions 기준)
     if ADMIN_EMD_JSON.exists() and ADMIN_SIGUNGU_JSON.exists():
         emd = json.loads(ADMIN_EMD_JSON.read_text(encoding="utf-8"))
         sig = json.loads(ADMIN_SIGUNGU_JSON.read_text(encoding="utf-8"))
-        roll_up_from_children(sig.get("markers") or [], emd.get("markers") or [], lambda x: str(x.get("code", ""))[:5])
-        roll_up_from_children(sig.get("regions") or [], emd.get("regions") or [], lambda x: str(x.get("code", ""))[:5])
-        for r in sig.get("regions") or []:
-            for m in sig.get("markers") or []:
-                if r.get("code") == m.get("code"):
-                    r["prob"] = m["prob"]
-                    r["color"] = m["color"]
-                    r["fill"] = m["color"]
-                    r["r"] = m["r"]
-                    r["fire_count"] = m.get("fire_count", r.get("fire_count"))
-                    break
-        ADMIN_SIGUNGU_JSON.write_text(json.dumps(sig, ensure_ascii=False), encoding="utf-8")
+        roll_up_from_children(
+            sig.get("regions") or [],
+            emd.get("regions") or [],
+            lambda x: str(x.get("code", ""))[:5],
+        )
+        ADMIN_SIGUNGU_JSON.write_text(
+            json.dumps(sig, ensure_ascii=False, separators=(",", ":")),
+            encoding="utf-8",
+        )
 
         if ADMIN_SIDO_JSON.exists():
             sido = json.loads(ADMIN_SIDO_JSON.read_text(encoding="utf-8"))
             roll_up_from_children(
-                sido.get("markers") or [], sig.get("markers") or [], lambda x: x.get("province")
+                sido.get("regions") or [],
+                sig.get("regions") or [],
+                lambda x: x.get("province"),
             )
-            roll_up_from_children(
-                sido.get("regions") or [], sig.get("regions") or [], lambda x: x.get("province")
+            ADMIN_SIDO_JSON.write_text(
+                json.dumps(sido, ensure_ascii=False, separators=(",", ":")),
+                encoding="utf-8",
             )
-            for r in sido.get("regions") or []:
-                for m in sido.get("markers") or []:
-                    if r.get("code") == m.get("code"):
-                        r["prob"] = m["prob"]
-                        r["color"] = m["color"]
-                        r["fill"] = m["color"]
-                        r["r"] = m["r"]
-                        r["fire_count"] = m.get("fire_count", r.get("fire_count"))
-                        break
-            ADMIN_SIDO_JSON.write_text(json.dumps(sido, ensure_ascii=False), encoding="utf-8")
 
     return counts
+
+
+def _clean_region_path(path: object) -> str:
+    """표시용: Unknown 제거 + 법정동 공식명."""
+    return normalize_region_path_string(str(path or ""))
 
 
 def _refresh_map_data(fires: pd.DataFrame) -> dict:
@@ -252,7 +243,7 @@ def _refresh_map_data(fires: pd.DataFrame) -> dict:
             hist.append(
                 {
                     "datetime": str(r.get("datetime") or r.get("date") or ""),
-                    "region": str(r.get("region_path") or ""),
+                    "region": _clean_region_path(r.get("region_path") or ""),
                     "city": str(r.get("city") or ""),
                     "town": str(r.get("town") or ""),
                     "village": str(r.get("village") or ""),
@@ -266,25 +257,8 @@ def _refresh_map_data(fires: pd.DataFrame) -> dict:
 
     if data.get("regions"):
         data["regions"] = regions
-    if data.get("provinces") is regions or (
-        data.get("provinces") and len(data["provinces"]) == len(regions)
-    ):
-        # some builds use provinces as main list
-        pass
-    # provinces: roll-up by province name if separate
-    if data.get("provinces") and data["provinces"] is not regions:
-        prov_counts: dict[str, int] = defaultdict(int)
-        for reg, c in zip(regions, counts):
-            prov_counts[str(reg.get("province") or "")] += c
-        pmax = max(prov_counts.values()) if prov_counts else 1
-        for p in data["provinces"]:
-            key = str(p.get("province") or p.get("name") or "")
-            fc = prov_counts.get(key, int(p.get("fire_count") or 0))
-            intensity = fc / pmax if pmax else 0
-            p["fire_count"] = int(fc)
-            p["intensity"] = round(float(intensity), 4)
-            p["risk_score"] = round(float(intensity * 100), 1)
-            p["color"] = lerp_color(intensity) if fc > 0 else "#93C5FD"
+    # provinces 중복 제거 유지
+    data["provinces"] = []
 
     data["history"] = {**(data.get("history") or {}), **history}
     meta = data.get("meta") or {}
@@ -293,7 +267,10 @@ def _refresh_map_data(fires: pd.DataFrame) -> dict:
     meta["source"] = "wildfire-atlas+openapi"
     data["meta"] = meta
 
-    MAP_DATA_JSON.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    MAP_DATA_JSON.write_text(
+        json.dumps(data, ensure_ascii=False, separators=(",", ":")),
+        encoding="utf-8",
+    )
     return {
         "updated": True,
         "regions": len(regions),

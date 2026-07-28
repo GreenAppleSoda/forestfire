@@ -1,5 +1,6 @@
+import type { Response } from "express";
 import { Router } from "express";
-import { readJson } from "../lib/data.js";
+import { readJsonCached } from "../lib/data.js";
 import {
   whitelistAdmin,
   whitelistDailyRisk,
@@ -15,9 +16,14 @@ const ADMIN_FILES: Record<string, string> = {
   emd: "admin-emd.json",
 };
 
+function setMapCacheHeaders(res: Response) {
+  res.setHeader("Cache-Control", "public, max-age=60, stale-while-revalidate=600");
+}
+
 router.get("/map/data", async (_req, res) => {
   try {
-    const raw = await readJson("map-data.json");
+    const raw = await readJsonCached("map-data.json");
+    setMapCacheHeaders(res);
     res.json({ ok: true, data: whitelistMapData(raw) });
   } catch (e) {
     console.error("[map/data]", e);
@@ -31,7 +37,8 @@ router.get("/map/admin/:level", async (req, res) => {
     return res.status(400).json({ ok: false, error: "invalid level" });
   }
   try {
-    const raw = await readJson(file);
+    const raw = await readJsonCached(file);
+    setMapCacheHeaders(res);
     res.json({ ok: true, data: whitelistAdmin(raw) });
   } catch (e) {
     console.error("[map/admin]", e);
@@ -43,7 +50,8 @@ router.get("/map/admin/:level", async (req, res) => {
 
 router.get("/map/ml-scores", async (_req, res) => {
   try {
-    const raw = await readJson("sigungu_ml_scores.json");
+    const raw = await readJsonCached("sigungu_ml_scores.json");
+    setMapCacheHeaders(res);
     res.json({ ok: true, data: whitelistMlScores(raw) });
   } catch {
     res.json({ ok: true, data: null });
@@ -52,7 +60,8 @@ router.get("/map/ml-scores", async (_req, res) => {
 
 router.get("/map/daily-risk", async (_req, res) => {
   try {
-    const raw = await readJson("daily_ml_risk.json");
+    const raw = await readJsonCached("daily_ml_risk.json");
+    setMapCacheHeaders(res);
     res.json({ ok: true, data: whitelistDailyRisk(raw), cached: true });
   } catch {
     res.json({ ok: true, data: null });

@@ -9,6 +9,8 @@ venv/
 # Data (large; share separately)
 db/
 db-archive/
+법정동코드 전체자료.txt
+법정동코드*.txt
 # Frontend
 frontend/node_modules/
 frontend/.next/

@@ -75,8 +75,8 @@ const SELECT_DIM = {
 } as const;
 
 function levelForScale(scale: number): AdminLevel {
-  if (scale < 1.75) return "sido";
-  if (scale < 3.5) return "sigungu";
+  if (scale < 4.5) return "sido";
+  if (scale < 11) return "sigungu";
   return "emd";
 }
 
@@ -153,16 +153,34 @@ function mergeMountainCatalogs(parts: RegionStat[]): {
 
 function shortLabel(name: string, level: AdminLevel) {
   if (level === "sido") {
-    return name
+    const short = name
       .replace("특별자치시", "")
       .replace("특별자치도", "")
       .replace("광역시", "")
       .replace("특별시", "")
       .replace("도", "")
       .replace("전남광주통합", "전남·광주");
+    const SIDO_SHORT: Record<string, string> = {
+      충청남: "충남",
+      충청북: "충북",
+      경상북: "경북",
+      경상남: "경남",
+      전라남: "전남",
+      전라북: "전북",
+    };
+    return SIDO_SHORT[short] ?? short;
   }
   if (name.length > 6) return name.replace(/(시|군|구|읍|면|동)$/, "");
   return name;
+}
+
+/** 시도 라벨 중 도 단위(경기·경북 등). 광역시·특별시는 false */
+function isProvinceSido(name: string): boolean {
+  if (/전남광주통합/.test(name)) return true;
+  if (/(광역시|특별시|특별자치시)/.test(name) && !/도/.test(name)) {
+    return false;
+  }
+  return /도/.test(name);
 }
 
 /** SVG path d 에서 대략적 bbox (숫자 좌표만) */
@@ -206,6 +224,7 @@ export function KoreaSvgMap({
   const [hovered, setHovered] = useState<AdminRegion | null>(null);
   const [view, setView] = useState<View>(INITIAL_VIEW);
   const [mapMode, setMapMode] = useState<MapDisplayMode>("choropleth");
+  const [rightPanelOpen, setRightPanelOpen] = useState(true);
   const [satView, setSatView] = useState<SatelliteViewState>(() =>
     svgViewToKakao(INITIAL_VIEW),
   );
@@ -747,6 +766,18 @@ export function KoreaSvgMap({
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  // 지역·산 선택 시 우측 패널 자동 펼침
+  useEffect(() => {
+    if (selected || searchPanelMountain) setRightPanelOpen(true);
+  }, [selected?.code, searchPanelMountain?.id]);
+
+  // 우측 패널 접기/펼치기 후 위성 지도 컨테이너 리사이즈
+  useEffect(() => {
+    if (mapMode !== "satellite") return;
+    const t = window.setTimeout(() => setSatSyncKey((k) => k + 1), 80);
+    return () => window.clearTimeout(t);
+  }, [rightPanelOpen, mapMode]);
+
   // 레벨 바뀌면 선택 유지(다른 단위로 넘어감)
   useEffect(() => {
     setHovered(null);
@@ -828,14 +859,17 @@ export function KoreaSvgMap({
   /** 읍면동 확대 시 시군구 외곽 — 짙은 남색, 얇은 선 */
   const sigunguOutline = Math.max(0.22, 1.05 / view.scale);
   const sigunguOutlineActive = Math.max(0.3, 1.35 / view.scale);
-  const SIGUNGU_OUTLINE = "#1e3a5f";
-  const SIGUNGU_OUTLINE_ACTIVE = "#0f2744";
+  const SIGUNGU_OUTLINE = "#ffffff";
+  const SIGUNGU_OUTLINE_ACTIVE = "#ffffff";
   // 시도·시군구: 기존 방식 / 고배율에서는 화면상 글자 크기 유지(÷scale)
-  const labelSize =
+  // 시도 중 도 단위는 시(광역시·특별시)보다 크게
+  const labelSizeCity =
     level === "sido"
       ? Math.max(7.5, 10.5 / Math.sqrt(view.scale))
       : Math.max(5.2, 7.2 / Math.sqrt(view.scale));
+  const labelSizeProvince = labelSizeCity * 1.8;
   const labelStroke = Math.max(0.28, 1.2 / view.scale);
+  const labelStrokeProvince = Math.max(1.2, 5.5 / view.scale);
   /** 호버 시군구 뱃지 — 화면 기준 눈에 띄는 크기 */
   const sigunguBadgeFs = Math.max(0.45, 18 / view.scale);
   const sigunguBadgePadX = Math.max(0.35, 7 / view.scale);
@@ -846,9 +880,19 @@ export function KoreaSvgMap({
   const emdLabelStroke = Math.max(0.08, 1.2 / view.scale);
 
   return (
-    <div className="flex h-dvh w-full overflow-hidden bg-[#c5d4e4]">
+    <div className="relative flex h-dvh w-full overflow-hidden bg-[#c5d4e4]">
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        <SiteHeader />
+        <SiteHeader
+          right={
+            <HistorySyncControl
+              variant="header"
+              onUpdated={({ mapData: nextMap, layers: nextLayers }) => {
+                setMapData(nextMap);
+                setLayers(nextLayers);
+              }}
+            />
+          }
+        />
 
         <section className="relative min-h-0 flex-1 overflow-hidden bg-[#c5d4e4]">
           <div
@@ -987,6 +1031,32 @@ export function KoreaSvgMap({
                     );
                   })}
 
+                {/* 선택·호버 읍면동 fill 을 시군구 흰 선 위에 다시 그려 최상단 유지 */}
+                {level === "emd" &&
+                  (() => {
+                    const seen = new Set<string>();
+                    const list: AdminRegion[] = [];
+                    for (const r of [selectedAdmin, hovered]) {
+                      if (r?.d && !seen.has(r.code)) {
+                        seen.add(r.code);
+                        list.push(r);
+                      }
+                    }
+                    return list.map((r) => {
+                      const isSelected = selectedAdmin?.code === r.code;
+                      return (
+                        <path
+                          key={`top-fill-${r.code}`}
+                          d={r.d}
+                          fill={probToColor(colorProb(r, level))}
+                          fillOpacity={isSelected ? 0.98 : 0.95}
+                          stroke="none"
+                          className="pointer-events-none"
+                        />
+                      );
+                    });
+                  })()}
+
                 {/* 호버·선택 외곽: fill/시군구선 위에 따로 그려 굵기·색 균일 유지 */}
                 {(() => {
                   const isEmd = level === "emd";
@@ -1064,12 +1134,17 @@ export function KoreaSvgMap({
                   // 시도·시군구: 전체 라벨 / 읍면동: 호버·선택만
                   if (level === "emd" && !active) return null;
                   const dimLabel = !!selectedAdmin && !isSelected;
+                  const provinceLabel =
+                    level === "sido" && isProvinceSido(r.name);
+                  const baseFs = provinceLabel
+                    ? labelSizeProvince
+                    : labelSizeCity;
                   const fs =
                     level === "emd"
                       ? emdLabelFs
                       : active
-                        ? labelSize + 0.8
-                        : labelSize;
+                        ? baseFs + (provinceLabel ? 2 : 0.8)
+                        : baseFs;
                   return (
                     <text
                       key={`lb-${r.code}`}
@@ -1080,10 +1155,16 @@ export function KoreaSvgMap({
                       fill={active ? "#0c0a09" : "#292524"}
                       fillOpacity={dimLabel ? SELECT_DIM.label : 1}
                       fontSize={fs}
-                      fontWeight={active ? 700 : 500}
+                      fontWeight={
+                        provinceLabel ? 700 : active ? 700 : 500
+                      }
                       stroke="#F8FAFC"
                       strokeWidth={
-                        level === "emd" ? emdLabelStroke : labelStroke
+                        level === "emd"
+                          ? emdLabelStroke
+                          : provinceLabel
+                            ? labelStrokeProvince
+                            : labelStroke
                       }
                       strokeOpacity={dimLabel ? SELECT_DIM.labelStroke : 1}
                       paintOrder="stroke"
@@ -1099,34 +1180,35 @@ export function KoreaSvgMap({
                   );
                 })}
 
-                {/* 산 검색 마커 (화면 기준 크기 유지, 이름 라벨 없음) */}
+                {/* 산 검색 마커 — 파란 핀 + 흰 글자/검정 테두리 이름 */}
                 {pinnedMountain && mountainLink?.marker && (
                   <g
                     className="pointer-events-none"
-                    transform={`translate(${mountainLink.marker.x} ${mountainLink.marker.y})`}
+                    transform={`translate(${mountainLink.marker.x} ${mountainLink.marker.y}) scale(${1 / view.scale})`}
                   >
-                    <circle
-                      r={22 / view.scale}
-                      fill="#b91c1c"
-                      fillOpacity={0.16}
-                      className="animate-pulse"
+                    {/* 팁이 (0,0) — 지도 좌표에 정확히 찍힘 */}
+                    <path
+                      d="M0 0c-1.1-8-15.5-22.5-15.5-34.5a15.5 15.5 0 1 1 31 0C15.5-22.5 1.1-8 0 0z"
+                      fill="#3B5BDB"
+                      stroke="#1e3a8a"
+                      strokeWidth={1.2}
+                      strokeLinejoin="round"
                     />
-                    <circle
-                      r={16 / view.scale}
-                      fill="#fffefb"
-                      stroke="#b91c1c"
-                      strokeWidth={2 / view.scale}
-                    />
+                    <circle cx={0} cy={-34.5} r={6.2} fill="#ffffff" />
                     <text
+                      x={0}
+                      y={-62}
                       textAnchor="middle"
-                      dominantBaseline="central"
-                      fontSize={22 / view.scale}
-                      style={{
-                        fontFamily:
-                          '"Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",sans-serif',
-                      }}
+                      fill="#ffffff"
+                      fontSize={23}
+                      fontWeight={700}
+                      stroke="#1c1917"
+                      strokeWidth={3.8}
+                      paintOrder="stroke"
+                      strokeLinejoin="round"
+                      style={{ fontFamily: "var(--font-sans)" }}
                     >
-                      ⛰️
+                      {pinnedMountain.name}
                     </text>
                   </g>
                 )}
@@ -1246,9 +1328,9 @@ export function KoreaSvgMap({
                           ? `${parentSigungu.name} · ${m.province_name || m.province}`
                           : m.province_name || m.province}
                       </p>
-                      <p className="mt-1">
+                      <p className="mt-1 text-sm">
                         {modeLabel}
-                        <span className="font-semibold text-[#b91c1c]">
+                        <span className="text-2xl font-bold text-[#b91c1c]">
                           {(p * 100).toFixed(1)}%
                         </span>
                         <span className="ml-2 text-xs text-[#78716c]">
@@ -1280,11 +1362,13 @@ export function KoreaSvgMap({
             )}
             </div>
 
-            <div className="pointer-events-auto flex w-full max-w-sm shrink-0 flex-col items-end gap-2">
-              <MountainSearch
-                mountainIndex={mapData.mountains}
-                onSelect={onMountainSelect}
-              />
+            <div className="pointer-events-auto flex shrink-0 flex-col items-end gap-2">
+              <div className="w-72">
+                <MountainSearch
+                  mountainIndex={mapData.mountains}
+                  onSelect={onMountainSelect}
+                />
+              </div>
               {riskMode === "daily" && (
                 <DailyPredictForm
                   daily={daily}
@@ -1301,14 +1385,6 @@ export function KoreaSvgMap({
                   onPredicted={(data) => {
                     setScenario(data);
                     setPredictError(null);
-                  }}
-                />
-              )}
-              {riskMode === "history" && (
-                <HistorySyncControl
-                  onUpdated={({ mapData: nextMap, layers: nextLayers }) => {
-                    setMapData(nextMap);
-                    setLayers(nextLayers);
                   }}
                 />
               )}
@@ -1332,52 +1408,78 @@ export function KoreaSvgMap({
         </section>
       </div>
 
-      <div className="hidden h-full w-[min(400px,38vw)] shrink-0 md:block">
-        {searchPanelMountain ? (
-          <MountainSearchResult
-            mountain={searchPanelMountain}
-            mapRegion={mountainLink?.mapRegion}
-            adminRegion={mountainLink?.adminRegion}
-            historyProb={mountainLink?.adminRegion?.prob}
-            mlRiskNorm={mountainRisk.norm}
-            mlRiskRaw={mountainRisk.raw}
-            riskMode={riskMode}
-            predictDate={activePredict?.predict_date}
-            weatherSource={activePredict?.weather_source}
-            predictLoading={predictLoading}
-            predictError={predictError}
-            onBack={() => {
-              clearMountainPin();
-            }}
-            onFocusRegion={() => {
-              if (mountainLink?.adminRegion) {
-                setSelectedAdmin(mountainLink.adminRegion);
-                setSelected(toStat(mountainLink.adminRegion));
+      {/* 접힌 상태: 화면 오른쪽 가장자리 중앙 */}
+      {!rightPanelOpen && (
+        <button
+          type="button"
+          onClick={() => setRightPanelOpen(true)}
+          className="absolute top-1/2 right-0 z-30 hidden h-12 w-7 -translate-y-1/2 items-center justify-center rounded-l-md border border-r-0 border-[#d6d3d1] bg-white text-base text-[#44403c] shadow-sm transition hover:bg-[#f5f5f4] md:flex"
+          aria-label="패널 열기"
+          title="패널 열기"
+        >
+          ‹
+        </button>
+      )}
+
+      {/* 데스크톱 우측 패널 */}
+      {rightPanelOpen && (
+        <div className="relative hidden h-full w-[min(400px,38vw)] shrink-0 md:block">
+          {/* 패널 왼쪽 가장자리 중앙 — 접기 */}
+          <button
+            type="button"
+            onClick={() => setRightPanelOpen(false)}
+            className="absolute top-1/2 left-0 z-30 flex h-12 w-7 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-md border border-[#d6d3d1] bg-white text-base text-[#44403c] shadow-sm transition hover:bg-[#f5f5f4]"
+            aria-label="패널 접기"
+            title="패널 접기"
+          >
+            ›
+          </button>
+          {searchPanelMountain ? (
+            <MountainSearchResult
+              mountain={searchPanelMountain}
+              mapRegion={mountainLink?.mapRegion}
+              adminRegion={mountainLink?.adminRegion}
+              historyProb={mountainLink?.adminRegion?.prob}
+              mlRiskNorm={mountainRisk.norm}
+              mlRiskRaw={mountainRisk.raw}
+              riskMode={riskMode}
+              predictDate={activePredict?.predict_date}
+              weatherSource={activePredict?.weather_source}
+              predictLoading={predictLoading}
+              predictError={predictError}
+              onBack={() => {
+                clearMountainPin();
+              }}
+              onFocusRegion={() => {
+                if (mountainLink?.adminRegion) {
+                  setSelectedAdmin(mountainLink.adminRegion);
+                  setSelected(toStat(mountainLink.adminRegion));
+                }
+              }}
+            />
+          ) : (
+            <FireHistoryPanel
+              key={selected?.code ?? "none"}
+              province={selected}
+              events={eventsForSelection}
+              mountainIndex={mapData.mountains}
+              totalFires={mapData.meta.total_fires}
+              totalMountains={mapData.meta.total_mountains}
+              matchedFires={mapData.meta.matched_fires}
+              probability={
+                selectedAdmin ? labelProb(selectedAdmin, level) : undefined
               }
-            }}
-          />
-        ) : (
-          <FireHistoryPanel
-            key={selected?.code ?? "none"}
-            province={selected}
-            events={eventsForSelection}
-            mountainIndex={mapData.mountains}
-            totalFires={mapData.meta.total_fires}
-            totalMountains={mapData.meta.total_mountains}
-            matchedFires={mapData.meta.matched_fires}
-            probability={
-              selectedAdmin ? labelProb(selectedAdmin, level) : undefined
-            }
-            probabilityLabel={probLabel}
-            onLocateMountain={onLocateMountain}
-            onClose={() => {
-              setSelected(null);
-              setSelectedAdmin(null);
-              clearMountainPin();
-            }}
-          />
-        )}
-      </div>
+              probabilityLabel={probLabel}
+              onLocateMountain={onLocateMountain}
+              onClose={() => {
+                setSelected(null);
+                setSelectedAdmin(null);
+                clearMountainPin();
+              }}
+            />
+          )}
+        </div>
+      )}
 
       {searchPanelMountain && (
         <div className="absolute inset-y-0 right-0 z-40 w-full max-w-md md:hidden">

@@ -19,6 +19,7 @@ from collections import defaultdict
 
 import pandas as pd
 import shapefile
+from pyproj import Transformer
 
 from paths import FRONTEND_PUBLIC_DATA, GEO_DIR, REFINED_WILDFIRE, ensure_dirs
 
@@ -28,6 +29,29 @@ XMIN, YMIN = 740000.0, 1450000.0
 XMAX, YMAX = 1395000.0, 2075000.0
 WIDTH, HEIGHT = 800, 900
 PAD = 24
+
+_WGS84_TO_5179 = Transformer.from_crs("EPSG:4326", "EPSG:5179", always_xy=True)
+
+# 시도 라벨 = 시청·도청 좌표 (WGS84 lat, lng) — 폴리곤 bbox 중심은 바다/섬으로 밀림
+SIDO_OFFICE_WGS84: dict[str, tuple[float, float]] = {
+    "서울": (37.5665, 126.9780),  # 서울특별시청
+    "부산": (35.1796, 129.0756),  # 부산광역시청
+    "대구": (35.8714, 128.6014),  # 대구광역시청
+    "인천": (37.4563, 126.7052),  # 인천광역시청
+    "광주": (35.1595, 126.8526),  # 광주광역시청
+    "대전": (36.3504, 127.3845),  # 대전광역시청
+    "울산": (35.5384, 129.3114),  # 울산광역시청
+    "세종": (36.4801, 127.2890),  # 세종특별자치시청
+    "경기": (37.2751, 127.0095),  # 경기도청(수원)
+    "강원": (37.8854, 127.7298),  # 강원특별자치도청(춘천)
+    "충북": (36.6357, 127.4912),  # 충청북도청(청주)
+    "충남": (36.6597, 126.6728),  # 충청남도청(홍성 내포)
+    "전북": (35.8203, 127.1088),  # 전북특별자치도청(전주)
+    "전남": (35.1595, 126.8526),  # 통합 폴리곤 → 광주광역시청(육지 중앙)
+    "경북": (36.5760, 128.5056),  # 경상북도청(안동)
+    "경남": (35.2279, 128.6819),  # 경상남도청(창원)
+    "제주": (33.4890, 126.4983),  # 제주특별자치도청
+}
 
 PREFIX_TO_PROV = {
     "11": "서울",
@@ -77,6 +101,20 @@ def to_svg(x: float, y: float) -> tuple[float, float]:
     return round(sx, 2), round(sy, 2)
 
 
+def wgs84_to_svg(lat: float, lng: float) -> tuple[float, float]:
+    tm_x, tm_y = _WGS84_TO_5179.transform(lng, lat)
+    return to_svg(tm_x, tm_y)
+
+
+def label_point_tm(shape, level: str, prov: str) -> tuple[float, float]:
+    """시도: 시청·도청 / 그 외: bbox 중심(기존)."""
+    if level == "sido":
+        ll = SIDO_OFFICE_WGS84.get(prov)
+        if ll:
+            return wgs84_to_svg(ll[0], ll[1])
+    return to_svg(*centroid_tm(shape))
+
+
 def strip_admin(name: str) -> str:
     name = re.sub(r"\s+", "", str(name).strip())
     name = re.sub(r"(특별자치시|광역시|특별시|특별자치도)$", "", name)
@@ -124,10 +162,10 @@ def path_tolerance(shape, level: str, base_tol: float) -> float:
     b = shape.bbox
     extent = max(b[2] - b[0], b[3] - b[1])
     if extent >= 20000:
-        return 0.32
+        return 0.55
     if extent >= 8000:
-        return 0.18
-    return 0.08
+        return 0.32
+    return 0.16
 
 
 def shape_to_svg_path(shape, tol: float) -> str | None:
@@ -294,7 +332,7 @@ def process_level(
             elif not prov and "광주" in raw:
                 prov = "광주"
 
-        sx, sy = to_svg(*centroid_tm(shape))
+        sx, sy = label_point_tm(shape, level, prov)
         n = strip_admin(name)
         count = 0
         if level == "sido":
@@ -327,42 +365,39 @@ def process_level(
             }
         )
 
-    regions, markers = [], []
+    regions = []
     for r in rows:
+        if not (include_paths and r["d"]):
+            continue
         prob = prob_from_count(r["fire_count"])
         color = prob_color(prob)
         radius = round(3.2 + 7.5 * (prob**0.85), 2)
-        item = {
-            "code": r["code"],
-            "name": r["name"],
-            "province": r["province"],
-            "province_name": r["province_name"],
-            "fire_count": r["fire_count"],
-            "prob": prob,
-            "color": color,
-            "x": r["x"],
-            "y": r["y"],
-            "r": radius,
-        }
-        markers.append(item)
-        if include_paths and r["d"]:
-            regions.append(
-                {
-                    **item,
-                    "d": r["d"],
-                    "fill": color,
-                    "label": [r["x"], r["y"]],
-                }
-            )
+        regions.append(
+            {
+                "code": r["code"],
+                "name": r["name"],
+                "province": r["province"],
+                "province_name": r["province_name"],
+                "fire_count": r["fire_count"],
+                "prob": prob,
+                "color": color,
+                "x": r["x"],
+                "y": r["y"],
+                "r": radius,
+                "d": r["d"],
+                "label": [r["x"], r["y"]],
+            }
+        )
 
     return {
         "level": level,
         "viewBox": [WIDTH, HEIGHT],
         "regions": regions,
-        "markers": markers,
+        # 프론트는 regions 만 사용 — markers 중복(~1MB) 제거
+        "markers": [],
         "meta": {
             "n_regions": len(regions),
-            "n_markers": len(markers),
+            "n_markers": 0,
             "max_fire_count": int(max((r["fire_count"] for r in rows), default=0)),
             "prob_note": "P(향후 1년 내 산불 1건+) 추정치 · 과거 발생률 기반",
         },
@@ -378,62 +413,35 @@ def main() -> None:
 
     print("시도…")
     sido = process_level(
-        "시도", "ctp_rvn", "sido", "CTPRVN_CD", "CTP_KOR_NM", 2.4, idx, True
+        "시도", "ctp_rvn", "sido", "CTPRVN_CD", "CTP_KOR_NM", 2.8, idx, True
     )
-    for m in sido["markers"]:
-        if "전남" in m["name"] and "광주" in m["name"]:
-            c = idx[0].get("전남", 0) + idx[0].get("광주", 0)
-            m["fire_count"] = c
-            apply_prob(m, prob_from_count(c))
     for r in sido["regions"]:
-        for m in sido["markers"]:
-            if r["code"] == m["code"]:
-                r["prob"] = m["prob"]
-                r["color"] = m["color"]
-                r["fire_count"] = m["fire_count"]
-                r["r"] = m["r"]
-                r["fill"] = m["color"]
-                break
+        if "전남" in r["name"] and "광주" in r["name"]:
+            c = idx[0].get("전남", 0) + idx[0].get("광주", 0)
+            r["fire_count"] = c
+            apply_prob(r, prob_from_count(c))
 
     print("시군구…")
     sig = process_level(
-        "시군구", "sig", "sigungu", "SIG_CD", "SIG_KOR_NM", 1.5, idx, True
+        "시군구", "sig", "sigungu", "SIG_CD", "SIG_KOR_NM", 1.8, idx, True
     )
 
     print("읍면동…")
     emd = process_level(
-        "읍면동", "emd", "emd", "EMD_CD", "EMD_KOR_NM", 0.35, idx, True
+        "읍면동", "emd", "emd", "EMD_CD", "EMD_KOR_NM", 0.55, idx, True
     )
 
     # 하위 평균으로 상위 확률·색상 통일 (줌 시 색감 일치)
-    roll_up_from_children(sig["markers"], emd["markers"], lambda x: x["code"][:5])
     roll_up_from_children(sig["regions"], emd["regions"], lambda x: x["code"][:5])
-    for r in sig["regions"]:
-        for m in sig["markers"]:
-            if r["code"] == m["code"]:
-                r["prob"] = m["prob"]
-                r["color"] = m["color"]
-                r["fill"] = m["color"]
-                r["r"] = m["r"]
-                break
-
-    roll_up_from_children(sido["markers"], sig["markers"], lambda x: x["province"])
     roll_up_from_children(sido["regions"], sig["regions"], lambda x: x["province"])
-    for r in sido["regions"]:
-        for m in sido["markers"]:
-            if r["code"] == m["code"]:
-                r["prob"] = m["prob"]
-                r["color"] = m["color"]
-                r["fill"] = m["color"]
-                r["r"] = m["r"]
-                break
 
-    (OUT_DIR / "admin-sido.json").write_text(json.dumps(sido, ensure_ascii=False), encoding="utf-8")
-    print(f"  {len(sido['regions'])} paths / {len(sido['markers'])} markers")
-    (OUT_DIR / "admin-sigungu.json").write_text(json.dumps(sig, ensure_ascii=False), encoding="utf-8")
-    print(f"  {len(sig['regions'])} paths / {len(sig['markers'])} markers")
-    (OUT_DIR / "admin-emd.json").write_text(json.dumps(emd, ensure_ascii=False), encoding="utf-8")
-    print(f"  {len(emd['regions'])} paths / {len(emd['markers'])} markers")
+    dumps_kw = {"ensure_ascii": False, "separators": (",", ":")}
+    (OUT_DIR / "admin-sido.json").write_text(json.dumps(sido, **dumps_kw), encoding="utf-8")
+    print(f"  {len(sido['regions'])} paths")
+    (OUT_DIR / "admin-sigungu.json").write_text(json.dumps(sig, **dumps_kw), encoding="utf-8")
+    print(f"  {len(sig['regions'])} paths")
+    (OUT_DIR / "admin-emd.json").write_text(json.dumps(emd, **dumps_kw), encoding="utf-8")
+    print(f"  {len(emd['regions'])} paths")
 
     for name in [
         "admin-sido.json",

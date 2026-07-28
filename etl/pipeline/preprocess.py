@@ -17,6 +17,7 @@ import json
 import pandas as pd
 
 from paths import RAW_WILDFIRE, REFINED_WILDFIRE, ensure_dirs
+from pipeline.normalize_region_names import format_region_path, normalize_parts
 
 
 def load_wildfire_raw(file_path: Path) -> pd.DataFrame:
@@ -113,15 +114,39 @@ def preprocess_wildfire_data(file_path=None):
         df_refined[col] = df_refined[col].fillna("Unknown").astype(str).str.strip()
         df_refined.loc[df_refined[col].isin(["", "nan", "None"]), col] = "Unknown"
 
-    df_refined["region_path"] = (
-        df_refined["province"]
-        + " > "
-        + df_refined["city"]
-        + " > "
-        + df_refined["town"]
-        + " > "
-        + df_refined["village"]
+    def _region_path(row: pd.Series) -> str:
+        return format_region_path(
+            row.get("province"),
+            row.get("city"),
+            row.get("town"),
+            row.get("village"),
+        )
+
+    df_refined["region_path"] = df_refined.apply(_region_path, axis=1)
+
+    # 가능하면 개별 필드도 공식명으로 맞춤 (매칭·표시 일관성)
+    lookup_parts = df_refined.apply(
+        lambda r: normalize_parts(
+            str(r.get("province") or ""),
+            str(r.get("city") or ""),
+            str(r.get("town") or ""),
+            str(r.get("village") or ""),
+        ),
+        axis=1,
     )
+    df_refined["province"] = lookup_parts.map(
+        lambda p: p[0] if len(p) > 0 else "Unknown"
+    )
+    df_refined["city"] = lookup_parts.map(
+        lambda p: p[1] if len(p) > 1 else "Unknown"
+    )
+    df_refined["town"] = lookup_parts.map(
+        lambda p: p[2] if len(p) > 2 else "Unknown"
+    )
+    df_refined["village"] = lookup_parts.map(
+        lambda p: p[3] if len(p) > 3 else "Unknown"
+    )
+
     df_refined["is_fire"] = 1
     df_refined = df_refined.sort_values("datetime", ascending=False).reset_index(drop=True)
 

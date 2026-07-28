@@ -28,6 +28,7 @@ from paths import (
     ensure_dirs,
 )
 from pipeline.forest_fire_openapi import fetch_range, service_key
+from pipeline.normalize_region_names import format_region_path, normalize_parts
 
 
 def _pad2(v: object) -> str:
@@ -69,6 +70,12 @@ def openapi_item_to_refined(item: dict) -> dict | None:
     except (TypeError, ValueError):
         damage = 0.0
 
+    parts = normalize_parts(province, city, town, village)
+    province = parts[0] if len(parts) > 0 else "Unknown"
+    city = parts[1] if len(parts) > 1 else "Unknown"
+    town = parts[2] if len(parts) > 2 else "Unknown"
+    village = parts[3] if len(parts) > 3 else "Unknown"
+
     return {
         "date": date.strftime("%Y-%m-%d"),
         "datetime": datetime_v.strftime("%Y-%m-%d %H:%M:%S"),
@@ -80,7 +87,7 @@ def openapi_item_to_refined(item: dict) -> dict | None:
         "village": village,
         "damage_area": damage,
         "cause": cause,
-        "region_path": f"{province} > {city} > {town} > {village}",
+        "region_path": format_region_path(province, city, town, village),
         "is_fire": 1,
     }
 

@@ -290,7 +290,7 @@ export function SatelliteMap({
           strokeOpacity: selected ? 1 : 0.85,
           fillColor: fill,
           fillOpacity: selected ? 0.72 : baseOpacity,
-          zIndex: selected ? 4 : 2,
+          zIndex: selected ? 10 : 2,
         });
         maps.event.addListener(polygon, "click", () => {
           suppressMapClickRef.current = true;
@@ -305,7 +305,7 @@ export function SatelliteMap({
             fillOpacity: 0.82,
             strokeWeight: 2.2,
             strokeColor: "#1c1917",
-            zIndex: 5,
+            zIndex: 11,
           });
         });
         maps.event.addListener(polygon, "mouseout", () => {
@@ -315,7 +315,7 @@ export function SatelliteMap({
             fillOpacity: isSel ? 0.72 : baseOpacity,
             strokeWeight: isSel ? 2.5 : level === "emd" ? 0.8 : 1.2,
             strokeColor: isSel ? "#1c1917" : "#fffefb",
-            zIndex: isSel ? 4 : 2,
+            zIndex: isSel ? 10 : 2,
           });
         });
         polygons.push(polygon);
@@ -346,7 +346,7 @@ export function SatelliteMap({
           map,
           path,
           strokeWeight: 1.2,
-          strokeColor: "#1e3a5f",
+          strokeColor: "#ffffff",
           strokeOpacity: 0.95,
           fillColor: "#000000",
           fillOpacity: 0.01,
@@ -375,7 +375,7 @@ export function SatelliteMap({
         (selectedCode != null && selectedCode.startsWith(code));
       polygon.setOptions({
         strokeWeight: isParent ? 2.2 : 1.2,
-        strokeColor: isParent ? "#0f2744" : "#1e3a5f",
+        strokeColor: "#ffffff",
         zIndex: isParent ? 1 : 3,
       });
     }

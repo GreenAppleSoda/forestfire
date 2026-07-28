@@ -28,7 +28,7 @@ export function MountainSearch({ mountainIndex, onSelect }: Props) {
   }, []);
 
   return (
-    <div ref={wrapRef} className="relative w-full max-w-sm">
+    <div ref={wrapRef} className="relative w-full">
       <label className="sr-only" htmlFor="mountain-search">
         산 검색
       </label>
