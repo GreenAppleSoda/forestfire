@@ -119,13 +119,13 @@ export function FireHistoryPanel({
     <aside className="flex h-full w-full flex-col border-l border-[#d6d3d1] bg-[#F7F5F1]">
       <div className="shrink-0 border-b border-[#e7e5e4] px-5 py-4">
         <p className="text-[12px] font-medium text-[#78716c]">
-          산림청에 등록된 산 현황
+          전체 산불 이력
         </p>
         <p className="mt-1 text-2xl font-bold text-[#1c1917]">
           {totalFires.toLocaleString()}
         </p>
         <p className="mt-0.5 text-[12px] text-[#78716c]">
-          산불
+          2011년부터 현재까지 · 산불
           {totalMountains != null
             ? ` · 산 ${totalMountains.toLocaleString()}개`
             : ""}
