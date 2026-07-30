@@ -23,7 +23,6 @@ export function MountainSearchResult({
   mountain,
   mapRegion,
   adminRegion,
-  historyProb,
   mlRiskNorm,
   mlRiskRaw,
   riskMode,
@@ -44,14 +43,14 @@ export function MountainSearchResult({
   const display =
     riskMode === "daily" || riskMode === "scenario"
       ? (mlRiskRaw ?? mlRiskNorm)
-      : historyProb ?? (mapRegion ? mapRegion.risk_score / 100 : null);
+      : null;
 
   const modeLabel =
     riskMode === "daily"
       ? "당일 예측 "
       : riskMode === "scenario"
         ? "시나리오 예측 "
-        : "이력 기반 확률 ";
+        : null;
 
   return (
     <div className="flex h-full flex-col bg-[#F7F4EF]">
@@ -87,10 +86,30 @@ export function MountainSearchResult({
                 ) : null}
               </p>
               <p className="mt-2">
-                <span className="text-[#78716c]">{modeLabel}</span>
-                <span className="font-semibold text-[#b91c1c]">
-                  {display != null ? `${(display * 100).toFixed(1)}%` : "—"}
-                </span>
+                {modeLabel && display != null ? (
+                  <>
+                    <span className="block text-[11px] leading-snug text-[#78716c]">
+                      {modeLabel}
+                    </span>
+                    <span className="font-semibold text-[#b91c1c]">
+                      {(display * 100).toFixed(1)}%
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <span className="block text-[11px] leading-snug text-[#78716c]">
+                      과거 산불 발생
+                    </span>
+                    <span className="font-semibold text-[#b91c1c]">
+                      {(
+                        adminRegion?.fire_count ??
+                        mapRegion?.fire_count ??
+                        0
+                      ).toLocaleString()}
+                    </span>
+                    <span className="ml-1 text-[12px] text-[#78716c]">건</span>
+                  </>
+                )}
               </p>
               {(riskMode === "daily" || riskMode === "scenario") &&
                 predictLoading && (
@@ -110,9 +129,6 @@ export function MountainSearchResult({
                 <p className="mt-0.5 text-[11px] text-[#b91c1c]">{predictError}</p>
               )}
               <div className="mt-1.5 space-y-0.5 text-[12px] text-[#57534e]">
-                {historyProb != null && (
-                  <p>이력 확률 {(historyProb * 100).toFixed(1)}%</p>
-                )}
                 {(riskMode === "daily" || riskMode === "scenario") &&
                   mlRiskRaw != null && (
                   <p>모델 발생 확률 {(mlRiskRaw * 100).toFixed(1)}%</p>

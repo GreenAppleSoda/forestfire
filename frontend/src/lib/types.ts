@@ -53,7 +53,7 @@ export type ProbMarker = {
   province: string;
   province_name: string;
   fire_count: number;
-  /** 향후 1년 내 산불 1건+ 추정 확률 0~1 */
+  /** 같은 행정 레벨 내 과거 건수 상대 빈도 0~1 (이력 색용). 예전 1년 확률 필드명 유지 */
   prob: number;
   color: string;
   x: number;

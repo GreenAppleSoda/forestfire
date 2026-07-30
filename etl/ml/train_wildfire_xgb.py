@@ -230,42 +230,82 @@ def add_history_features(df: pd.DataFrame, fire_labels: pd.DataFrame) -> pd.Data
 
 
 def train_and_eval(df: pd.DataFrame) -> tuple[XGBClassifier, dict, pd.DataFrame]:
+    """시군구×일 테이블로 XGBoost 이진분류 모델을 학습하고, 테스트 성능을 측정한다.
+
+    흐름 요약
+    ---------
+    1) feature 결측 행 제거
+    2) 날짜 기준으로 train / test 분할 (미래 데이터가 학습에 안 들어가게)
+    3) 산불(1)이 훨씬 적은 불균형을 scale_pos_weight 로 보정
+    4) 모델 학습 → 테스트에 대해 발생 '확률' 예측
+    5) 확률을 임계값으로 잘라 0/1 로 만든 뒤 precision/recall 등 계산
+       ※ 지도 색은 보통 이 0/1이 아니라 확률(proba)을 씀
+    """
+    # feature 컬럼에 NaN 이 있으면 XGBoost 학습이 깨지므로 해당 행 제거
     df = df.dropna(subset=FEATURE_COLS).copy()
+    # 날짜 비교를 문자열(YYYY-MM-DD)로 통일
     df["date_str"] = df["date"].dt.strftime("%Y-%m-%d")
 
+    # --- 시간 분할 (time-based split) ---
+    # 랜덤 섞기(X) : 과거로 학습하고, 그보다 늦은 날짜로만 평가
+    # → "아직 안 본 미래"에 대한 성능에 더 가깝게 측정
+    # TEST_START 예: "2025-01-01" 이면 train=그 전날까지, test=그날 이후
     train = df[df["date_str"] < TEST_START]
     test = df[df["date_str"] >= TEST_START]
     if train.empty or test.empty:
         raise RuntimeError("train/test 분할 결과가 비어 있습니다.")
 
+    # X = 입력(날씨·월·이력 등), y = 정답(그날 그 시군구에 산불 있었으면 1, 없으면 0)
     X_train, y_train = train[FEATURE_COLS], train["y"].astype(int)
     X_test, y_test = test[FEATURE_COLS], test["y"].astype(int)
 
-    pos = int(y_train.sum())
-    neg = int(len(y_train) - pos)
+    # --- 클래스 불균형 보정 ---
+    # 산불 난 날(y=1)은 전체의 극소수. 그대로 두면 모델이 "전부 0"만 찍어도
+    # 정확도가 높게 나와서 학습이 망가진다.
+    # scale_pos_weight ≈ (음성 개수) / (양성 개수) 로 양성(산불) 샘플의 비중을 키움
+    pos = int(y_train.sum())  # 학습 데이터에서 산불 발생(1) 건수
+    neg = int(len(y_train) - pos)  # 미발생(0) 건수
     spw = max(neg / max(pos, 1), 1.0)
 
+    # --- XGBoost 이진 분류기 ---
+    # objective="binary:logistic" → 내부적으로 로지스틱을 써서
+    #   최종적으로 P(y=1 | X) 형태의 확률을 낼 수 있음
     model = XGBClassifier(
-        n_estimators=300,
-        max_depth=5,
-        learning_rate=0.05,
-        subsample=0.8,
-        colsample_bytree=0.8,
-        min_child_weight=5,
-        reg_lambda=1.0,
-        objective="binary:logistic",
-        eval_metric="auc",
-        scale_pos_weight=spw,
-        random_state=42,
-        n_jobs=4,
+        n_estimators=300,  # 트리(약한 학습기)를 300개 순차적으로 쌓음
+        max_depth=5,  # 각 트리의 최대 깊이 (너무 깊으면 과적합)
+        learning_rate=0.05,  # 각 트리가 결과에 기여하는 보폭 (작을수록 천천히·안정적)
+        subsample=0.8,  # 매 트리마다 학습 행의 80%만 랜덤 사용 (과적합 완화)
+        colsample_bytree=0.8,  # 매 트리마다 feature 의 80%만 사용
+        min_child_weight=5,  # 리프에 필요한 최소 샘플 무게 (작으면 잔가지·과적합)
+        reg_lambda=1.0,  # L2 규제 강도
+        objective="binary:logistic",  # 이진 분류 + 확률 출력
+        eval_metric="auc",  # 학습 중 참고할 지표(ROC-AUC)
+        scale_pos_weight=spw,  # 위에서 계산한 양성 가중치
+        random_state=42,  # 재현 가능한 난수 시드
+        n_jobs=4,  # 병렬 코어 수
     )
+    # 학습: X_train 으로 y_train(0/1)을 맞추도록 트리들을 업데이트
     model.fit(X_train, y_train)
 
+    # --- 예측: 0/1 이 아니라 "발생할 확률" ---
+    # predict_proba 는 [P(y=0), P(y=1)] 두 열을 줌
+    # [:, 1] = 산불 발생(양성 클래스) 확률 → 지도 ml_risk 에 쓰는 값과 같은 종류
     proba = model.predict_proba(X_test)[:, 1]
-    # 불균형 → 상위 비율로 threshold (test 양성 비율의 ~10배 또는 0.5)
+
+    # --- 평가용 0/1 절단 (threshold) ---
+    # 지도 색칠에는 proba 를 그대로 쓰고,
+    # precision/recall/F1 을 계산하려면 어디부터를 "발생으로 본다"는 선이 필요함.
+    # 산불이 드무니 0.5 고정은 부적절 → 테스트 양성 비율을 참고해
+    # "확률이 상위 몇 %인 경우만 1" 이 되도록 분위수(quantile)로 thr 결정
+    #   y_test.mean() = 테스트에서 실제 산불 비율
+    #   그 비율×10 (최대 5%) 정도를 '양성으로 찍을 비율'로 잡음
     thr = float(np.quantile(proba, 1 - min(0.05, max(y_test.mean() * 10, 0.01))))
+    # 확률이 thr 이상이면 1(발생으로 판정), 아니면 0
     pred = (proba >= thr).astype(int)
 
+    # precision: 1이라고 찍은 것 중 실제 1 비율
+    # recall: 실제 1 중 모델이 잡아낸 비율
+    # f1: 둘의 조화평균
     precision, recall, f1, _ = precision_recall_fscore_support(
         y_test, pred, average="binary", zero_division=0
     )
@@ -273,11 +313,13 @@ def train_and_eval(df: pd.DataFrame) -> tuple[XGBClassifier, dict, pd.DataFrame]
         "test_start": TEST_START,
         "n_train": int(len(train)),
         "n_test": int(len(test)),
-        "n_train_pos": pos,
-        "n_test_pos": int(y_test.sum()),
+        "n_train_pos": pos,  # 학습 양성(산불) 수
+        "n_test_pos": int(y_test.sum()),  # 테스트 양성 수
         "scale_pos_weight": round(spw, 2),
-        "threshold": round(thr, 4),
+        "threshold": round(thr, 4),  # 위에서 구한 0/1 절단 기준
+        # roc_auc: 확률 순위가 실제 양성/음성을 잘 가르는지 (임계값과 무관)
         "roc_auc": round(float(roc_auc_score(y_test, proba)), 4),
+        # pr_auc: 불균형에서 더 엄격한 지표 (Precision-Recall 곡선 아래 면적)
         "pr_auc": round(float(average_precision_score(y_test, proba)), 4),
         "precision": round(float(precision), 4),
         "recall": round(float(recall), 4),
@@ -285,10 +327,12 @@ def train_and_eval(df: pd.DataFrame) -> tuple[XGBClassifier, dict, pd.DataFrame]
         "features": FEATURE_COLS,
     }
 
+    # 테스트 구간 각 행에 예측 확률을 붙여 반환 (시군구별 점수 집계 등에 사용)
     test_out = test[
         ["date_str", "sigungu_code", "sigungu_name", "province", "y"]
     ].copy()
     test_out["y_prob"] = proba
+    # model: 저장·당일예측에 사용 / metrics: 리포트 / test_out: 후속 분석
     return model, metrics, test_out
 
 

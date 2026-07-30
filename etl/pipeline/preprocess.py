@@ -1,33 +1,35 @@
-"""산불 원본 전처리 → db-archive/processed/refined_wildfire_data.csv
+"""산불 원본 wildfire_2011_2026.json 파일을 전처리하여 
+
+db-archive/processed/refined_wildfire_data.csv 파일로 저장하는 스크립트
 
 지원 입력:
   - JSON: { count, columns, items: [...] }  (산림청 OpenAPI 형태)
   - CSV: cp949/utf-8-sig
 """
 
-from __future__ import annotations
+from __future__ import annotations   # type hinting
 
-import sys
-from pathlib import Path
+import sys   # 시스템 경로 추가
+from pathlib import Path   # 경로 처리
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-import json
+import json   # JSON 파일 처리
 
-import pandas as pd
+import pandas as pd   # 데이터 분석
 
-from paths import RAW_WILDFIRE, REFINED_WILDFIRE, ensure_dirs
-from pipeline.normalize_region_names import format_region_path, normalize_parts
+from paths import RAW_WILDFIRE, REFINED_WILDFIRE, ensure_dirs   # 경로 설정
+from pipeline.normalize_region_names import format_region_path, normalize_parts   # 지역 정규화
 
 
-def load_wildfire_raw(file_path: Path) -> pd.DataFrame:
+def load_wildfire_raw(file_path: Path) -> pd.DataFrame:   # 원본 데이터 로드
     path = Path(file_path)
     if path.suffix.lower() == ".json":
-        raw = json.loads(path.read_text(encoding="utf-8"))
-        items = raw.get("items") if isinstance(raw, dict) else raw
+        raw = json.loads(path.read_text(encoding="utf-8"))   # JSON 파일 읽기
+        items = raw.get("items") if isinstance(raw, dict) else raw   # items 배열 추출
         if not isinstance(items, list):
             raise ValueError(f"JSON items 배열이 없습니다: {path}")
-        df = pd.DataFrame(items)
+        df = pd.DataFrame(items)   # DataFrame 생성
     else:
         for enc in ("cp949", "utf-8-sig", "utf-8"):
             try:
@@ -42,12 +44,12 @@ def load_wildfire_raw(file_path: Path) -> pd.DataFrame:
 
 def preprocess_wildfire_data(file_path=None):
     ensure_dirs()
-    file_path = Path(file_path) if file_path else Path(RAW_WILDFIRE)
+    file_path = Path(file_path) if file_path else Path(RAW_WILDFIRE)   # 원본 데이터 경로 : wildfire_2011_2026.json
 
-    df = load_wildfire_raw(file_path)
+    df = load_wildfire_raw(file_path)   # 원본 데이터 로드
     print(f"원본: {file_path.name} / {len(df):,}행")
 
-    required = ["발생일시_년", "발생일시_월", "발생일시_일", "발생일시_시간"]
+    required = ["발생일시_년", "발생일시_월", "발생일시_일", "발생일시_시간"]   # 필수 컬럼
     for c in required:
         if c not in df.columns:
             raise KeyError(f"필수 컬럼 없음: {c}")

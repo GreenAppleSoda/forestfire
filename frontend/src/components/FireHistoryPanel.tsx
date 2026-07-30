@@ -142,7 +142,7 @@ export function FireHistoryPanel({
           </p>
           <p className="mt-2 text-sm leading-relaxed text-[#78716c]">
             스크롤로 행정구역을 세분화한 뒤, 색이 입혀진 지역을 클릭하면 산불
-            확률과 이력이 표시됩니다.
+            이력과 추정치가 표시됩니다.
           </p>
         </div>
       ) : selectedMountain ? (
@@ -168,7 +168,7 @@ export function FireHistoryPanel({
                 {probability != null && (
                   <>
                     <span className="text-[#78716c]">
-                      {probabilityLabel ?? "산불 추정 확률"}{" "}
+                      {probabilityLabel ?? "예측 발생 확률"}{" "}
                     </span>
                     <span className="text-2xl font-bold text-[#b91c1c]">
                       {(probability * 100).toFixed(1)}%
@@ -177,8 +177,13 @@ export function FireHistoryPanel({
                   </>
                 )}
                 산불 {province.fire_count.toLocaleString()}건 · 산{" "}
-                {(province.mountain_count ?? 0).toLocaleString()}개 · 위험{" "}
-                {province.risk_score}
+                {(province.mountain_count ?? 0).toLocaleString()}개
+                {probability != null ? (
+                  <>
+                    {" "}
+                    · 위험 {province.risk_score}
+                  </>
+                ) : null}
               </p>
             </div>
             <button

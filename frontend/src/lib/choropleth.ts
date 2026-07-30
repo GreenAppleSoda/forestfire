@@ -10,7 +10,7 @@ export const RISK_STOPS: HslStop[] = [
   { t: 1, h: 24, s: 92, l: 48 },
 ];
 
-/** 이 절대 확률 이상이면 색 스케일 최댓값(주황). 낮은 구간을 더 촘촘히 펼침. */
+/** 당일/시나리오: 이 절대 확률 이상이면 색 스케일 최댓값. 낮은 구간을 더 촘촘히 펼침. */
 export const ABS_COLOR_FOCUS = 0.4;
 
 function hslToRgb(h: number, s: number, l: number): [number, number, number] {
@@ -78,17 +78,32 @@ export function densifyAbsoluteProb(
   return Math.pow(u, 0.65);
 }
 
-/** 확률(0~1) → 지도·범례 공통 색상 (절대값 + 낮은 구간 강조) */
+/** 당일/시나리오: 절대 확률(0~1) → 색 */
 export function probToColor(prob: number): string {
   return interpolateStops(densifyAbsoluteProb(prob));
 }
 
-/** 범례용 CSS linear-gradient — 바는 0%~40%+ 절대 확률 구간 */
+/** 이력 기반: 상대 빈도(0~1, 같은 레벨 내 fire_count/max) → 색 */
+export function intensityToColor(intensity: number): string {
+  return interpolateStops(Math.max(0, Math.min(1, Number(intensity) || 0)));
+}
+
+/** 당일/시나리오 범례 — 바는 0%~40%+ 절대 확률 구간 */
 export function riskLegendGradient(): string {
   const absTicks = [0, 0.08, 0.15, 0.22, 0.3, 0.4];
   const parts = absTicks.map((p, i) => {
     const barPct = Math.round((i / (absTicks.length - 1)) * 100);
     return `${probToColor(p)} ${barPct}%`;
+  });
+  return `linear-gradient(to right, ${parts.join(", ")})`;
+}
+
+/** 이력 기반 범례 — 상대 빈도 0~1 전 구간 */
+export function frequencyLegendGradient(): string {
+  const ticks = [0, 0.2, 0.4, 0.6, 0.8, 1];
+  const parts = ticks.map((t, i) => {
+    const barPct = Math.round((i / (ticks.length - 1)) * 100);
+    return `${intensityToColor(t)} ${barPct}%`;
   });
   return `linear-gradient(to right, ${parts.join(", ")})`;
 }

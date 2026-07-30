@@ -13,7 +13,7 @@ import type {
   RiskMode,
   SigunguMlScores,
 } from "@/lib/types";
-import { probToColor } from "@/lib/choropleth";
+import { intensityToColor, probToColor } from "@/lib/choropleth";
 import {
   kakaoToSvgView,
   svgToWgs84,
@@ -229,7 +229,7 @@ export function KoreaSvgMap({
     svgViewToKakao(INITIAL_VIEW),
   );
   const [satSyncKey, setSatSyncKey] = useState(0);
-  const [riskMode, setRiskMode] = useState<RiskMode>("history");
+  const [riskMode, setRiskMode] = useState<RiskMode>("daily");
   const [daily, setDaily] = useState<DailyMlRisk | null>(dailyRisk ?? null);
   const [scenario, setScenario] = useState<DailyMlRisk | null>(null);
   const [predictLoading, setPredictLoading] = useState(false);
@@ -300,6 +300,12 @@ export function KoreaSvgMap({
     return job;
   }, []);
 
+  useEffect(() => {
+    if (riskMode === "daily" && !daily && !predictLoading) {
+      void fetchKmaPredict(false);
+    }
+  }, [riskMode, daily, predictLoading, fetchKmaPredict]);
+
   const level = levelForScale(view.scale);
   const activeLayer =
     level === "sido"
@@ -369,7 +375,7 @@ export function KoreaSvgMap({
     [layers.sigungu],
   );
 
-  /** 지도 색용 (당일/시나리오는 절대 발생 확률, 이력은 이력 확률) */
+  /** 지도 색용 수치 0~1 (당일/시나리오=절대 확률, 이력=상대 빈도) */
   const colorProb = useCallback(
     (r: AdminRegion, lvl: AdminLevel): number => {
       if (isPredictMode) {
@@ -381,16 +387,21 @@ export function KoreaSvgMap({
     [isPredictMode, scoreForRegion, activeByCode],
   );
 
-  /** UI 숫자용 (당일/시나리오는 원확률, 이력은 이력 확률) */
+  /** 당일/시나리오 UI용 원확률. 이력 모드에서는 쓰지 않음(건수만 표시). */
   const labelProb = useCallback(
-    (r: AdminRegion, lvl: AdminLevel): number => {
-      if (isPredictMode) {
-        const v = scoreForRegion(r, lvl, activeByCode, false);
-        if (v != null) return v;
-      }
-      return r.prob;
+    (r: AdminRegion, lvl: AdminLevel): number | null => {
+      if (!isPredictMode) return null;
+      return scoreForRegion(r, lvl, activeByCode, false);
     },
     [isPredictMode, scoreForRegion, activeByCode],
+  );
+
+  const fillOf = useCallback(
+    (r: AdminRegion, lvl: AdminLevel = level) => {
+      const v = colorProb(r, lvl);
+      return isPredictMode ? probToColor(v) : intensityToColor(v);
+    },
+    [colorProb, isPredictMode, level],
   );
 
   const parentSigungu = useMemo(() => {
@@ -582,8 +593,12 @@ export function KoreaSvgMap({
   const toStat = useCallback(
     (admin: AdminRegion): RegionStat => {
       const key = stripName(admin.name);
-      const p = labelProb(admin, level);
-      const baseRisk = Math.round(p * 1000) / 10;
+      const predictP = labelProb(admin, level);
+      const intensity = isPredictMode
+        ? (predictP ?? 0)
+        : admin.prob;
+      const baseRisk = Math.round(intensity * 1000) / 10;
+      const fill = fillOf(admin, level);
 
       // 시도: map-data는 시군구 단위 → 같은 시도 산 목록을 합침
       // (제주특별자치도 → strip "제주" 가 제주시와 우연히 겹치는 문제도 여기서 방지)
@@ -597,10 +612,11 @@ export function KoreaSvgMap({
           province_name: admin.province_name,
           fire_count: admin.fire_count,
           risk_score: baseRisk,
-          risk_tier: p >= 0.55 ? "고위험" : p >= 0.25 ? "주의" : "낮음",
+          risk_tier:
+            intensity >= 0.55 ? "고위험" : intensity >= 0.25 ? "주의" : "낮음",
           large_fire_pct: 0,
-          intensity: p,
-          color: probToColor(colorProb(admin, level)),
+          intensity,
+          color: fill,
           center: [admin.x, admin.y],
           ...mountains,
         };
@@ -644,17 +660,26 @@ export function KoreaSvgMap({
         province_name: admin.province_name,
         fire_count: admin.fire_count,
         risk_score: baseRisk,
-        risk_tier: p >= 0.55 ? "고위험" : p >= 0.25 ? "주의" : "낮음",
+        risk_tier:
+          intensity >= 0.55 ? "고위험" : intensity >= 0.25 ? "주의" : "낮음",
         large_fire_pct: 0,
-        intensity: p,
-        color: probToColor(colorProb(admin, level)),
+        intensity,
+        color: fill,
         center: [admin.x, admin.y],
         mountain_count: 0,
         top_mountains: [],
         catalog_mountains: [],
       };
     },
-    [byName, labelProb, colorProb, level, regionList, sigunguByCode],
+    [
+      byName,
+      labelProb,
+      fillOf,
+      isPredictMode,
+      level,
+      regionList,
+      sigunguByCode,
+    ],
   );
 
   const clearMountainPin = useCallback(() => {
@@ -839,8 +864,8 @@ export function KoreaSvgMap({
   }, [pinnedMountain, mountainLink]);
 
   const satColorOf = useCallback(
-    (r: AdminRegion) => probToColor(colorProb(r, level)),
-    [colorProb, level],
+    (r: AdminRegion) => fillOf(r, level),
+    [fillOf, level],
   );
 
   const satPaletteKey = `${riskMode}:${daily?.predict_date ?? ""}:${scenario?.predict_date ?? ""}:${level}`;
@@ -850,7 +875,7 @@ export function KoreaSvgMap({
       ? `당일 예측${daily?.predict_date ? ` (${daily.predict_date})` : ""}`
       : riskMode === "scenario"
         ? `사용자 지정${scenario?.predict_date ? ` (${scenario.predict_date})` : ""}`
-        : "이력 기반 확률";
+        : "과거 산불 발생 건수";
 
   const [vbW, vbH] = layers.sido.viewBox;
   const viewBox = `0 0 ${vbW} ${vbH}`;
@@ -957,7 +982,7 @@ export function KoreaSvgMap({
                   const isSelected = selectedAdmin?.code === r.code;
                   const isHovered = hovered?.code === r.code;
                   const active = isSelected || isHovered;
-                  const fill = probToColor(colorProb(r, level));
+                  const fill = fillOf(r, level);
                   const isEmd = level === "emd";
                   const dimOthers = !!selectedAdmin && !isSelected;
                   return (
@@ -1048,7 +1073,7 @@ export function KoreaSvgMap({
                         <path
                           key={`top-fill-${r.code}`}
                           d={r.d}
-                          fill={probToColor(colorProb(r, level))}
+                          fill={fillOf(r, level)}
                           fillOpacity={isSelected ? 0.98 : 0.95}
                           stroke="none"
                           className="pointer-events-none"
@@ -1250,17 +1275,6 @@ export function KoreaSvgMap({
               <div className="flex flex-wrap gap-1">
                 <button
                   type="button"
-                  onClick={() => setRiskMode("history")}
-                  className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition ${
-                    riskMode === "history"
-                      ? "bg-[#1c1917] text-white"
-                      : "text-[#57534e] hover:bg-[#f5f5f4]"
-                  }`}
-                >
-                  이력 기반
-                </button>
-                <button
-                  type="button"
                   onClick={() => {
                     setRiskMode("daily");
                     void fetchKmaPredict(false);
@@ -1289,6 +1303,17 @@ export function KoreaSvgMap({
                 >
                   사용자 지정
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setRiskMode("history")}
+                  className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition ${
+                    riskMode === "history"
+                      ? "bg-[#1c1917] text-white"
+                      : "text-[#57534e] hover:bg-[#f5f5f4]"
+                  }`}
+                >
+                  과거 이력
+                </button>
               </div>
             </div>
 
@@ -1311,15 +1336,12 @@ export function KoreaSvgMap({
                 {(() => {
                   const m = hovered || selectedAdmin!;
                   const p = labelProb(m, level);
-                  const sgCode =
-                    level === "emd" ? m.code.slice(0, 5) : m.code;
-                  const day = activeByCode.get(sgCode);
                   const modeLabel =
                     riskMode === "daily"
                       ? "당일 예측 "
                       : riskMode === "scenario"
                         ? "시나리오 "
-                        : "이력 확률 ";
+                        : null;
                   return (
                     <>
                       <p className="font-medium">{m.name}</p>
@@ -1329,13 +1351,29 @@ export function KoreaSvgMap({
                           : m.province_name || m.province}
                       </p>
                       <p className="mt-1 text-sm">
-                        {modeLabel}
-                        <span className="text-2xl font-bold text-[#b91c1c]">
-                          {(p * 100).toFixed(1)}%
-                        </span>
-                        <span className="ml-2 text-xs text-[#78716c]">
-                          과거 {m.fire_count}건
-                        </span>
+                        {isPredictMode && p != null ? (
+                          <>
+                            <span className="block text-[11px] leading-snug text-[#78716c]">
+                              {modeLabel}
+                            </span>
+                            <span className="text-2xl font-bold text-[#b91c1c]">
+                              {(p * 100).toFixed(1)}%
+                            </span>
+                            <span className="ml-2 text-xs text-[#78716c]">
+                              과거 {m.fire_count.toLocaleString()}건
+                            </span>
+                          </>
+                        ) : (
+                          <>
+                            <span className="block text-[11px] leading-snug text-[#78716c]">
+                              과거 산불 발생
+                            </span>
+                            <span className="text-2xl font-bold text-[#b91c1c]">
+                              {m.fire_count.toLocaleString()}
+                            </span>
+                            <span className="ml-1 text-xs text-[#78716c]">건</span>
+                          </>
+                        )}
                       </p>
                       {isPredictMode && activePredict?.predict_date && (
                         <p className="mt-0.5 text-[10px] text-[#a8a29e]">
@@ -1345,9 +1383,7 @@ export function KoreaSvgMap({
                             : riskMode === "daily"
                               ? " · 기상청 ASOS"
                               : ""}
-                          {day != null
-                            ? " · 지도 색은 절대 확률(낮은 구간 강조)"
-                            : ""}
+                          {" · 지도 색은 절대 확률(낮은 구간 강조)"}
                         </p>
                       )}
                       {predictError && isPredictMode && (
@@ -1439,7 +1475,7 @@ export function KoreaSvgMap({
               mountain={searchPanelMountain}
               mapRegion={mountainLink?.mapRegion}
               adminRegion={mountainLink?.adminRegion}
-              historyProb={mountainLink?.adminRegion?.prob}
+              historyProb={null}
               mlRiskNorm={mountainRisk.norm}
               mlRiskRaw={mountainRisk.raw}
               riskMode={riskMode}
@@ -1467,9 +1503,11 @@ export function KoreaSvgMap({
               totalMountains={mapData.meta.total_mountains}
               matchedFires={mapData.meta.matched_fires}
               probability={
-                selectedAdmin ? labelProb(selectedAdmin, level) : undefined
+                isPredictMode && selectedAdmin
+                  ? (labelProb(selectedAdmin, level) ?? undefined)
+                  : undefined
               }
-              probabilityLabel={probLabel}
+              probabilityLabel={isPredictMode ? probLabel : undefined}
               onLocateMountain={onLocateMountain}
               onClose={() => {
                 setSelected(null);
@@ -1487,7 +1525,7 @@ export function KoreaSvgMap({
             mountain={searchPanelMountain}
             mapRegion={mountainLink?.mapRegion}
             adminRegion={mountainLink?.adminRegion}
-            historyProb={mountainLink?.adminRegion?.prob}
+            historyProb={null}
             mlRiskNorm={mountainRisk.norm}
             mlRiskRaw={mountainRisk.raw}
             riskMode={riskMode}
@@ -1519,9 +1557,11 @@ export function KoreaSvgMap({
             totalMountains={mapData.meta.total_mountains}
             matchedFires={mapData.meta.matched_fires}
             probability={
-              selectedAdmin ? labelProb(selectedAdmin, level) : undefined
+              isPredictMode && selectedAdmin
+                ? (labelProb(selectedAdmin, level) ?? undefined)
+                : undefined
             }
-            probabilityLabel={probLabel}
+            probabilityLabel={isPredictMode ? probLabel : undefined}
             onLocateMountain={onLocateMountain}
             onClose={() => {
               setSelected(null);

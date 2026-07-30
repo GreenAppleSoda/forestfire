@@ -1,8 +1,18 @@
 """
-시도/시군구/읍면동 shapefile → 웹용 레이어 + 산불 확률 마커.
+이력 기반 지도용 — 행정구역 SVG 레이어 + 산불 건수 상대 빈도 색.
 
-출력 (frontend/public/data/):
-  admin-sido.json, admin-sigungu.json, admin-emd.json
+입력
+  - db-archive/raw/geo/          시도·시군구·읍면동 shapefile
+  - refined_wildfire_data.csv    전처리된 산불 (2단계 결과)
+
+출력 (frontend/public/data/)
+  - admin-sido.json
+  - admin-sigungu.json
+  - admin-emd.json
+
+프론트 KoreaSvgMap 의 riskMode === "history" 가 이 JSON 의
+prob(상대 빈도 0~1) / color / d(경로) 를 사용해 칠합니다.
+(ML 분류기 아님 — 같은 행정 레벨 내 과거 건수 비교)
 """
 
 from __future__ import annotations
@@ -10,6 +20,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+# etl/ 를 import 경로에 추가 → paths, pipeline 사용 가능
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import json
@@ -18,21 +29,27 @@ import re
 from collections import defaultdict
 
 import pandas as pd
-import shapefile
-from pyproj import Transformer
+import shapefile  # pyshp: .shp 행정경계 읽기
+from pyproj import Transformer  # 위도(lat)와 경도(lng)를 TM(한국통합좌표계) 미터 좌표로 변환하는 데 사용
 
 from paths import FRONTEND_PUBLIC_DATA, GEO_DIR, REFINED_WILDFIRE, ensure_dirs
 
 OUT_DIR = FRONTEND_PUBLIC_DATA
 
-XMIN, YMIN = 740000.0, 1450000.0
-XMAX, YMAX = 1395000.0, 2075000.0
-WIDTH, HEIGHT = 800, 900
-PAD = 24
+# ---------------------------------------------------------------------------
+# SVG viewBox 좌표계
+# shapefile 좌표(EPSG:5179 TM)를 800×900 SVG 픽셀로 옮길 때 쓰는 한반도 bbox (EPSG:5179는 TM 좌표계, 한국통합좌표계의 약칭)
+# ---------------------------------------------------------------------------
+XMIN, YMIN = 740000.0, 1450000.0   # 한반도 bbox 좌측 하단 좌표 (경도, 위도 순서)
+XMAX, YMAX = 1395000.0, 2075000.0   # 한반도 bbox 우측 상단 좌표 (경도, 위도 순서)
+WIDTH, HEIGHT = 800, 900   # SVG 픽셀 크기
+PAD = 24  # 가장자리 여백(px)
 
+# 위·경도(GPS) → 한국 TM(미터). always_xy=True 이면 (경도, 위도) 순서 (위도, 경도 순서로 변환)
 _WGS84_TO_5179 = Transformer.from_crs("EPSG:4326", "EPSG:5179", always_xy=True)
 
-# 시도 라벨 = 시청·도청 좌표 (WGS84 lat, lng) — 폴리곤 bbox 중심은 바다/섬으로 밀림
+# 시도 라벨 위치 = 시청·도청 (WGS84 lat, lng) (위도, 경도 순서)
+# 폴리곤 bbox 중심을 쓰면 섬·바다 쪽으로 라벨이 밀리는 경우가 많아서 고정 좌표 사용 (위도, 경도 순서)
 SIDO_OFFICE_WGS84: dict[str, tuple[float, float]] = {
     "서울": (37.5665, 126.9780),  # 서울특별시청
     "부산": (35.1796, 129.0756),  # 부산광역시청
@@ -53,6 +70,7 @@ SIDO_OFFICE_WGS84: dict[str, tuple[float, float]] = {
     "제주": (33.4890, 126.4983),  # 제주특별자치도청
 }
 
+# 법정동 코드 앞 2자리 → 시도 약칭 (통계청 행정구역 코드)
 PREFIX_TO_PROV = {
     "11": "서울",
     "26": "부산",
@@ -70,6 +88,7 @@ PREFIX_TO_PROV = {
     "51": "강원",
     "52": "전북",
 }
+# 코드 prefix "12" 는 광주·전남이 섞여 있어 시군구 5자리로 구분
 GWANGJU_SIG = {"12210", "12240", "12270", "12300", "12330"}
 
 PROV_FULL = {
@@ -91,23 +110,27 @@ PROV_FULL = {
     "경남": "경상남도",
     "제주": "제주특별자치도",
 }
+PROV_FULL_TO_SHORT = {v: k for k, v in PROV_FULL.items()}
 
-YEARS = 15.5  # 2011-01 ~ 2026-06 대략 (prob_from_count용)
-
+# ---------------------------------------------------------------------------
+# 좌표 변환 · 이름 정규화 · 폴리곤 → SVG path
+# ---------------------------------------------------------------------------
 
 def to_svg(x: float, y: float) -> tuple[float, float]:
+    """TM 미터 좌표 → SVG (x, y). Y는 화면 좌표계라 위아래 뒤집음."""
     sx = PAD + (x - XMIN) / (XMAX - XMIN) * (WIDTH - 2 * PAD)
     sy = PAD + (YMAX - y) / (YMAX - YMIN) * (HEIGHT - 2 * PAD)
     return round(sx, 2), round(sy, 2)
 
 
 def wgs84_to_svg(lat: float, lng: float) -> tuple[float, float]:
+    """GPS(위·경도) → SVG 픽셀."""
     tm_x, tm_y = _WGS84_TO_5179.transform(lng, lat)
     return to_svg(tm_x, tm_y)
 
 
 def label_point_tm(shape, level: str, prov: str) -> tuple[float, float]:
-    """시도: 시청·도청 / 그 외: bbox 중심(기존)."""
+    """지도 위 이름/마커 위치. 시도는 도청, 그 외는 폴리곤 bbox 중심."""
     if level == "sido":
         ll = SIDO_OFFICE_WGS84.get(prov)
         if ll:
@@ -116,13 +139,34 @@ def label_point_tm(shape, level: str, prov: str) -> tuple[float, float]:
 
 
 def strip_admin(name: str) -> str:
+    """'강원특별자치도', '영월군' → '강원', '영월' 처럼 비교용 약칭."""
     name = re.sub(r"\s+", "", str(name).strip())
     name = re.sub(r"(특별자치시|광역시|특별시|특별자치도)$", "", name)
     name = re.sub(r"(시|군|구|읍|면|동|리)$", "", name)
     return name
 
 
+def normalize_province(name: str) -> str:
+    """공식명/약칭/접미 혼합 표기를 시도 약칭(서울, 강원...)으로 통일."""
+    raw = str(name or "").strip()
+    if not raw or raw == "Unknown":
+        return ""
+    if raw in PROV_FULL:
+        return raw
+    if raw in PROV_FULL_TO_SHORT:
+        return PROV_FULL_TO_SHORT[raw]
+    short = strip_admin(raw)
+    if short in PROV_FULL:
+        return short
+    # 예: "강원특별자치도청", "경상북도(임시)" 같이 접미가 더 붙은 경우 대응
+    for k, full in PROV_FULL.items():
+        if raw.startswith(full) or full in raw:
+            return k
+    return ""
+
+
 def simplify_ring(points: list[tuple[float, float]], tol: float) -> list[tuple[float, float]]:
+    """Douglas–Peucker: 점 수를 줄여 JSON 용량·렌더 부담을 낮춤."""
     if len(points) <= 3:
         return points
 
@@ -151,12 +195,12 @@ def simplify_ring(points: list[tuple[float, float]], tol: float) -> list[tuple[f
 
     out = _dp(points, tol)
     if out[0] != out[-1]:
-        out.append(out[0])
+        out.append(out[0])  # 닫힌 링
     return out
 
 
 def path_tolerance(shape, level: str, base_tol: float) -> float:
-    """행정구역 크기에 따라 단순화 강도 조절 — 과도한 축소로 빈 구멍 생기는 것 방지."""
+    """작은 읍면동은 덜 단순화(구멍·깨짐 방지), 큰 구역은 base_tol 사용."""
     if level != "emd":
         return base_tol
     b = shape.bbox
@@ -169,8 +213,9 @@ def path_tolerance(shape, level: str, base_tol: float) -> float:
 
 
 def shape_to_svg_path(shape, tol: float) -> str | None:
+    """shapefile 폴리곤 → SVG path 문자열 (M/L/Z). 프론트의 d 속성에 들어감."""
     pts = shape.points
-    parts = list(shape.parts) + [len(pts)]
+    parts = list(shape.parts) + [len(pts)]  # 멀티폴리곤/홀 경계 인덱스
     cmds: list[str] = []
     for i in range(len(parts) - 1):
         ring = [to_svg(x, y) for x, y in pts[parts[i] : parts[i + 1]]]
@@ -187,11 +232,13 @@ def shape_to_svg_path(shape, tol: float) -> str | None:
 
 
 def centroid_tm(shape) -> tuple[float, float]:
+    """bbox 중심점 (정확한 무게중심은 아님, 라벨용으로 충분)."""
     b = shape.bbox
     return (b[0] + b[2]) / 2, (b[1] + b[3]) / 2
 
 
 def resolve_province_from_code(code: str) -> str:
+    """행정코드 → 시도 약칭. '12' 는 광주/전남 특수 처리."""
     pref = code[:2]
     if pref != "12":
         return PREFIX_TO_PROV.get(pref, "")
@@ -199,16 +246,19 @@ def resolve_province_from_code(code: str) -> str:
     return "광주" if sig5 in GWANGJU_SIG else "전남"
 
 
-def prob_from_count(count: int) -> float:
-    """절대 발생 건수 기반 확률 — 행정 단위마다 동일한 척도."""
-    if count <= 0:
-        return 0.04
-    annual = count / YEARS
-    p = 1.0 - math.exp(-annual * 0.8)
-    return round(min(0.94, max(0.06, p)), 4)
+# ---------------------------------------------------------------------------
+# 이력 빈도 · 색상 (ML 아님 — 같은 레벨 내 과거 건수 상대 비교)
+# ---------------------------------------------------------------------------
+
+def intensity_from_count(count: int, max_count: int) -> float:
+    """fire_count / 해당 레벨 max → 0~1 상대 빈도."""
+    if max_count <= 0 or count <= 0:
+        return 0.0
+    return round(min(1.0, float(count) / float(max_count)), 4)
 
 
 def _hsl_to_rgb(h: float, s: float, l: float) -> tuple[int, int, int]:
+    """HSL → RGB (지도 색 그라데이션용)."""
     sn, ln = s / 100.0, l / 100.0
     c = (1.0 - abs(2 * ln - 1)) * sn
     x = c * (1.0 - abs((h / 60.0) % 2 - 1))
@@ -232,17 +282,19 @@ def _hsl_to_rgb(h: float, s: float, l: float) -> tuple[int, int, int]:
     )
 
 
+# (상대빈도 t, Hue, Saturation, Lightness) — 낮음(초록) → 높음(주황)
 _RISK_STOPS = [
-    (0.0, 224, 76, 48),
-    (0.22, 199, 89, 58),
-    (0.48, 45, 93, 52),
-    (0.72, 25, 95, 50),
-    (1.0, 0, 72, 46),
+    (0.0, 142, 55, 38),
+    (0.28, 98, 52, 46),
+    (0.55, 55, 78, 50),
+    (0.78, 36, 90, 50),
+    (1.0, 24, 92, 48),
 ]
 
 
-def prob_color(prob: float) -> str:
-    t = max(0.0, min(1.0, prob))
+def intensity_color(intensity: float) -> str:
+    """상대 빈도(0~1) → #RRGGBB. 전 구간 선형 보간."""
+    t = max(0.0, min(1.0, intensity))
     for i in range(len(_RISK_STOPS) - 1):
         t0, h0, s0, l0 = _RISK_STOPS[i]
         t1, h1, s1, l1 = _RISK_STOPS[i + 1]
@@ -257,32 +309,61 @@ def prob_color(prob: float) -> str:
     return f"#{r:02X}{g:02X}{b:02X}"
 
 
-def apply_prob(item: dict, prob: float) -> None:
-    item["prob"] = prob
-    item["color"] = prob_color(prob)
-    item["r"] = round(3.2 + 7.5 * (prob**0.85), 2)
+def apply_intensity(item: dict, intensity: float) -> None:
+    """지역 dict 에 상대빈도(prob 필드)·color·마커 반지름 r 을 in-place 로 채움.
+
+    하위 호환: JSON 필드명은 기존 `prob` 유지하되, 값은 1년 확률이 아니라
+    같은 행정 레벨 내 fire_count 상대 밀도(0~1)이다.
+    """
+    item["prob"] = intensity
+    item["color"] = intensity_color(intensity)
+    item["r"] = round(3.2 + 7.5 * (intensity**0.85), 2)
+
+
+def recolor_regions_by_fire_count(regions: list[dict]) -> int:
+    """레벨 내 max fire_count 기준으로 상대 빈도·색 재계산. max 반환."""
+    mx = int(max((int(r.get("fire_count") or 0) for r in regions), default=0))
+    for r in regions:
+        apply_intensity(r, intensity_from_count(int(r.get("fire_count") or 0), mx))
+    return mx
+
+
+# 하위 호환 별칭 (refresh_history_layers 등)
+def apply_prob(item: dict, intensity: float) -> None:
+    apply_intensity(item, intensity)
+
+
+def prob_from_count(count: int, max_count: int = 0) -> float:
+    """하위 호환. max_count 없으면 단일 건수로는 의미 없으므로 0."""
+    return intensity_from_count(count, max_count)
 
 
 def roll_up_from_children(
     parents: list[dict], children: list[dict], key_fn
 ) -> None:
-    buckets: dict[str, list[float]] = defaultdict(list)
-    for c in children:
-        buckets[key_fn(c)].append(c["prob"])
-    for p in parents:
-        probs = buckets.get(key_fn(p), [])
-        if probs:
-            apply_prob(p, round(sum(probs) / len(probs), 4))
+    """하위 호환 no-op. 이력 색은 레벨별 fire_count 상대 비교만 사용."""
+    return
 
+
+# ---------------------------------------------------------------------------
+# 산불 CSV → 집계 인덱스 (시도 / 시군구 / 읍면 / 동리)
+# ---------------------------------------------------------------------------
 
 def load_fires() -> pd.DataFrame:
+    """2단계 refined CSV 로드. province 없는 행은 제외."""
     df = pd.read_csv(REFINED_WILDFIRE)
     for c in ["province", "city", "town", "village"]:
         df[c] = df[c].fillna("").astype(str).str.strip()
-    return df[df["province"].ne("") & df["province"].ne("Unknown")]
+    # refined 는 공식명(예: 강원특별자치도), shp 매칭은 약칭(강원)을 쓰므로 통일
+    df["province"] = df["province"].map(normalize_province)
+    return df[df["province"].ne("")]
 
 
 def build_fire_indexes(fires: pd.DataFrame):
+    """
+    빠른 조인을 위해 건수를 미리 센 딕셔너리 4개 반환.
+    키 예: by_city["강원|영월"] = 42
+    """
     by_prov = fires.groupby("province").size().to_dict()
     by_city: dict[str, int] = defaultdict(int)
     by_town_name: dict[str, int] = defaultdict(int)
@@ -299,6 +380,10 @@ def build_fire_indexes(fires: pd.DataFrame):
     return by_prov, by_city, by_town_name, by_village_name
 
 
+# ---------------------------------------------------------------------------
+# 레벨별 shapefile 처리 → admin-*.json 한 덩어리
+# ---------------------------------------------------------------------------
+
 def process_level(
     folder: str,
     shp_name: str,
@@ -309,6 +394,12 @@ def process_level(
     fires_idx,
     include_paths: bool,
 ) -> dict:
+    """
+    GEO_DIR/{folder}/{shp_name}.shp 를 읽어 regions[] 를 만든다.
+
+    각 region:
+      code, name, province, fire_count, prob, color, x/y, r, d(SVG path), label
+    """
     by_prov, by_city, by_town_name, by_village_name = fires_idx
     sf = shapefile.Reader(str(GEO_DIR / folder / shp_name), encoding="cp949")
     fields = [f[0] for f in sf.fields[1:]]
@@ -321,6 +412,7 @@ def process_level(
         name = str(rec[name_i]).strip()
         prov = resolve_province_from_code(code)
 
+        # 시도 레이어: shapefile 한글명으로 약칭 보정 (광주·전남 통합 폴리곤 등)
         if level == "sido":
             raw = name
             for k, full in PROV_FULL.items():
@@ -334,12 +426,15 @@ def process_level(
 
         sx, sy = label_point_tm(shape, level, prov)
         n = strip_admin(name)
+
+        # 산불 건수 매칭 (레벨마다 인덱스 키가 다름)
         count = 0
         if level == "sido":
             count = int(by_prov.get(prov, 0))
         elif level == "sigungu":
             count = int(by_city.get(f"{prov}|{n}", 0))
             if count == 0 and " " in name:
+                # "청주시 상당구" → 마지막 토큰만으로 재시도
                 count = int(by_city.get(f"{prov}|{strip_admin(name.split()[-1])}", 0))
         elif level == "emd":
             prov = resolve_province_from_code(code[:5] if len(code) >= 5 else code) or prov
@@ -365,13 +460,11 @@ def process_level(
             }
         )
 
+    # path 가 있는 것만 프론트에 전달 (색은 아래에서 레벨 max 기준 상대 빈도)
     regions = []
     for r in rows:
         if not (include_paths and r["d"]):
             continue
-        prob = prob_from_count(r["fire_count"])
-        color = prob_color(prob)
-        radius = round(3.2 + 7.5 * (prob**0.85), 2)
         regions.append(
             {
                 "code": r["code"],
@@ -379,32 +472,34 @@ def process_level(
                 "province": r["province"],
                 "province_name": r["province_name"],
                 "fire_count": r["fire_count"],
-                "prob": prob,
-                "color": color,
+                "prob": 0.0,
+                "color": intensity_color(0.0),
                 "x": r["x"],
                 "y": r["y"],
-                "r": radius,
+                "r": 3.2,
                 "d": r["d"],
                 "label": [r["x"], r["y"]],
             }
         )
 
+    mx = recolor_regions_by_fire_count(regions)
     return {
         "level": level,
         "viewBox": [WIDTH, HEIGHT],
         "regions": regions,
-        # 프론트는 regions 만 사용 — markers 중복(~1MB) 제거
+        # 예전 markers 배열은 regions 와 중복이라 비움 (용량 절약)
         "markers": [],
         "meta": {
             "n_regions": len(regions),
             "n_markers": 0,
-            "max_fire_count": int(max((r["fire_count"] for r in rows), default=0)),
-            "prob_note": "P(향후 1년 내 산불 1건+) 추정치 · 과거 발생률 기반",
+            "max_fire_count": mx,
+            "prob_note": "과거 산불 발생 건수 상대 빈도(같은 행정 레벨 내 비교)",
         },
     }
 
 
 def main() -> None:
+    """시도 → 시군구 → 읍면동 순으로 만들고, 레벨별 건수 상대 빈도로 색을 입혀 저장."""
     ensure_dirs()
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     fires = load_fires()
@@ -415,11 +510,12 @@ def main() -> None:
     sido = process_level(
         "시도", "ctp_rvn", "sido", "CTPRVN_CD", "CTP_KOR_NM", 2.8, idx, True
     )
+    # 광주·전남이 한 폴리곤인 경우 건수를 합산 후 상대 빈도 재계산
     for r in sido["regions"]:
         if "전남" in r["name"] and "광주" in r["name"]:
             c = idx[0].get("전남", 0) + idx[0].get("광주", 0)
             r["fire_count"] = c
-            apply_prob(r, prob_from_count(c))
+    sido["meta"]["max_fire_count"] = recolor_regions_by_fire_count(sido["regions"])
 
     print("시군구…")
     sig = process_level(
@@ -431,10 +527,7 @@ def main() -> None:
         "읍면동", "emd", "emd", "EMD_CD", "EMD_KOR_NM", 0.55, idx, True
     )
 
-    # 하위 평균으로 상위 확률·색상 통일 (줌 시 색감 일치)
-    roll_up_from_children(sig["regions"], emd["regions"], lambda x: x["code"][:5])
-    roll_up_from_children(sido["regions"], sig["regions"], lambda x: x["province"])
-
+    # separators 로 공백 제거 → 파일 크기 축소
     dumps_kw = {"ensure_ascii": False, "separators": (",", ":")}
     (OUT_DIR / "admin-sido.json").write_text(json.dumps(sido, **dumps_kw), encoding="utf-8")
     print(f"  {len(sido['regions'])} paths")

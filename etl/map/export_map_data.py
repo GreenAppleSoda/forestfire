@@ -1,4 +1,22 @@
-"""시군구 단위 산불 밀도 + 이력 + 산 메타 → frontend/public/data/map-data.json"""
+"""
+이력 기반 지도용 — 시군구별 요약 + 산불 이력 + 산 메타 → map-data.json
+
+입력 (주로 예전 산-산불 매칭 파이프라인 산출물)
+  - korea-sigungu-paths.json     시군구 SVG/라벨
+  - wildfire_with_mountains.csv  산불이 어떤 산과 연결됐는지
+  - wildfire_mountain_events.csv 산불×산 이벤트
+  - mountain_data / location / coords
+  - refined_wildfire_data.csv    meta.total_fires 건수용
+
+출력
+  - frontend/public/data/map-data.json
+      regions[]   시군구 요약(건수·색·산 목록)
+      history{}   시군구 코드 → 최근 산불 사건 목록
+      mountains{} 산 id → 상세(검색·패널)
+
+참고: admin-*.json(색칠 path)은 build_admin_layers.py 가 만들고,
+이 파일은 클릭 시 패널/이력/산 정보에 가깝습니다.
+"""
 
 from __future__ import annotations
 
@@ -51,7 +69,15 @@ PROVINCE_FULL = {
 }
 
 
+# ---------------------------------------------------------------------------
+# 유틸: 색 · 텍스트 · 산 DTO
+# ---------------------------------------------------------------------------
+
 def lerp_color(t: float) -> str:
+    """
+    상대 밀도 intensity(0~1) → 파랑→하늘→주황→빨강.
+    admin-*.json 의 prob_color 와는 별개(이 파일 전용 팔레트).
+    """
     t = max(0.0, min(1.0, t))
     stops = [
         (0.0, (37, 99, 235)),
@@ -73,6 +99,7 @@ def lerp_color(t: float) -> str:
 
 
 def snippet(text: object, limit: int = 140) -> str:
+    """긴 산 설명 문구를 UI용으로 짧게 자름."""
     if text is None or (isinstance(text, float) and pd.isna(text)):
         return ""
     s = re.sub(r"\s+", " ", str(text)).strip()
@@ -88,6 +115,7 @@ def mountain_payload(
     fire_count: int = 0,
     coords_by_id: dict[str, dict] | None = None,
 ) -> dict:
+    """산 1개 → 프론트가 쓰는 객체 (이름·고도·좌표·산불 연계 건수 등)."""
     height = row.get("mntn_hght")
     try:
         height_val = None if pd.isna(height) else round(float(height), 1)
@@ -105,6 +133,7 @@ def mountain_payload(
         "admin_tel": str(row.get("mntn_admin_tel", "") or ""),
         "fire_count": int(fire_count),
     }
+    # 카카오 지오코딩 결과가 있으면 lon/lat + SVG 좌표 첨부
     c = (coords_by_id or {}).get(mid) or {}
     lon, lat = c.get("lon"), c.get("lat")
     sx, sy = c.get("svg_x"), c.get("svg_y")
@@ -118,7 +147,7 @@ def mountain_payload(
 
 
 def catalog_payload(full: dict) -> dict:
-    """지역별 catalog/top 에는 검색·패널에 필요한 최소 필드만."""
+    """지역별 catalog/top 목록용 — 검색·패널에 필요한 필드만 남김 (용량↓)."""
     out = {
         "id": full.get("id", ""),
         "name": full.get("name", ""),
@@ -132,6 +161,7 @@ def catalog_payload(full: dict) -> dict:
 
 
 def load_coords_by_id() -> dict[str, dict]:
+    """mountain_coords.csv 에서 지오코딩 성공(ok) 행만 id → 좌표 dict."""
     if not MOUNTAIN_COORDS.exists():
         return {}
     df = pd.read_csv(MOUNTAIN_COORDS, encoding="utf-8-sig")
@@ -153,7 +183,13 @@ def load_coords_by_id() -> dict[str, dict]:
     return out
 
 
+# ---------------------------------------------------------------------------
+# 이름 매칭 헬퍼
+# 산불 CSV 의 city 표기와 geo 시군구명이 달라서 여러 키로 느슨하게 맞춤
+# ---------------------------------------------------------------------------
+
 def strip_suffix(name: str) -> str:
+    """시·군·구 접미 제거 (비교용)."""
     name = name.strip()
     name = re.sub(r"\s+", "", name)
     name = re.sub(r"(특별자치시|광역시|특별시)$", "", name)
@@ -162,7 +198,7 @@ def strip_suffix(name: str) -> str:
 
 
 def geo_name_keys(name: str) -> list[str]:
-    """창원시의창구 → ['창원의창', '의창', '창원'] 등 매칭 키."""
+    """지도 시군구명 → 매칭에 쓸 후보 키들. 예: 창원시의창구 → 창원의창, 의창, 창원."""
     raw = re.sub(r"\s+", "", name.strip())
     keys: list[str] = []
 
@@ -184,7 +220,6 @@ def geo_name_keys(name: str) -> list[str]:
         keys.append(strip_suffix(raw))
         keys.append(raw)
 
-    # 세종시
     if raw.startswith("세종"):
         keys.append("세종")
 
@@ -199,13 +234,14 @@ def geo_name_keys(name: str) -> list[str]:
 
 
 def fire_city_keys(city: str) -> list[str]:
+    """산불 행의 city 문자열 → 매칭 후보 키 (청주상당 → 청주, 상당 등)."""
     city = str(city).strip()
     if not city or city.lower() in {"unknown", "nan"}:
         return []
     compact = re.sub(r"\s+", "", city)
     spaced = re.sub(r"\s+", " ", city)
     keys = [compact, spaced, strip_suffix(compact)]
-    # 청주상당 → 청주 상당
+    # 자치구가 붙은 표기 분해
     m = re.match(r"^([가-힣]+?)(상당|서원|흥덕|청원|동남|서북|장안|권선|팔달|영통|수정|중원|분당|만안|동안|상록|단원|처인|기흥|수지구|의창|성산|진해|마산합포|마산회원|남|북)$", compact)
     if m:
         keys.append(f"{m.group(1)} {m.group(2)}")
@@ -222,6 +258,7 @@ def fire_city_keys(city: str) -> list[str]:
 
 
 def build_feature_index(paths: dict) -> list[dict]:
+    """korea-sigungu-paths.json 의 regions → 코드·이름·매칭 keys·라벨."""
     features = []
     for r in paths["regions"]:
         province = r["province"]
@@ -243,7 +280,11 @@ def build_feature_index(paths: dict) -> list[dict]:
 def match_fire_to_feature(
     province: str, city: str, features: list[dict]
 ) -> list[dict]:
-    """한 산불 시군구 → 매칭되는 geo feature들 (구 단위 여러 개일 수 있음)."""
+    """
+    산불 1건의 (시도, 시군구) → 지도 feature 목록.
+    구 단위로 쪼개진 지도면 여러 code 에 걸릴 수 있음.
+    세종은 시군구 구분이 약해 도 전체 feature 반환.
+    """
     if province == "세종":
         return [f for f in features if f["province"] == "세종"]
 
@@ -261,7 +302,6 @@ def match_fire_to_feature(
         # 부모시만 있는 경우: 고양 → 고양시*구 전부
         parent = fkeys[0]
         if any(gk.startswith(parent) or parent.startswith(gk) for gk in gkeys if len(parent) >= 2):
-            # 더 엄격: geo key가 parent로 시작하거나 parent가 geo의 시 이름
             if any(
                 gk == parent
                 or gk.startswith(parent)
@@ -270,7 +310,7 @@ def match_fire_to_feature(
             ):
                 hits.append(f)
 
-    # 중복 제거 후, 정확히 매칭된 것만 우선
+    # 정확 매칭 우선, 없으면 soft
     exact = []
     soft = []
     for f in hits:
@@ -279,7 +319,6 @@ def match_fire_to_feature(
         else:
             soft.append(f)
     chosen = exact or soft
-    # 고유 code
     seen = set()
     out = []
     for f in chosen:
@@ -290,6 +329,10 @@ def match_fire_to_feature(
     return out
 
 
+# ---------------------------------------------------------------------------
+# main: 데이터 로드 → 시군구 루프 → map-data.json 저장
+# ---------------------------------------------------------------------------
+
 def main() -> None:
     ensure_dirs()
     if not PATHS_FILE.exists():
@@ -297,9 +340,12 @@ def main() -> None:
             f"{PATHS_FILE} 없음. 먼저 node etl/map/build_sigungu_paths.mjs 실행"
         )
 
+    # 1) 시군구 geo 인덱스
     paths = json.loads(PATHS_FILE.read_text(encoding="utf-8"))
     features = build_feature_index(paths)
 
+    # 2) 산불(+산 매칭) · 산 메타 로드
+    #    ※ wildfire_with_mountains 는 analyze 단계에서 만든 것 (refined 와 별개)
     fires = pd.read_csv(WILDFIRE_WITH_MOUNTAINS)
     fires["datetime"] = pd.to_datetime(fires["datetime"], errors="coerce")
     fires = fires.sort_values("datetime", ascending=False)
@@ -327,6 +373,7 @@ def main() -> None:
     def mp(row: pd.Series, fire_count: int = 0) -> dict:
         return mountain_payload(row, fire_count, coords_by_id)
 
+    # 산 id → 연계 산불 건수
     fire_counts_mtn: dict[str, int] = {}
     if not by_mtn.empty and "mntn_id" in by_mtn.columns:
         by_mtn["mntn_id"] = by_mtn["mntn_id"].astype(str).str.replace(r"\.0$", "", regex=True)
@@ -340,7 +387,7 @@ def main() -> None:
         loc["mntn_notable"] = ""
     loc["mntn_notable"] = loc["mntn_notable"].fillna("").astype(str)
 
-    # feature code → fire ids
+    # 3) 산불 → 시군구 code 매핑
     feature_fires: dict[str, list[int]] = {f["code"]: [] for f in features}
     fire_feature_codes: dict[int, list[str]] = {}
 
@@ -354,7 +401,7 @@ def main() -> None:
         for code in codes:
             feature_fires[code].append(fid)
 
-    # risk lookup by city_key
+    # 4) (선택) 시군구 위험 통계 CSV — 있으면 risk_score/tier 사용
     risk_by_key = {}
     if not city_risk.empty:
         for _, r in city_risk.iterrows():
@@ -366,13 +413,14 @@ def main() -> None:
     history: dict[str, list] = {}
     mountain_index: dict[str, dict] = {}
 
+    # 5) 시군구마다 요약 + 이력 + 산 목록
     for feat in features:
         code = feat["code"]
         fids = feature_fires[code]
         fire_count = len(fids)
+        # 전국 최대 대비 상대 밀도 (색용). admin 의 절대 prob 와는 다른 척도
         intensity = fire_count / max_count if max_count else 0
 
-        # risk from city_key if available
         city_key_candidates = [f"{feat['province']} {k}" for k in feat["keys"]]
         risk_row = None
         for ck in city_key_candidates:
@@ -386,9 +434,8 @@ def main() -> None:
         )
         large_pct = float(risk_row["large_fire_pct"]) if risk_row is not None else 0.0
 
-        # mountains in same city (approx by city name in loc)
+        # --- 이 시군구에 속한 산 (location CSV 이름 근사 매칭) ---
         city_norm = strip_suffix(feat["name"])
-        # for 구: use parent city for mountain filter when possible
         m = re.match(r"^(.+?시)(.+구)$", re.sub(r"\s+", "", feat["name"]))
         city_for_mtn = strip_suffix(m.group(1)) if m else city_norm
 
@@ -411,7 +458,7 @@ def main() -> None:
             prov_loc = loc[loc["province"] == "세종"].drop_duplicates("mntn_id")
             mountain_count = int(len(prov_loc))
 
-        # catalog
+        # 카탈로그: 유명 산 우선, 없으면 고도 순으로 최대 14개
         catalog_ids: list[str] = []
         notable = prov_loc[prov_loc["mntn_notable"].str.strip().ne("")]
         for mid in notable.sort_values("mntn_hght", ascending=False)["mntn_id"].astype(str):
@@ -428,7 +475,7 @@ def main() -> None:
             if mid in mtn_meta.index:
                 catalog.append(catalog_payload(mp(mtn_meta.loc[mid], fire_counts_mtn.get(mid, 0))))
 
-        # top mountains from events for these fires
+        # 이 지역 산불과 실제로 연결된 산 TOP
         top_mountains = []
         if fids and not events.empty:
             sub = events[
@@ -463,20 +510,16 @@ def main() -> None:
             }
         )
 
-        # history
+        # --- history: 클릭 시 FireHistoryPanel 에 보이는 최근 사건 ---
         hist = []
         if fids:
-            sub_fires = fires[fires["fire_id"].isin(fids)] if "fire_id" in fires.columns else fires.iloc[0:0]
-            if sub_fires.empty:
-                # fallback by index list order
-                sub_fires = fires.loc[fires.index.isin(fids)] if False else fires.head(0)
-            # rebuild from fire_id column
             if "fire_id" in fires.columns:
                 sub_fires = fires[fires["fire_id"].isin(fids)].copy()
             else:
                 sub_fires = fires.iloc[0:0]
 
             sub_fires = sub_fires.copy()
+            # 산 이름이 있는 사건을 우선 보여주고, 없으면 나머지로 채움 (최대 28)
             sub_fires["_has_mtn"] = (
                 sub_fires["mountain_names"].fillna("").astype(str).str.strip().ne("")
                 & sub_fires["mountain_names"].fillna("").astype(str).str.lower().ne("nan")
@@ -499,6 +542,7 @@ def main() -> None:
                 names = [n.strip() for n in names_raw.split(",") if n.strip()]
                 ids = [i.strip() for i in ids_raw.split(",") if i.strip()]
                 linked = []
+                # id 로 산 메타 연결
                 for i, mid in enumerate(ids[:10]):
                     mid = mid.replace(".0", "") if mid.endswith(".0") else mid
                     if mid in mtn_meta.index:
@@ -520,6 +564,7 @@ def main() -> None:
                                 "fire_count": 0,
                             }
                         )
+                # id 없고 이름만 있으면 이름으로 재검색
                 if not linked and names:
                     for name in names[:8]:
                         hit = mountains[mountains["mntn_nm"] == name]
@@ -573,11 +618,10 @@ def main() -> None:
             if mid and mid in mtn_meta.index and mid not in mountain_index:
                 mountain_index[mid] = mp(mtn_meta.loc[mid], fire_counts_mtn.get(mid, 0))
 
-    # 전체 산 카탈로그 + 지오코딩 좌표 병합 (검색용)
+    # 6) 검색용으로 전체 산 + 좌표 보강
     for mid, row in mtn_meta.iterrows():
         mid_s = str(mid)
         if mid_s in mountain_index:
-            # 좌표만 보강
             base = mountain_index[mid_s]
             enriched = mp(row, int(base.get("fire_count") or fire_counts_mtn.get(mid_s, 0)))
             for k in ("lon", "lat", "svg_x", "svg_y"):
@@ -595,6 +639,7 @@ def main() -> None:
             "source": "korea_mountains.json + wildfire_with_mountains + sigungu + kakao_geocode",
             "unit": "시군구",
             "color": "blue(safe) → red(many fires)",
+            # 건수 표시만 최신 refined 사용 (이력 상세는 with_mountains 기준)
             "total_fires": int(len(pd.read_csv(REFINED_WILDFIRE))),
             "total_mountains": int(len(mountain_index)),
             "mountains_with_coords": n_with_xy,
@@ -604,8 +649,7 @@ def main() -> None:
             "regions": len(regions_out),
             "regions_with_fires": matched_feature_fires,
         },
-        # regions 와 동일 내용 중복 방지 (프론트는 regions 우선)
-        "provinces": [],
+        "provinces": [],  # 예전 필드 자리 — 프론트는 regions 사용
         "regions": regions_out,
         "history": history,
         "mountains": mountain_index,

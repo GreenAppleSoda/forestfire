@@ -11,19 +11,15 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import json
-import math
-import re
 from collections import defaultdict
 from datetime import datetime
 
 import pandas as pd
 
 from map.build_admin_layers import (
-    apply_prob,
     build_fire_indexes,
     load_fires,
-    prob_from_count,
-    roll_up_from_children,
+    recolor_regions_by_fire_count,
     strip_admin,
 )
 from map.export_map_data import lerp_color
@@ -38,21 +34,6 @@ from paths import (
 )
 
 
-def _set_years_from_fires(fires: pd.DataFrame) -> float:
-    if fires.empty:
-        return 15.5
-    dmin = pd.to_datetime(fires["date"], errors="coerce").min()
-    dmax = pd.to_datetime(fires["date"], errors="coerce").max()
-    if pd.isna(dmin) or pd.isna(dmax):
-        return 15.5
-    years = max((dmax - dmin).days / 365.25, 1.0)
-    # build_admin_layers.prob_from_count 가 모듈 상수 YEARS 를 쓰므로 패치
-    import map.build_admin_layers as bal
-
-    bal.YEARS = years
-    return years
-
-
 def _patch_admin_layer(path: Path, by_code_count: dict[str, int]) -> int:
     if not path.exists():
         return 0
@@ -63,10 +44,13 @@ def _patch_admin_layer(path: Path, by_code_count: dict[str, int]) -> int:
         if not code:
             continue
         if code in by_code_count:
-            c = int(by_code_count[code])
-            item["fire_count"] = c
-            apply_prob(item, prob_from_count(c))
+            item["fire_count"] = int(by_code_count[code])
             updated += 1
+    mx = recolor_regions_by_fire_count(data.get("regions") or [])
+    data["meta"] = data.get("meta") or {}
+    data["meta"]["max_fire_count"] = mx
+    data["meta"]["prob_note"] = "과거 산불 발생 건수 상대 빈도(같은 행정 레벨 내 비교)"
+    data["meta"]["synced_at"] = datetime.now().isoformat(timespec="seconds")
     path.write_text(
         json.dumps(data, ensure_ascii=False, separators=(",", ":")),
         encoding="utf-8",
@@ -139,12 +123,11 @@ def _recount_admin_from_indexes(fires: pd.DataFrame) -> dict:
                             c = cnt
                             break
             item["fire_count"] = int(c)
-            apply_prob(item, prob_from_count(int(c)))
             n += 1
+        mx = recolor_regions_by_fire_count(data.get("regions") or [])
         data["meta"] = data.get("meta") or {}
-        data["meta"]["max_fire_count"] = int(
-            max((r.get("fire_count") or 0 for r in data.get("regions") or []), default=0)
-        )
+        data["meta"]["max_fire_count"] = mx
+        data["meta"]["prob_note"] = "과거 산불 발생 건수 상대 빈도(같은 행정 레벨 내 비교)"
         data["meta"]["synced_at"] = datetime.now().isoformat(timespec="seconds")
         path.write_text(
             json.dumps(data, ensure_ascii=False, separators=(",", ":")),
@@ -152,39 +135,11 @@ def _recount_admin_from_indexes(fires: pd.DataFrame) -> dict:
         )
         return n
 
-    counts = {
+    return {
         "sido": patch_file(ADMIN_SIDO_JSON, "sido"),
         "sigungu": patch_file(ADMIN_SIGUNGU_JSON, "sigungu"),
         "emd": patch_file(ADMIN_EMD_JSON, "emd"),
     }
-
-    # 하위→상위 평균 (regions 기준)
-    if ADMIN_EMD_JSON.exists() and ADMIN_SIGUNGU_JSON.exists():
-        emd = json.loads(ADMIN_EMD_JSON.read_text(encoding="utf-8"))
-        sig = json.loads(ADMIN_SIGUNGU_JSON.read_text(encoding="utf-8"))
-        roll_up_from_children(
-            sig.get("regions") or [],
-            emd.get("regions") or [],
-            lambda x: str(x.get("code", ""))[:5],
-        )
-        ADMIN_SIGUNGU_JSON.write_text(
-            json.dumps(sig, ensure_ascii=False, separators=(",", ":")),
-            encoding="utf-8",
-        )
-
-        if ADMIN_SIDO_JSON.exists():
-            sido = json.loads(ADMIN_SIDO_JSON.read_text(encoding="utf-8"))
-            roll_up_from_children(
-                sido.get("regions") or [],
-                sig.get("regions") or [],
-                lambda x: x.get("province"),
-            )
-            ADMIN_SIDO_JSON.write_text(
-                json.dumps(sido, ensure_ascii=False, separators=(",", ":")),
-                encoding="utf-8",
-            )
-
-    return counts
 
 
 def _clean_region_path(path: object) -> str:
@@ -284,12 +239,10 @@ def refresh_history_layers() -> dict:
     if not REFINED_WILDFIRE.exists():
         raise FileNotFoundError(str(REFINED_WILDFIRE))
     fires = load_fires()
-    years = _set_years_from_fires(fires)
     admin = _recount_admin_from_indexes(fires)
     map_info = _refresh_map_data(fires)
     return {
         "ok": True,
-        "years_span": round(years, 2),
         "fire_rows": int(len(fires)),
         "admin": admin,
         "map_data": map_info,
