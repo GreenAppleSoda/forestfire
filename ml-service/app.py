@@ -2,7 +2,7 @@
 산불 당일 위험 예측 — Flask (내부 전용)
 
 Express(backend/)만 이 서비스를 호출한다. 브라우저에서 직접 열지 말 것.
-기존 etl/ml/predict_daily_risk.py 로직을 재사용한다.
+기존 ml-service/predict/ 예측 엔진을 호출한다.
 """
 
 from __future__ import annotations

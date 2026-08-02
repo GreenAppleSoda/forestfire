@@ -11,8 +11,12 @@
   db-archive/output/sigungu_ml_risk_scores.csv
   db-archive/output/wildfire_xgb_feature_importance.csv
   db/output/wildfire_xgb_model.json · wildfire_xgb_bundle.json
-  db/processed/sigungu_hist_state.csv · weather_recent_tail.csv
+  db/processed/sigungu_hist_state.csv  (시군구 이력 feature, 예측용)
   frontend/public/data/sigungu_ml_scores.json  (지도 연동용)
+
+feature: 사용자 입력 기상 4개 + 시군구 산불이력 2개 + DWI + SPI
+
+예측 엔진(DWI/SPI 포함)은 ml-service/predict/ 에 두고, 학습은 여기서 import 한다.
 """
 
 from __future__ import annotations
@@ -20,7 +24,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # etl/
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "ml-service"))
 
 import json
 import re
@@ -43,7 +48,6 @@ from paths import (
     SIGUNGU_HIST_STATE,
     SIGUNGU_ML_SCORES_WEB,
     WEATHER_DAILY_SIGUNGU,
-    WEATHER_RECENT_TAIL,
     WILDFIRE_XGB_BUNDLE,
     WILDFIRE_XGB_IMPORTANCE,
     WILDFIRE_XGB_METRICS,
@@ -51,6 +55,8 @@ from paths import (
     SIGUNGU_ML_RISK_SCORES,
     ensure_dirs,
 )
+from predict.dwi import add_dwi_column
+from predict.spi import attach_spi, build_spi_daily_sigungu
 
 ADMIN_SIGUNGU = ADMIN_SIGUNGU_JSON
 OUT_METRICS = WILDFIRE_XGB_METRICS
@@ -60,24 +66,16 @@ OUT_WEB = SIGUNGU_ML_SCORES_WEB
 OUT_TRAIN_SAMPLE = DATA_PROCESSED_ETL / "ml_train_sigungu_daily_sample.csv"
 
 TEST_START = "2025-01-01"
+# 기상 4 + 산불이력 2 + DWI + SPI
 FEATURE_COLS = [
     "temp_avg",
-    "temp_min",
-    "temp_max",
     "precip",
-    "precip_3d",
-    "precip_7d",
     "wind_avg",
-    "wind_max",
     "humidity_avg",
-    "humidity_min",
-    "dry_spell",
-    "month",
-    "month_sin",
-    "month_cos",
-    "dow",
     "hist_fire_rate",
     "hist_fire_count_365",
+    "dwi",
+    "spi",
 ]
 
 
@@ -170,36 +168,18 @@ def match_fire_to_codes(fires: pd.DataFrame, sig: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows).drop_duplicates(["date", "sigungu_code"])
 
 
-def add_weather_features(w: pd.DataFrame) -> pd.DataFrame:
+def prepare_weather(w: pd.DataFrame) -> pd.DataFrame:
+    """원본 기상만 정리 (파생 feature 없음)."""
     w = w.sort_values(["sigungu_code", "date"]).copy()
     w["date"] = pd.to_datetime(w["date"])
-    g = w.groupby("sigungu_code", group_keys=False)
-
-    w["precip_3d"] = g["precip"].transform(lambda s: s.rolling(3, min_periods=1).sum())
-    w["precip_7d"] = g["precip"].transform(lambda s: s.rolling(7, min_periods=1).sum())
-
-    def dry_spell(s: pd.Series) -> pd.Series:
-        out = []
-        n = 0
-        for v in s.fillna(0):
-            if v <= 0:
-                n += 1
-            else:
-                n = 0
-            out.append(n)
-        return pd.Series(out, index=s.index)
-
-    w["dry_spell"] = g["precip"].transform(dry_spell)
-
-    w["month"] = w["date"].dt.month
-    w["dow"] = w["date"].dt.dayofweek
-    w["month_sin"] = np.sin(2 * np.pi * w["month"] / 12)
-    w["month_cos"] = np.cos(2 * np.pi * w["month"] / 12)
+    w["sigungu_code"] = w["sigungu_code"].astype(str)
+    if "precip" in w.columns:
+        w["precip"] = w["precip"].fillna(0.0)
     return w
 
 
-def add_history_features(df: pd.DataFrame, fire_labels: pd.DataFrame) -> pd.DataFrame:
-    """과거 365일 발생 건수·비율 (누수 방지: 당일 제외)."""
+def add_labels_and_history(df: pd.DataFrame, fire_labels: pd.DataFrame) -> pd.DataFrame:
+    """시군구·일 산불 라벨 y + 과거 365일 이력 feature (누수 방지: 당일 제외)."""
     df = df.copy()
     df["sigungu_code"] = df["sigungu_code"].astype(str)
     fire_labels = fire_labels.copy()
@@ -255,7 +235,7 @@ def train_and_eval(df: pd.DataFrame) -> tuple[XGBClassifier, dict, pd.DataFrame]
     if train.empty or test.empty:
         raise RuntimeError("train/test 분할 결과가 비어 있습니다.")
 
-    # X = 입력(날씨·월·이력 등), y = 정답(그날 그 시군구에 산불 있었으면 1, 없으면 0)
+    # X = 입력(기상 4 + 이력 2), y = 정답(그날 그 시군구에 산불 있었으면 1, 없으면 0)
     X_train, y_train = train[FEATURE_COLS], train["y"].astype(int)
     X_test, y_test = test[FEATURE_COLS], test["y"].astype(int)
 
@@ -387,13 +367,18 @@ def main() -> None:
     fire_labels = match_fire_to_codes(fires, sig)
     print(f"   산불 원본 {len(fires)}건 → 라벨 {len(fire_labels)} (시군구·일)")
 
-    print("3) 기상 파생변수…")
-    weather = weather.copy()
-    weather["sigungu_code"] = weather["sigungu_code"].astype(str)
-    w = add_weather_features(weather)
+    print("3) 기상 원본 정리…")
+    w = prepare_weather(weather)
 
-    print("4) 이력 feature + y…")
-    df = add_history_features(w, fire_labels)
+    print("4) SPI 시군구 매핑·조인…")
+    build_spi_daily_sigungu()
+    w = attach_spi(w)
+
+    print("5) DWI 산출…")
+    w = add_dwi_column(w)
+
+    print("6) 라벨 y + 이력 feature…")
+    df = add_labels_and_history(w, fire_labels)
     print(f"   학습 후보 행 {len(df):,} / 양성 {int(df['y'].sum()):,} ({df['y'].mean()*100:.3f}%)")
 
     # 샘플 저장 (전체 parquet는 용량 큼 → 양성+랜덤음성 샘플 CSV)
@@ -406,7 +391,7 @@ def main() -> None:
     sample_out.to_csv(OUT_TRAIN_SAMPLE, index=False, encoding="utf-8-sig")
     print(f"   샘플 저장: {OUT_TRAIN_SAMPLE.name} ({len(sample_out):,}행)")
 
-    print("5) XGBoost 학습…")
+    print("7) XGBoost 학습…")
     model, metrics, test_out = train_and_eval(df)
     print(
         f"   ROC-AUC={metrics['roc_auc']}  PR-AUC={metrics['pr_auc']}  "
@@ -420,7 +405,7 @@ def main() -> None:
     imp.to_csv(OUT_IMP, index=False, encoding="utf-8-sig")
     metrics["top_features"] = imp.head(8).to_dict(orient="records")
 
-    print("6) 시군구 위험점수…")
+    print("8) 시군구 위험점수…")
     scores = region_scores(test_out, df, model)
     scores.to_csv(OUT_SCORES, index=False, encoding="utf-8-sig")
 
@@ -450,7 +435,7 @@ def main() -> None:
     OUT_WEB.write_text(json.dumps(web_payload, ensure_ascii=False), encoding="utf-8")
     OUT_METRICS.write_text(json.dumps(metrics, ensure_ascii=False, indent=2), encoding="utf-8")
 
-    print("7) 모델·추론용 상태 저장…")
+    print("9) 모델·추론용 상태 저장…")
     # XGBoost 네이티브 JSON (joblib 불필요)
     model.save_model(str(WILDFIRE_XGB_MODEL))
 
@@ -471,27 +456,6 @@ def main() -> None:
     )
     last.to_csv(SIGUNGU_HIST_STATE, index=False, encoding="utf-8-sig")
 
-    # 최근 14일 기상 (precip_3d/7d·dry_spell 계산용)
-    max_d = df["date"].max()
-    tail = df[df["date"] >= max_d - pd.Timedelta(days=13)][
-        [
-            "date",
-            "sigungu_code",
-            "sigungu_name",
-            "province",
-            "temp_avg",
-            "temp_min",
-            "temp_max",
-            "precip",
-            "wind_max",
-            "wind_avg",
-            "humidity_min",
-            "humidity_avg",
-        ]
-    ].copy()
-    tail["date"] = pd.to_datetime(tail["date"]).dt.strftime("%Y-%m-%d")
-    tail.to_csv(WEATHER_RECENT_TAIL, index=False, encoding="utf-8-sig")
-
     bundle = {
         "model_path": str(WILDFIRE_XGB_MODEL.relative_to(ROOT)).replace("\\", "/"),
         "features": FEATURE_COLS,
@@ -503,14 +467,13 @@ def main() -> None:
             "threshold": metrics["threshold"],
         },
         "hist_state": str(SIGUNGU_HIST_STATE.relative_to(ROOT)).replace("\\", "/"),
-        "weather_tail": str(WEATHER_RECENT_TAIL.relative_to(ROOT)).replace("\\", "/"),
-        "note": "predict_daily_risk.py 로 날짜·날씨 입력 예측",
+        "note": "ml-service/predict/daily.py 로 날짜·날씨 입력 예측 (기상4 + 이력2 + DWI + SPI)",
     }
     WILDFIRE_XGB_BUNDLE.write_text(
         json.dumps(bundle, ensure_ascii=False, indent=2), encoding="utf-8"
     )
     print(f"   {WILDFIRE_XGB_MODEL.name}")
-    print(f"   {SIGUNGU_HIST_STATE.name} / {WEATHER_RECENT_TAIL.name}")
+    print(f"   {SIGUNGU_HIST_STATE.name}")
     print(f"   {WILDFIRE_XGB_BUNDLE.name}")
 
     print(f"   {OUT_SCORES.name}")

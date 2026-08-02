@@ -34,13 +34,9 @@ export function whitelistDailyRisk(raw: unknown): DailyRiskDto | null {
     weather_source: publicWeatherSource(obj.weather_source),
     sample_weather: {
       temp_avg: (sample.temp_avg as number | null | undefined) ?? null,
-      temp_min: (sample.temp_min as number | null | undefined) ?? null,
-      temp_max: (sample.temp_max as number | null | undefined) ?? null,
       precip: (sample.precip as number | null | undefined) ?? null,
       wind_avg: (sample.wind_avg as number | null | undefined) ?? null,
-      wind_max: (sample.wind_max as number | null | undefined) ?? null,
       humidity_avg: (sample.humidity_avg as number | null | undefined) ?? null,
-      humidity_min: (sample.humidity_min as number | null | undefined) ?? null,
     },
     n_regions:
       typeof obj.n_regions === "number" ? obj.n_regions : regions.length,
@@ -63,7 +59,7 @@ export function whitelistDailyRisk(raw: unknown): DailyRiskDto | null {
         province: r.province,
         ml_risk: r.ml_risk,
         ml_risk_norm: r.ml_risk_norm,
-        humidity_min: r.humidity_min,
+        humidity_avg: r.humidity_avg,
         temp_avg: r.temp_avg,
         precip: r.precip,
         wind_avg: r.wind_avg,

@@ -136,8 +136,7 @@ def fetch_hourly(stn: int | str = 0, tm: str | None = None) -> list[dict]:
 def fetch_daily(tm: str, stn: int | str = 0) -> list[dict]:
     """
     일자료. tm=YYYYMMDD
-    반환: [{stn_id, date, temp_avg, temp_min, temp_max, humidity_avg, humidity_min,
-            wind_avg, wind_max, precip}, ...]
+    반환: [{stn_id, date, temp_avg, humidity_avg, wind_avg, precip}, ...]
     """
     params = {
         "tm": tm,
@@ -162,16 +161,11 @@ def fetch_daily(tm: str, stn: int | str = 0) -> list[dict]:
         stn_id = _i(parts[1])
         if stn_id is None:
             continue
-        # 0 TM, 1 STN, 2 WS_AVG, 5 WS_MAX, 10 TA_AVG, 11 TA_MAX, 13 TA_MIN,
-        # 18 HM_AVG, 19 HM_MIN, 38 RN_DAY
+        # 0 TM, 1 STN, 2 WS_AVG, 10 TA_AVG, 18 HM_AVG, 38 RN_DAY
         try:
             ws_avg = _f(parts[2])
-            ws_max = _f(parts[5])
             ta_avg = _f(parts[10])
-            ta_max = _f(parts[11])
-            ta_min = _f(parts[13])
             hm_avg = _f(parts[18])
-            hm_min = _f(parts[19])
             rn_day = _f(parts[38]) if len(parts) > 38 else None
         except IndexError:
             continue
@@ -181,12 +175,8 @@ def fetch_daily(tm: str, stn: int | str = 0) -> list[dict]:
                 "date": parts[0],
                 "stn_id": stn_id,
                 "temp_avg": ta_avg,
-                "temp_min": ta_min,
-                "temp_max": ta_max,
                 "humidity_avg": hm_avg,
-                "humidity_min": hm_min,
                 "wind_avg": ws_avg if ws_avg is not None else 0.0,
-                "wind_max": ws_max if ws_max is not None else (ws_avg or 0.0),
                 "precip": precip,
             }
         )
@@ -205,13 +195,9 @@ def hourly_to_model_weather(h: dict) -> dict:
         hm = 50.0
     return {
         "temp_avg": float(t),
-        "temp_min": float(t) - 3.0,
-        "temp_max": float(t) + 3.0,
         "precip": float(p),
         "wind_avg": float(w),
-        "wind_max": float(w) * 1.4 + 0.5,
         "humidity_avg": min(100.0, float(hm) + 5.0),
-        "humidity_min": float(hm),
     }
 
 
@@ -243,13 +229,9 @@ def fetch_now_weather_by_station() -> tuple[str, dict[int, dict], str]:
             continue
         by_stn[int(d["stn_id"])] = {
             "temp_avg": float(d["temp_avg"]),
-            "temp_min": float(d["temp_min"] if d["temp_min"] is not None else d["temp_avg"] - 3),
-            "temp_max": float(d["temp_max"] if d["temp_max"] is not None else d["temp_avg"] + 3),
             "precip": float(d["precip"] or 0),
             "wind_avg": float(d["wind_avg"] or 0),
-            "wind_max": float(d["wind_max"] or d["wind_avg"] or 0),
             "humidity_avg": float(d["humidity_avg"] if d["humidity_avg"] is not None else 50),
-            "humidity_min": float(d["humidity_min"] if d["humidity_min"] is not None else 40),
         }
     if not by_stn:
         raise RuntimeError("기상청 ASOS에서 유효한 관측값을 받지 못했습니다.")

@@ -4,13 +4,9 @@ export type WeatherSource = "kma" | "open_meteo" | "manual" | "local" | "unknown
 
 export type SampleWeather = {
   temp_avg: number | null;
-  temp_min: number | null;
-  temp_max: number | null;
   precip: number | null;
   wind_avg: number | null;
-  wind_max: number | null;
   humidity_avg: number | null;
-  humidity_min: number | null;
 };
 
 export type DailyRiskRegion = {
@@ -19,7 +15,7 @@ export type DailyRiskRegion = {
   province: unknown;
   ml_risk: unknown;
   ml_risk_norm: unknown;
-  humidity_min?: unknown;
+  humidity_avg?: unknown;
   temp_avg?: unknown;
   precip?: unknown;
   wind_avg?: unknown;
@@ -56,13 +52,9 @@ export type PredictDailyBody = {
   date?: string;
   weather?: JsonObject;
   temp_avg?: number;
-  temp_min?: number;
-  temp_max?: number;
   precip?: number;
   wind_avg?: number;
-  wind_max?: number;
   humidity_avg?: number;
-  humidity_min?: number;
 };
 
 export type PredictScenarioBody = {

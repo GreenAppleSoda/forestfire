@@ -87,7 +87,7 @@ def _clamp_weather(w: dict[str, float]) -> dict[str, float]:
 
 
 def weather_to_cli(weather: dict[str, Any]) -> dict[str, float]:
-    """슬라이더/요청 weather → predict_daily_risk cli_weather."""
+    """슬라이더/요청 weather → predict.daily cli_weather."""
     if weather.get("temp_avg") is None:
         raise ValueError("temp_avg required")
     temp_avg = float(weather["temp_avg"])
@@ -106,30 +106,11 @@ def weather_to_cli(weather: dict[str, Any]) -> dict[str, float]:
     wind_avg = clamp(wind_avg, SLIDER_RANGES["wind_avg"]["min"], SLIDER_RANGES["wind_avg"]["max"])
     precip = clamp(precip, SLIDER_RANGES["precip"]["min"], SLIDER_RANGES["precip"]["max"])
 
-    humidity_min = float(
-        weather["humidity_min"]
-        if weather.get("humidity_min") is not None
-        else max(15.0, humidity_avg - 15)
-    )
-    wind_max = float(
-        weather["wind_max"] if weather.get("wind_max") is not None else wind_avg + 2.0
-    )
-    temp_min = float(
-        weather["temp_min"] if weather.get("temp_min") is not None else temp_avg - 5
-    )
-    temp_max = float(
-        weather["temp_max"] if weather.get("temp_max") is not None else temp_avg + 5
-    )
-
     return {
         "temp_avg": round(temp_avg, 1),
-        "temp_min": round(temp_min, 1),
-        "temp_max": round(temp_max, 1),
         "precip": round(precip, 1),
         "wind_avg": round(wind_avg, 1),
-        "wind_max": round(max(wind_avg, wind_max), 1),
         "humidity_avg": round(humidity_avg, 1),
-        "humidity_min": round(min(humidity_avg, humidity_min), 1),
     }
 
 

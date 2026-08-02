@@ -88,13 +88,9 @@ export async function runPredictDaily(
     date: body.date,
     weather: body.weather,
     temp_avg: body.temp_avg,
-    temp_min: body.temp_min,
-    temp_max: body.temp_max,
     precip: body.precip,
     wind_avg: body.wind_avg,
-    wind_max: body.wind_max,
     humidity_avg: body.humidity_avg,
-    humidity_min: body.humidity_min,
   });
 
   if (!json.ok || status >= 400) {

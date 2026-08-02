@@ -26,13 +26,14 @@ def load_dotenv(path: Path = ENV_FILE) -> None:
 
 
 def ensure_etl_path() -> None:
-    """etl/ 를 import path 에 넣어 ml·pipeline 모듈을 재사용."""
+    """etl/ 를 import path 에 넣어 paths·kma 등 공유 모듈을 쓴다."""
     if str(ETL) not in sys.path:
         sys.path.insert(0, str(ETL))
 
 
 def bootstrap() -> None:
     load_dotenv()
+    # ml-service/ 는 app 진입 시 이미 path 에 있음. etl 만 보강.
     ensure_etl_path()
 
 

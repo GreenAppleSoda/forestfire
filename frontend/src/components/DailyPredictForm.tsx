@@ -16,7 +16,7 @@ type Props = {
 type Wx = {
   label: string;
   temp_avg?: number | null;
-  humidity_min?: number | null;
+  humidity_avg?: number | null;
   precip?: number | null;
   wind_avg?: number | null;
 };
@@ -26,8 +26,8 @@ function fmtWx(wx: Wx): string {
   if (wx.temp_avg != null && !Number.isNaN(wx.temp_avg)) {
     parts.push(`기온 ${wx.temp_avg}℃`);
   }
-  if (wx.humidity_min != null && !Number.isNaN(wx.humidity_min)) {
-    parts.push(`최저습도 ${wx.humidity_min}%`);
+  if (wx.humidity_avg != null && !Number.isNaN(wx.humidity_avg)) {
+    parts.push(`습도 ${wx.humidity_avg}%`);
   }
   if (wx.precip != null && !Number.isNaN(wx.precip)) {
     parts.push(`강수 ${wx.precip}mm`);
@@ -40,7 +40,7 @@ function fmtWx(wx: Wx): string {
 
 function avgField(
   rows: SigunguMlRegion[],
-  key: "temp_avg" | "humidity_min" | "precip" | "wind_avg",
+  key: "temp_avg" | "humidity_avg" | "precip" | "wind_avg",
 ): number | null {
   const vals = rows
     .map((r) => r[key])
@@ -61,7 +61,7 @@ function resolveRegionWeather(
   const sampleWx = (): Wx => ({
     label: "전국 요약",
     temp_avg: sample?.temp_avg ?? null,
-    humidity_min: sample?.humidity_min ?? null,
+    humidity_avg: sample?.humidity_avg ?? null,
     precip: sample?.precip ?? null,
     wind_avg: sample?.wind_avg ?? null,
   });
@@ -76,7 +76,7 @@ function resolveRegionWeather(
     return {
       label: name ? `${name} 평균` : "시도 평균",
       temp_avg: avgField(kids, "temp_avg"),
-      humidity_min: avgField(kids, "humidity_min"),
+      humidity_avg: avgField(kids, "humidity_avg"),
       precip: avgField(kids, "precip"),
       wind_avg: avgField(kids, "wind_avg"),
     };
@@ -89,7 +89,7 @@ function resolveRegionWeather(
   return {
     label: hit.name || name || sgCode,
     temp_avg: hit.temp_avg ?? null,
-    humidity_min: hit.humidity_min ?? null,
+    humidity_avg: hit.humidity_avg ?? null,
     precip: hit.precip ?? null,
     wind_avg: hit.wind_avg ?? null,
   };

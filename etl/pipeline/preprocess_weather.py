@@ -126,19 +126,12 @@ def preprocess_asos(path: Path) -> pd.DataFrame:
     # 기상청 일강수 결측 ≈ 강수 없음
     df["precip"] = df["precip"].fillna(0.0)
 
-    num_cols = [
-        "temp_avg",
-        "temp_min",
-        "temp_max",
-        "precip",
-        "wind_max",
-        "wind_avg",
-        "humidity_min",
-        "humidity_avg",
-    ]
-    for c in num_cols:
+    # 모델·런타임에 쓰는 기상만 유지 (원본 ASOS 11열 중 나머지 폐기)
+    keep_weather = ["temp_avg", "precip", "wind_avg", "humidity_avg"]
+    for c in keep_weather:
         df[c] = pd.to_numeric(df[c], errors="coerce")
 
+    df = df[["stn_id", "stn_name", "date", *keep_weather]]
     df = df.sort_values(["stn_id", "date"]).drop_duplicates(["stn_id", "date"], keep="last")
     return df.reset_index(drop=True)
 
@@ -253,12 +246,8 @@ def assign_nearest_station(sig: pd.DataFrame, stn_map: pd.DataFrame) -> pd.DataF
 def build_sigungu_daily(asos: pd.DataFrame, sig_stn: pd.DataFrame) -> pd.DataFrame:
     weather_cols = [
         "temp_avg",
-        "temp_min",
-        "temp_max",
         "precip",
-        "wind_max",
         "wind_avg",
-        "humidity_min",
         "humidity_avg",
     ]
     base = asos[["stn_id", "date", *weather_cols]].copy()

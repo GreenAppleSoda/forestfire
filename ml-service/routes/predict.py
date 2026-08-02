@@ -15,7 +15,7 @@ log = logging.getLogger("ml-service.predict")
 
 @bp.post("/daily")
 def predict_daily():
-    from ml.predict_daily_risk import run_daily_predict
+    from predict.daily import run_daily_predict
 
     body = request.get_json(silent=True) or {}
     source = (body.get("source") or "kma").lower()
@@ -60,7 +60,7 @@ def predict_daily():
 @bp.get("/scenario/defaults")
 def predict_scenario_defaults():
     """월별 평년·슬라이더 범위·프리셋 (UI 초기값)."""
-    from ml.scenario_weather import scenario_defaults
+    from predict.scenario_weather import scenario_defaults
 
     try:
         year = int(request.args.get("year") or 0)
@@ -83,8 +83,8 @@ def predict_scenario_defaults():
 @bp.post("/scenario")
 def predict_scenario():
     """연·월 + 가정 기상 → 시군구 산불 확률 (사용자 지정 탭)."""
-    from ml.predict_daily_risk import run_daily_predict
-    from ml.scenario_weather import build_scenario
+    from predict.daily import run_daily_predict
+    from predict.scenario_weather import build_scenario
 
     body = request.get_json(silent=True) or {}
     try:

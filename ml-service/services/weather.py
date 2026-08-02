@@ -28,15 +28,9 @@ def cli_weather_from_body(body: dict) -> dict | None:
         return None
     return {
         "temp_avg": float(temp_avg),
-        "temp_min": float(w["temp_min"] if w.get("temp_min") is not None else temp_avg - 5),
-        "temp_max": float(w["temp_max"] if w.get("temp_max") is not None else temp_avg + 5),
         "precip": float(w["precip"] if w.get("precip") is not None else 0),
         "wind_avg": float(w["wind_avg"] if w.get("wind_avg") is not None else 2.0),
-        "wind_max": float(w["wind_max"] if w.get("wind_max") is not None else 4.0),
         "humidity_avg": float(
             w["humidity_avg"] if w.get("humidity_avg") is not None else 50
-        ),
-        "humidity_min": float(
-            w["humidity_min"] if w.get("humidity_min") is not None else 35
         ),
     }

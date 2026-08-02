@@ -51,22 +51,16 @@ MOUNTAIN_GEOCODE_CACHE = DATA_PROCESSED_ETL / "mountain_geocode_cache.json"
 
 # 기상 (ASOS)
 RAW_ASOS_DAILY = DATA_RAW / "weather" / "asos_daily_2011_2026.csv"
-WEATHER_DAILY_ASOS = DATA_PROCESSED_ETL / "weather_daily_asos.csv"
 ASOS_STATION_SIGUNGU_MAP = DATA_PROCESSED_ETL / "asos_station_sigungu_map.csv"
 # 예측 런타임에 필요 → db/
 WEATHER_DAILY_SIGUNGU = DATA_PROCESSED / "weather_daily_sigungu.csv"
 SIGUNGU_ASOS_STATION = DATA_PROCESSED / "sigungu_asos_station.csv"
+# SPI (지점 일자료 → 시군구 매핑본은 processed)
+DAILY_SPI_RAW = DATA_RAW / "spi" / "daily_spi_1991~2026.csv"
+SPI_DAILY_SIGUNGU = DATA_PROCESSED / "spi_daily_sigungu.csv"
 
 # 분석 결과 (archive)
-PROVINCE_RISK = DATA_OUTPUT_ETL / "province_wildfire_risk.csv"
 CITY_RISK = DATA_OUTPUT_ETL / "city_wildfire_risk.csv"
-TOWN_RISK = DATA_OUTPUT_ETL / "town_wildfire_risk.csv"
-WILDFIRE_ML_SUMMARY = DATA_OUTPUT_ETL / "wildfire_ml_summary.json"
-WILDFIRE_DETAIL_SUMMARY = DATA_OUTPUT_ETL / "wildfire_detail_summary.json"
-
-WILDFIRE_MOUNTAIN_CITY = DATA_OUTPUT_ETL / "wildfire_mountain_city.csv"
-WILDFIRE_MOUNTAIN_TOWN = DATA_OUTPUT_ETL / "wildfire_mountain_town.csv"
-WILDFIRE_MOUNTAIN_SUMMARY = DATA_OUTPUT_ETL / "wildfire_mountain_summary.json"
 
 WILDFIRE_MOUNTAIN_EVENTS = DATA_OUTPUT_ETL / "wildfire_mountain_events.csv"
 WILDFIRE_WITH_MOUNTAINS = DATA_OUTPUT_ETL / "wildfire_with_mountains.csv"
@@ -80,7 +74,6 @@ WILDFIRE_XGB_IMPORTANCE = DATA_OUTPUT_ETL / "wildfire_xgb_feature_importance.csv
 WILDFIRE_XGB_MODEL = DATA_OUTPUT / "wildfire_xgb_model.json"
 WILDFIRE_XGB_BUNDLE = DATA_OUTPUT / "wildfire_xgb_bundle.json"
 SIGUNGU_HIST_STATE = DATA_PROCESSED / "sigungu_hist_state.csv"
-WEATHER_RECENT_TAIL = DATA_PROCESSED / "weather_recent_tail.csv"
 DAILY_ML_RISK = FRONTEND_PUBLIC_DATA / "daily_ml_risk.json"
 ADMIN_SIDO_JSON = FRONTEND_PUBLIC_DATA / "admin-sido.json"
 ADMIN_SIGUNGU_JSON = FRONTEND_PUBLIC_DATA / "admin-sigungu.json"

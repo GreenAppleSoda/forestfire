@@ -140,7 +140,7 @@ export type SigunguMlRegion = {
   ml_risk: number;
   ml_risk_norm: number;
   test_fire_days?: number;
-  humidity_min?: number;
+  humidity_avg?: number;
   temp_avg?: number;
   precip?: number;
   wind_avg?: number;

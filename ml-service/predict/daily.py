@@ -1,22 +1,13 @@
 """
 날짜 + 날씨 → 시군구별 산불 발생 위험 예측 (XGBoost)
 
-사용 예:
-  # 기상청 ASOS 실시간(시간자료) → 당일 예측 (기본)
-  python etl/ml/predict_daily_risk.py --kma
+사용 예 (ml-service 디렉터리에서):
+  python -m predict.daily --kma
+  python -m predict.daily --date 2025-03-15
+  python -m predict.daily --date 2026-07-23 \\
+    --temp-avg 28 --humidity-avg 45 --wind-avg 3.5 --precip 0
 
-  # 특정 날짜 (기상 CSV에 있으면 그 값 사용)
-  python etl/ml/predict_daily_risk.py --date 2025-03-15
-
-  # 날씨 직접 입력 (전국 동일 기상 + 지역별 이력 feature)
-  python etl/ml/predict_daily_risk.py --date 2026-07-23 \\
-    --temp-avg 28 --temp-min 22 --temp-max 33 \\
-    --humidity-avg 45 --humidity-min 28 \\
-    --wind-avg 3.5 --wind-max 6 --precip 0
-
-antecedent(precip_3d/7d·dry_spell):
-  예측일−오늘 ≤ 7일 → weather_recent_tail 실측
-  그 이상 → 작년 동일 달력일(weather_daily_sigungu)로 window 재구성
+feature: 사용자 입력 기상 4개 + 시군구 산불이력 2개 + DWI + SPI
 
 출력: frontend/public/data/daily_ml_risk.json
 """
@@ -26,7 +17,11 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+_SERVICE_DIR = Path(__file__).resolve().parents[1]
+_ETL_DIR = _SERVICE_DIR.parent / "etl"
+for _p in (_SERVICE_DIR, _ETL_DIR):
+    if str(_p) not in sys.path:
+        sys.path.insert(0, str(_p))
 
 import argparse
 import json
@@ -34,7 +29,6 @@ import math
 import urllib.parse
 import urllib.request
 
-import numpy as np
 import pandas as pd
 from xgboost import XGBClassifier
 
@@ -43,12 +37,13 @@ from paths import (
     ROOT,
     SIGUNGU_ASOS_STATION,
     SIGUNGU_HIST_STATE,
+    SPI_DAILY_SIGUNGU,
     WEATHER_DAILY_SIGUNGU,
-    WEATHER_RECENT_TAIL,
     WILDFIRE_XGB_BUNDLE,
     WILDFIRE_XGB_MODEL,
     ensure_dirs,
 )
+from predict.dwi import compute_dwi
 
 # ASOS 주요 지점 대략 좌표 (Open-Meteo용)
 ASOS_COORDS: dict[int, tuple[float, float]] = {
@@ -153,108 +148,152 @@ ASOS_COORDS: dict[int, tuple[float, float]] = {
 
 FEATURE_COLS = [
     "temp_avg",
-    "temp_min",
-    "temp_max",
     "precip",
-    "precip_3d",
-    "precip_7d",
     "wind_avg",
-    "wind_max",
     "humidity_avg",
-    "humidity_min",
-    "dry_spell",
-    "month",
-    "month_sin",
-    "month_cos",
-    "dow",
     "hist_fire_rate",
     "hist_fire_count_365",
+    "dwi",
+    "spi",
 ]
 
-# precip_7d 기준: 예측일−오늘 ≤ 7일이면 실측 recent tail, 초과면 작년 동월 window
-NEAR_HORIZON_DAYS = 7
-ANTECEDENT_LOOKBACK = 13  # + 예측일 = 14일 window
-
-_weather_daily_cache: pd.DataFrame | None = None
+_weather_lag_index: dict[str, dict[pd.Timestamp, tuple[float | None, float | None]]] | None = None
+_spi_index: dict[tuple[str, str], float] | None = None
 
 
-def predict_horizon_days(date: str | pd.Timestamp) -> int:
-    today = pd.Timestamp.now(tz="Asia/Seoul").tz_localize(None).normalize()
-    t = pd.Timestamp(date).normalize()
-    return int((t - today).days)
+def _ensure_spi_index() -> dict[tuple[str, str], float]:
+    """(sigungu_code, YYYY-MM-DD) → spi."""
+    global _spi_index
+    if _spi_index is not None:
+        return _spi_index
+    idx: dict[tuple[str, str], float] = {}
+    if SPI_DAILY_SIGUNGU.exists():
+        s = pd.read_csv(
+            SPI_DAILY_SIGUNGU,
+            encoding="utf-8-sig",
+            usecols=["date", "sigungu_code", "spi"],
+        )
+        s["sigungu_code"] = s["sigungu_code"].astype(str)
+        for r in s.itertuples(index=False):
+            d = str(r.date)[:10]
+            idx[(str(r.sigungu_code), d)] = float(r.spi)
+    else:
+        # 매핑본 없으면 원본에서 빌드 시도
+        try:
+            from predict.spi import build_spi_daily_sigungu
+
+            build_spi_daily_sigungu()
+            return _ensure_spi_index()
+        except Exception:
+            pass
+    _spi_index = idx
+    return idx
 
 
-def antecedent_mode_for_date(date: str | pd.Timestamp) -> tuple[str, int]:
-    """반환: (mode, horizon_days). mode=recent_obs | prior_year_month"""
-    h = predict_horizon_days(date)
-    if h <= NEAR_HORIZON_DAYS:
-        return "recent_obs", h
-    return "prior_year_month", h
+def _lookup_spi(date: str, code: str) -> float:
+    """해당일 SPI. 없으면 0.0(Near normal 근사) — 지도 전 시군구 예측 유지."""
+    idx = _ensure_spi_index()
+    d = str(date)[:10]
+    v = idx.get((str(code), d))
+    if v is None:
+        return 0.0
+    return float(v)
 
 
-def _load_weather_daily() -> pd.DataFrame:
-    global _weather_daily_cache
-    if _weather_daily_cache is not None:
-        return _weather_daily_cache
-    if not WEATHER_DAILY_SIGUNGU.exists():
-        _weather_daily_cache = pd.DataFrame()
-        return _weather_daily_cache
-    df = pd.read_csv(WEATHER_DAILY_SIGUNGU, encoding="utf-8-sig")
-    df["sigungu_code"] = df["sigungu_code"].astype(str)
-    df["date"] = pd.to_datetime(df["date"]).dt.normalize()
-    _weather_daily_cache = df
-    return df
+def _ensure_lag_index() -> dict[str, dict[pd.Timestamp, tuple[float | None, float | None]]]:
+    """sigungu_code → {date → (humidity_avg, precip)}."""
+    global _weather_lag_index
+    if _weather_lag_index is not None:
+        return _weather_lag_index
+
+    idx: dict[str, dict[pd.Timestamp, tuple[float | None, float | None]]] = {}
+    if WEATHER_DAILY_SIGUNGU.exists():
+        w = pd.read_csv(
+            WEATHER_DAILY_SIGUNGU,
+            encoding="utf-8-sig",
+            usecols=["date", "sigungu_code", "humidity_avg", "precip"],
+        )
+        w["sigungu_code"] = w["sigungu_code"].astype(str)
+        w["date"] = pd.to_datetime(w["date"]).dt.normalize()
+        for r in w.itertuples(index=False):
+            hum = r.humidity_avg
+            pr = r.precip
+            if hum is not None and isinstance(hum, float) and math.isnan(hum):
+                hum = None
+            elif hum is not None:
+                hum = float(hum)
+            if pr is None or (isinstance(pr, float) and math.isnan(pr)):
+                pr = None
+            else:
+                pr = float(pr)
+            bucket = idx.setdefault(str(r.sigungu_code), {})
+            bucket[pd.Timestamp(r.date)] = (hum, pr)
+    _weather_lag_index = idx
+    return idx
 
 
-def _wx_row(date: pd.Timestamp, code: str, w: dict) -> dict:
+def _lag_weather_lookup(date: str, code: str) -> dict[str, float | None]:
+    """1·2일전 습도·강수. 없으면 None → compute_dwi가 당일로 대체."""
+    idx = _ensure_lag_index()
+    by_date = idx.get(str(code), {})
+    dt = pd.Timestamp(date).normalize()
+    d1 = dt - pd.Timedelta(days=1)
+    d2 = dt - pd.Timedelta(days=2)
+    h1, p1 = by_date.get(d1, (None, None))
+    h2, p2 = by_date.get(d2, (None, None))
     return {
-        "date": date,
-        "sigungu_code": code,
-        "precip": float(w.get("precip") or 0),
-        "temp_avg": float(w["temp_avg"]),
-        "temp_min": float(w["temp_min"]),
-        "temp_max": float(w["temp_max"]),
-        "wind_avg": float(w["wind_avg"]),
-        "wind_max": float(w["wind_max"]),
-        "humidity_avg": float(w["humidity_avg"]),
-        "humidity_min": float(w["humidity_min"]),
+        "humidity_lag1": h1,
+        "humidity_lag2": h2,
+        "precip_lag1": p1,
+        "precip_lag2": p2,
     }
 
 
-def _synthetic_past(dt: pd.Timestamp, code: str, w: dict) -> pd.DataFrame:
-    """작년 동월 데이터가 없을 때: 시나리오 당일 기상으로 lookback 채움."""
-    rows = [
-        _wx_row(dt - pd.Timedelta(days=i), code, w)
-        for i in range(ANTECEDENT_LOOKBACK, 0, -1)
-    ]
-    return pd.DataFrame(rows)
-
-
-def _prior_year_hist_dates(dt: pd.Timestamp) -> list[pd.Timestamp]:
-    out: list[pd.Timestamp] = []
-    for i in range(ANTECEDENT_LOOKBACK, 0, -1):
-        d = (dt - pd.Timedelta(days=i) - pd.DateOffset(years=1)).normalize()
-        out.append(pd.Timestamp(d))
-    return out
-
-
-def _past_frame_for_code(
-    *,
-    dt: pd.Timestamp,
-    code: str,
-    w: dict,
-    mode: str,
-    recent_tail: pd.DataFrame,
-    prior_by_code: dict[str, pd.DataFrame],
+def build_features_for_day(
+    date: str,
+    weather_by_code: dict[str, dict],
+    regions: pd.DataFrame,
 ) -> pd.DataFrame:
-    if mode == "recent_obs":
-        past = recent_tail[recent_tail["sigungu_code"] == code].copy()
-        return past[past["date"] < dt]
-
-    hist = prior_by_code.get(code)
-    if hist is not None and len(hist) >= 3:
-        return hist.copy()
-    return _synthetic_past(dt, code, w)
+    """시군구별 feature 행렬 (기상 4 + 이력 2 + DWI + SPI)."""
+    month = int(pd.Timestamp(date).month)
+    rows = []
+    for _, h in regions.iterrows():
+        code = str(h["sigungu_code"])
+        w = weather_by_code.get(code)
+        if not w:
+            continue
+        temp_avg = float(w["temp_avg"])
+        precip = float(w.get("precip") or 0)
+        wind_avg = float(w["wind_avg"])
+        humidity_avg = float(w["humidity_avg"])
+        lags = _lag_weather_lookup(date, code)
+        dwi = compute_dwi(
+            temp_avg=temp_avg,
+            humidity_avg=humidity_avg,
+            wind_avg=wind_avg,
+            precip=precip,
+            month=month,
+            humidity_lag1=lags["humidity_lag1"],
+            humidity_lag2=lags["humidity_lag2"],
+            precip_lag1=lags["precip_lag1"],
+            precip_lag2=lags["precip_lag2"],
+        )
+        rows.append(
+            {
+                "sigungu_code": code,
+                "sigungu_name": h["sigungu_name"],
+                "province": h["province"],
+                "temp_avg": temp_avg,
+                "precip": precip,
+                "wind_avg": wind_avg,
+                "humidity_avg": humidity_avg,
+                "hist_fire_rate": float(h["hist_fire_rate"]),
+                "hist_fire_count_365": float(h["hist_fire_count_365"]),
+                "dwi": dwi,
+                "spi": _lookup_spi(date, code),
+            }
+        )
+    return pd.DataFrame(rows)
 
 
 def fetch_open_meteo(lat: float, lon: float, date: str) -> dict | None:
@@ -267,13 +306,9 @@ def fetch_open_meteo(lat: float, lon: float, date: str) -> dict | None:
             "daily": ",".join(
                 [
                     "temperature_2m_mean",
-                    "temperature_2m_min",
-                    "temperature_2m_max",
                     "precipitation_sum",
-                    "wind_speed_10m_max",
                     "wind_speed_10m_mean",
                     "relative_humidity_2m_mean",
-                    "relative_humidity_2m_min",
                 ]
             ),
             "timezone": "Asia/Seoul",
@@ -297,21 +332,14 @@ def fetch_open_meteo(lat: float, lon: float, date: str) -> dict | None:
             return float(v) if v is not None else default
 
         # open-meteo wind: km/h → m/s
-        wind_max = g("wind_speed_10m_max")
         wind_avg = g("wind_speed_10m_mean")
-        if not math.isnan(wind_max):
-            wind_max /= 3.6
         if not math.isnan(wind_avg):
             wind_avg /= 3.6
         return {
             "temp_avg": g("temperature_2m_mean"),
-            "temp_min": g("temperature_2m_min"),
-            "temp_max": g("temperature_2m_max"),
             "precip": g("precipitation_sum", 0.0),
-            "wind_max": wind_max,
             "wind_avg": wind_avg,
             "humidity_avg": g("relative_humidity_2m_mean"),
-            "humidity_min": g("relative_humidity_2m_min"),
         }
     except Exception:
         return None
@@ -322,122 +350,16 @@ def weather_from_cli(args: argparse.Namespace) -> dict | None:
         return None
     return {
         "temp_avg": float(args.temp_avg),
-        "temp_min": float(args.temp_min if args.temp_min is not None else args.temp_avg - 5),
-        "temp_max": float(args.temp_max if args.temp_max is not None else args.temp_avg + 5),
         "precip": float(args.precip if args.precip is not None else 0),
         "wind_avg": float(args.wind_avg if args.wind_avg is not None else 2.0),
-        "wind_max": float(args.wind_max if args.wind_max is not None else 4.0),
         "humidity_avg": float(args.humidity_avg if args.humidity_avg is not None else 50),
-        "humidity_min": float(args.humidity_min if args.humidity_min is not None else 35),
     }
 
 
-def load_hist() -> pd.DataFrame:
+def load_regions() -> pd.DataFrame:
     h = pd.read_csv(SIGUNGU_HIST_STATE, encoding="utf-8-sig")
     h["sigungu_code"] = h["sigungu_code"].astype(str)
     return h
-
-
-def build_features_for_day(
-    date: str,
-    weather_by_code: dict[str, dict],
-    hist: pd.DataFrame,
-) -> tuple[pd.DataFrame, dict]:
-    """시군구 feature 행렬 + antecedent 메타(mode, horizon_days).
-
-    near(≤7일): weather_recent_tail 실측
-    far(≥8일): 작년 동일 달력일 기상으로 precip_3d/7d·dry_spell 계산
-    """
-    dt = pd.Timestamp(date).normalize()
-    month = int(dt.month)
-    dow = int(dt.dayofweek)
-    mode, horizon = antecedent_mode_for_date(dt)
-    meta = {
-        "antecedent_weather_mode": mode,
-        "horizon_days": horizon,
-        "near_horizon_days": NEAR_HORIZON_DAYS,
-    }
-
-    recent_tail = pd.DataFrame()
-    prior_by_code: dict[str, pd.DataFrame] = {}
-    if mode == "recent_obs":
-        if WEATHER_RECENT_TAIL.exists():
-            recent_tail = pd.read_csv(WEATHER_RECENT_TAIL, encoding="utf-8-sig")
-            recent_tail["sigungu_code"] = recent_tail["sigungu_code"].astype(str)
-            recent_tail["date"] = pd.to_datetime(recent_tail["date"]).dt.normalize()
-    else:
-        daily = _load_weather_daily()
-        if len(daily):
-            hist_dates = _prior_year_hist_dates(dt)
-            sub = daily[daily["date"].isin(hist_dates)]
-            cols = [
-                "date",
-                "sigungu_code",
-                "precip",
-                "temp_avg",
-                "temp_min",
-                "temp_max",
-                "wind_avg",
-                "wind_max",
-                "humidity_avg",
-                "humidity_min",
-            ]
-            have = [c for c in cols if c in sub.columns]
-            for code, g in sub.groupby("sigungu_code"):
-                prior_by_code[str(code)] = g[have].sort_values("date")
-
-    rows = []
-    for _, h in hist.iterrows():
-        code = str(h["sigungu_code"])
-        w = weather_by_code.get(code)
-        if not w:
-            continue
-        past = _past_frame_for_code(
-            dt=dt,
-            code=code,
-            w=w,
-            mode=mode,
-            recent_tail=recent_tail,
-            prior_by_code=prior_by_code,
-        )
-        today_row = _wx_row(dt, code, w)
-        combo = pd.concat([past, pd.DataFrame([today_row])], ignore_index=True)
-        combo = combo.sort_values("date").tail(14)
-        precip = combo["precip"].fillna(0)
-        precip_3d = float(precip.tail(3).sum())
-        precip_7d = float(precip.tail(7).sum())
-        dry = 0
-        for v in reversed(precip.tolist()):
-            if v <= 0:
-                dry += 1
-            else:
-                break
-
-        rows.append(
-            {
-                "sigungu_code": code,
-                "sigungu_name": h["sigungu_name"],
-                "province": h["province"],
-                "temp_avg": float(w["temp_avg"]),
-                "temp_min": float(w["temp_min"]),
-                "temp_max": float(w["temp_max"]),
-                "precip": float(w.get("precip") or 0),
-                "precip_3d": precip_3d,
-                "precip_7d": precip_7d,
-                "wind_avg": float(w["wind_avg"]),
-                "wind_max": float(w["wind_max"]),
-                "humidity_avg": float(w["humidity_avg"]),
-                "humidity_min": float(w["humidity_min"]),
-                "dry_spell": dry,
-                "month": month,
-                "month_sin": math.sin(2 * math.pi * month / 12),
-                "month_cos": math.cos(2 * math.pi * month / 12),
-                "dow": dow,
-                "hist_fire_rate": float(h["hist_fire_rate"]),
-                "hist_fire_count_365": float(h["hist_fire_count_365"]),
-            }
-        )
-    return pd.DataFrame(rows), meta
 
 
 def _map_station_weather(
@@ -464,7 +386,7 @@ def resolve_weather(
     use_open_meteo: bool,
 ) -> tuple[str, dict[str, dict], str]:
     """반환: (실제 예측일, sigungu_code→weather, source label)"""
-    hist = load_hist()
+    hist = load_regions()
     assign = pd.read_csv(SIGUNGU_ASOS_STATION, encoding="utf-8-sig")
     assign["sigungu_code"] = assign["sigungu_code"].astype(str)
 
@@ -491,20 +413,10 @@ def resolve_weather(
                     continue
                 stn_wx[int(d["stn_id"])] = {
                     "temp_avg": float(d["temp_avg"]),
-                    "temp_min": float(
-                        d["temp_min"] if d["temp_min"] is not None else d["temp_avg"] - 3
-                    ),
-                    "temp_max": float(
-                        d["temp_max"] if d["temp_max"] is not None else d["temp_avg"] + 3
-                    ),
                     "precip": float(d["precip"] or 0),
                     "wind_avg": float(d["wind_avg"] or 0),
-                    "wind_max": float(d["wind_max"] or d["wind_avg"] or 0),
                     "humidity_avg": float(
                         d["humidity_avg"] if d["humidity_avg"] is not None else 50
-                    ),
-                    "humidity_min": float(
-                        d["humidity_min"] if d["humidity_min"] is not None else 40
                     ),
                 }
             if not stn_wx:
@@ -524,13 +436,9 @@ def resolve_weather(
             for _, r in day.iterrows():
                 out[str(r["sigungu_code"])] = {
                     "temp_avg": r["temp_avg"],
-                    "temp_min": r["temp_min"],
-                    "temp_max": r["temp_max"],
                     "precip": 0 if pd.isna(r["precip"]) else r["precip"],
                     "wind_avg": r["wind_avg"],
-                    "wind_max": r["wind_max"],
                     "humidity_avg": r["humidity_avg"],
-                    "humidity_min": r["humidity_min"],
                 }
             return date, out, f"local_csv:{date}"
 
@@ -579,8 +487,8 @@ def run_daily_predict(
         req_date, cli_weather, use_kma, use_open_meteo
     )
 
-    hist = load_hist()
-    feats, ant_meta = build_features_for_day(pred_date, weather_by_code, hist)
+    hist = load_regions()
+    feats = build_features_for_day(pred_date, weather_by_code, hist)
     feats = feats.dropna(subset=FEATURE_COLS)
 
     model = XGBClassifier()
@@ -602,15 +510,12 @@ def run_daily_predict(
     payload = {
         "predict_date": pred_date,
         "weather_source": source,
-        "antecedent_weather_mode": ant_meta["antecedent_weather_mode"],
-        "horizon_days": ant_meta["horizon_days"],
-        "near_horizon_days": ant_meta["near_horizon_days"],
         "sample_weather": {
             k: round(float(v), 2) if v == v else None for k, v in sample_wx.items()
         },
         "model_metrics": bundle.get("metrics", {}),
         "n_regions": int(len(feats)),
-        "note": "y_prob=당일 산불 발생 예측확률 · ml_risk_norm=지도 색용 정규화",
+        "note": "y_prob=당일 산불 발생 예측확률 · ml_risk_norm=지도 색용 정규화 (기상4 + 이력2 + DWI + SPI)",
         "regions": [
             {
                 "code": str(r["sigungu_code"]),
@@ -618,11 +523,11 @@ def run_daily_predict(
                 "province": r["province"],
                 "ml_risk": round(float(r["y_prob"]), 6),
                 "ml_risk_norm": round(float(r["ml_risk_norm"]), 4),
-                        "humidity_min": round(float(r["humidity_min"]), 1),
-                        "temp_avg": round(float(r["temp_avg"]), 1),
-                        "precip": round(float(r["precip"]), 1),
-                        "wind_avg": round(float(r["wind_avg"]), 1),
-                    }
+                "humidity_avg": round(float(r["humidity_avg"]), 1),
+                "temp_avg": round(float(r["temp_avg"]), 1),
+                "precip": round(float(r["precip"]), 1),
+                "wind_avg": round(float(r["wind_avg"]), 1),
+            }
             for _, r in feats.sort_values("y_prob", ascending=False).iterrows()
         ],
     }
@@ -642,13 +547,9 @@ def main() -> None:
         help="예측 날짜 YYYY-MM-DD (기본: 오늘)",
     )
     parser.add_argument("--temp-avg", type=float, default=None)
-    parser.add_argument("--temp-min", type=float, default=None)
-    parser.add_argument("--temp-max", type=float, default=None)
     parser.add_argument("--precip", type=float, default=None)
     parser.add_argument("--wind-avg", type=float, default=None)
-    parser.add_argument("--wind-max", type=float, default=None)
     parser.add_argument("--humidity-avg", type=float, default=None)
-    parser.add_argument("--humidity-min", type=float, default=None)
     parser.add_argument(
         "--kma",
         action="store_true",
@@ -686,7 +587,7 @@ def main() -> None:
     for r in payload["regions"][:8]:
         print(
             f"  {r['name']} ({r['province']}) "
-            f"prob={r['ml_risk']:.4f} humid_min={r['humidity_min']} temp={r['temp_avg']}"
+            f"prob={r['ml_risk']:.4f} humid={r['humidity_avg']} temp={r['temp_avg']}"
         )
 
 
