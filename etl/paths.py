@@ -51,8 +51,9 @@ ASOS_STATION_SIGUNGU_MAP = DATA_PROCESSED_ETL / "asos_station_sigungu_map.csv"
 WEATHER_DAILY_SIGUNGU = DATA_PROCESSED / "weather_daily_sigungu.csv"
 WEATHER_DAILY_ASOS = DATA_PROCESSED_ETL / "weather_daily_asos.csv"
 SIGUNGU_ASOS_STATION = DATA_PROCESSED / "sigungu_asos_station.csv"
-# SPI (지점 일자료 → 시군구 매핑본은 processed)
-DAILY_SPI_RAW = DATA_RAW / "spi" / "daily_spi_1991~2026.csv"
+# SPI (당일: daily_spi_realtime.py, 학습 매핑본: processed)
+DAILY_PRECIP_FILLED = DATA_RAW / "spi" / "daily_precipitation_filled.csv"
+DAILY_SPI_RAW = DATA_RAW / "spi" / "daily_spi_1971~2020.csv"
 SPI_DAILY_SIGUNGU = DATA_PROCESSED / "spi_daily_sigungu.csv"
 
 # 분석 결과 (archive)

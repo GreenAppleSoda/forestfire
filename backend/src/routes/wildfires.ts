@@ -37,10 +37,14 @@ router.post("/wildfires/sync", async (req, res) => {
     });
     if (!ok || !json.ok) {
       console.error("[wildfires/sync]", status, json.error, json.detail);
+      const detail =
+        typeof json.detail === "string" ? json.detail.trim() : "";
       const msg =
         json.error === "config_error"
           ? "산불 OpenAPI 키가 없습니다. ml-service/.env 의 FOREST_FIRE_SERVICE_KEY 를 확인하세요."
-          : "산불 이력 동기화에 실패했습니다.";
+          : detail
+            ? `산불 이력 동기화 실패: ${detail}`
+            : "산불 이력 동기화에 실패했습니다.";
       return res.status(502).json({ ok: false, error: msg });
     }
     return res.json({ ok: true, data: json.data });

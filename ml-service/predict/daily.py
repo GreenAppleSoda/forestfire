@@ -159,10 +159,11 @@ FEATURE_COLS = [
 
 _weather_lag_index: dict[str, dict[pd.Timestamp, tuple[float | None, float | None]]] | None = None
 _spi_index: dict[tuple[str, str], float] | None = None
+_spi_day_cache: dict[str, dict[str, float]] = {}
 
 
 def _ensure_spi_index() -> dict[tuple[str, str], float]:
-    """(sigungu_code, YYYY-MM-DD) → spi."""
+    """(sigungu_code, YYYY-MM-DD) → spi (학습용·과거 CSV 매핑본)."""
     global _spi_index
     if _spi_index is not None:
         return _spi_index
@@ -178,7 +179,6 @@ def _ensure_spi_index() -> dict[tuple[str, str], float]:
             d = str(r.date)[:10]
             idx[(str(r.sigungu_code), d)] = float(r.spi)
     else:
-        # 매핑본 없으면 원본에서 빌드 시도
         try:
             from predict.spi import build_spi_daily_sigungu
 
@@ -190,8 +190,65 @@ def _ensure_spi_index() -> dict[tuple[str, str], float]:
     return idx
 
 
-def _lookup_spi(date: str, code: str) -> float:
-    """해당일 SPI. 없으면 0.0(Near normal 근사) — 지도 전 시군구 예측 유지."""
+def _historical_spi_by_code(date: str) -> dict[str, float]:
+    idx = _ensure_spi_index()
+    d = str(date)[:10]
+    return {code: v for (code, dd), v in idx.items() if dd == d}
+
+
+def _realtime_spi_by_code(date: str) -> dict[str, float]:
+    """기상청 API + 강수 CSV로 당일 SPI → 시군구 코드 맵."""
+    from datetime import datetime
+
+    from predict.daily_spi_realtime import compute_spi_by_station
+
+    d = str(date)[:10]
+    today = pd.Timestamp.now(tz="Asia/Seoul").strftime("%Y-%m-%d")
+    if d == today:
+        as_of = datetime.now().replace(minute=0, second=0, microsecond=0)
+    else:
+        as_of = datetime.strptime(d + "1500", "%Y%m%d%H%M")
+
+    assign = pd.read_csv(SIGUNGU_ASOS_STATION, encoding="utf-8-sig")
+    assign["sigungu_code"] = assign["sigungu_code"].astype(str)
+    assign["stn_id"] = assign["stn_id"].astype(int)
+    stn_ids = sorted(assign["stn_id"].unique().tolist())
+
+    stn_spi = compute_spi_by_station(
+        as_of=as_of,
+        station_ids=stn_ids,
+        quiet=True,
+    )
+    out: dict[str, float] = {}
+    for _, r in assign.iterrows():
+        sid = int(r["stn_id"])
+        if sid in stn_spi:
+            out[str(r["sigungu_code"])] = stn_spi[sid]
+    return out
+
+
+def _spi_map_for_predict(date: str, *, use_realtime: bool) -> dict[str, float]:
+    """시군구→SPI. 과거 매핑본 + (옵션) realtime 당일 계산 덮어쓰기."""
+    d = str(date)[:10]
+    cache_key = f"{d}|rt={int(use_realtime)}"
+    if cache_key in _spi_day_cache:
+        return _spi_day_cache[cache_key]
+
+    out = _historical_spi_by_code(d)
+    if use_realtime:
+        try:
+            out.update(_realtime_spi_by_code(d))
+        except Exception:
+            # API/패키지 실패 시 과거 SPI·0.0 폴백
+            pass
+    _spi_day_cache[cache_key] = out
+    return out
+
+
+def _lookup_spi(date: str, code: str, spi_by_code: dict[str, float] | None = None) -> float:
+    """해당일 SPI. 없으면 0.0(Near normal 근사)."""
+    if spi_by_code is not None and str(code) in spi_by_code:
+        return float(spi_by_code[str(code)])
     idx = _ensure_spi_index()
     d = str(date)[:10]
     v = idx.get((str(code), d))
@@ -253,6 +310,7 @@ def build_features_for_day(
     date: str,
     weather_by_code: dict[str, dict],
     regions: pd.DataFrame,
+    spi_by_code: dict[str, float] | None = None,
 ) -> pd.DataFrame:
     """시군구별 feature 행렬 (기상 4 + 이력 2 + DWI + SPI)."""
     month = int(pd.Timestamp(date).month)
@@ -290,7 +348,7 @@ def build_features_for_day(
                 "hist_fire_rate": float(h["hist_fire_rate"]),
                 "hist_fire_count_365": float(h["hist_fire_count_365"]),
                 "dwi": dwi,
-                "spi": _lookup_spi(date, code),
+                "spi": _lookup_spi(date, code, spi_by_code),
             }
         )
     return pd.DataFrame(rows)
@@ -487,8 +545,15 @@ def run_daily_predict(
         req_date, cli_weather, use_kma, use_open_meteo
     )
 
+    today = pd.Timestamp.now(tz="Asia/Seoul").strftime("%Y-%m-%d")
+    # 기상청 당일(또는 오늘) 예측 → realtime SPI, 그 외·시나리오는 과거 매핑본
+    use_realtime_spi = bool(use_kma) or (pred_date == today and cli_weather is None)
+    spi_by_code = _spi_map_for_predict(pred_date, use_realtime=use_realtime_spi)
+
     hist = load_regions()
-    feats = build_features_for_day(pred_date, weather_by_code, hist)
+    feats = build_features_for_day(
+        pred_date, weather_by_code, hist, spi_by_code=spi_by_code
+    )
     feats = feats.dropna(subset=FEATURE_COLS)
 
     model = XGBClassifier()

@@ -1,7 +1,7 @@
 """산림청 산불발생통계 OpenAPI (data.go.kr) 클라이언트.
 
 엔드포인트:
-  http://apis.data.go.kr/1400000/forestStusService/getfirestatsservice
+  https://apis.data.go.kr/1400000/forestStusService/getfirestatsservice
 
 환경변수 (우선순위):
   FOREST_FIRE_SERVICE_KEY > DATA_GO_KR_SERVICE_KEY > SERVICE_KEY
@@ -10,6 +10,8 @@
 from __future__ import annotations
 
 import os
+import time
+import urllib.error
 import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
@@ -17,7 +19,11 @@ from pathlib import Path
 
 from paths import ML_SERVICE_ENV, FRONTEND_ENV_LOCAL
 
-API_URL = "http://apis.data.go.kr/1400000/forestStusService/getfirestatsservice"
+API_URL = (
+    "https://apis.data.go.kr/1400000/forestStusService/getfirestatsservice"
+)
+REQUEST_TIMEOUT_SEC = 30
+MAX_RETRIES = 3
 
 
 def _read_env_key(env_path: Path, names: tuple[str, ...]) -> str:
@@ -93,6 +99,57 @@ def _parse_items(xml_text: str) -> tuple[list[dict], int, str]:
     return items, total, result_msg or "OK"
 
 
+def _build_url(
+    *,
+    start: str,
+    end: str,
+    page_no: int,
+    num_of_rows: int,
+    key: str,
+) -> str:
+    # data.go.kr 는 serviceKey 를 디코딩하지 않는 경우가 있어 이중 인코딩 주의.
+    # 키가 '%'를 포함하면 그대로, 아니면 quote.
+    params = {
+        "serviceKey": key,
+        "numOfRows": str(num_of_rows),
+        "pageNo": str(page_no),
+        "searchStDt": start,
+        "searchEdDt": end,
+    }
+    if "%" in key:
+        qs = urllib.parse.urlencode(params, safe="%*")
+    else:
+        qs = urllib.parse.urlencode(params)
+    return f"{API_URL}?{qs}"
+
+
+def _http_get(url: str) -> bytes:
+    req = urllib.request.Request(url, headers={"User-Agent": "wildfire-atlas/1.0"})
+    last_err: Exception | None = None
+    for attempt in range(1, MAX_RETRIES + 1):
+        try:
+            with urllib.request.urlopen(req, timeout=REQUEST_TIMEOUT_SEC) as resp:
+                return resp.read()
+        except urllib.error.HTTPError as e:
+            body = ""
+            try:
+                body = e.read().decode("utf-8", errors="replace")[:300]
+            except Exception:
+                pass
+            raise RuntimeError(
+                f"OpenAPI HTTP {e.code}: {e.reason}"
+                + (f" — {body}" if body else "")
+            ) from e
+        except (TimeoutError, urllib.error.URLError, OSError) as e:
+            last_err = e
+            if attempt >= MAX_RETRIES:
+                break
+            time.sleep(1.5 * attempt)
+    raise RuntimeError(
+        f"OpenAPI 연결 실패 (재시도 {MAX_RETRIES}회): {last_err}"
+    ) from last_err
+
+
 def fetch_page(
     *,
     start: str,
@@ -103,32 +160,10 @@ def fetch_page(
 ) -> tuple[list[dict], int]:
     """start/end: YYYYMMDD"""
     key = key or service_key()
-    qs = urllib.parse.urlencode(
-        {
-            "serviceKey": key,  # 포털은 보통 이미 인코딩된 키도 허용
-            "numOfRows": str(num_of_rows),
-            "pageNo": str(page_no),
-            "searchStDt": start,
-            "searchEdDt": end,
-        },
-        safe="%*",  # 키가 이미 percent-encoding 된 경우 유지
+    url = _build_url(
+        start=start, end=end, page_no=page_no, num_of_rows=num_of_rows, key=key
     )
-    # data.go.kr 는 serviceKey 를 디코딩하지 않는 경우가 있어 이중 인코딩 주의.
-    # 키가 '%'를 포함하면 그대로, 아니면 quote.
-    if "%" not in key:
-        qs = urllib.parse.urlencode(
-            {
-                "serviceKey": key,
-                "numOfRows": str(num_of_rows),
-                "pageNo": str(page_no),
-                "searchStDt": start,
-                "searchEdDt": end,
-            }
-        )
-    url = f"{API_URL}?{qs}"
-    req = urllib.request.Request(url, headers={"User-Agent": "wildfire-atlas/1.0"})
-    with urllib.request.urlopen(req, timeout=60) as resp:
-        raw = resp.read()
+    raw = _http_get(url)
     for enc in ("utf-8", "euc-kr", "cp949"):
         try:
             text = raw.decode(enc)

@@ -33,6 +33,8 @@ python -m predict.daily --date 2026-07-23 --temp-avg 28 --humidity-avg 45 --wind
 ```
 
 피처 (8): 기상 4 + 산불이력 2 + DWI + SPI  
+SPI 학습: `daily_spi_1971~2020.csv` → `spi.py` 시군구 매핑  
+SPI 당일 예측: `daily_spi_realtime.py` (강수 CSV + 기상청 API)  
 학습은 `etl/ml/train_wildfire_xgb.py` (여기서 DWI/SPI 모듈을 import).
 
 ## HTTP (내부)
@@ -55,7 +57,8 @@ ml-service/
 ├── predict/               # 예측 엔진 (라우트·CLI·학습이 공유)
 │   ├── daily.py           # run_daily_predict · CLI
 │   ├── dwi.py             # 일기상지수
-│   ├── spi.py             # 표준강수지수 시군구 매핑
+│   ├── daily_spi_realtime.py  # 당일 SPI (강수 CSV + KMA API)
+│   ├── spi.py             # 지점 SPI → 시군구 매핑 (학습)
 │   └── scenario_weather.py
 ├── routes/
 │   ├── health.py

@@ -41,6 +41,20 @@ export function HistorySyncControl({ onUpdated }: Props) {
     };
   }, []);
 
+  const readJson = async (res: Response) => {
+    const text = await res.text();
+    try {
+      return JSON.parse(text) as { ok?: boolean; error?: string; data?: unknown };
+    } catch {
+      const snippet = text.replace(/\s+/g, " ").trim().slice(0, 80);
+      throw new Error(
+        snippet
+          ? `서버 오류 (${res.status}): ${snippet}`
+          : `서버 오류 (${res.status})`,
+      );
+    }
+  };
+
   const run = async () => {
     setLoading(true);
     setError(null);
@@ -50,7 +64,7 @@ export function HistorySyncControl({ onUpdated }: Props) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ days: 120 }),
       });
-      const syncJson = await syncRes.json();
+      const syncJson = await readJson(syncRes);
       if (!syncRes.ok || !syncJson.ok) {
         throw new Error(syncJson.error || "동기화 실패");
       }
@@ -64,10 +78,10 @@ export function HistorySyncControl({ onUpdated }: Props) {
         fetch("/api/map/admin/emd"),
       ]);
       const [mapJson, sidoJson, sigunguJson, emdJson] = await Promise.all([
-        mapRes.json(),
-        sidoRes.json(),
-        sigunguRes.json(),
-        emdRes.json(),
+        readJson(mapRes),
+        readJson(sidoRes),
+        readJson(sigunguRes),
+        readJson(emdRes),
       ]);
       if (!mapJson.ok || !sidoJson.ok || !sigunguJson.ok || !emdJson.ok) {
         throw new Error("맵 데이터 갱신 실패");

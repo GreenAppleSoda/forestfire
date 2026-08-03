@@ -22,7 +22,10 @@
 - `output/wildfire_xgb_model.json`
 - `output/wildfire_xgb_bundle.json`
 
-SPI 원본은 `db-archive/raw/spi/daily_spi_1991~2026.csv` → 학습/예측 시 시군구 매핑본으로 빌드합니다.
+SPI: `db-archive/raw/spi/daily_precipitation_filled.csv`
+→ 학습: `daily_spi_1971~2020.csv` → `spi.py` 시군구 매핑  
+→ 당일 예측: `python -m predict.daily_spi_realtime` (기상청 API + 동일 강수 CSV)
+
 
 ## 폴더 구조
 

@@ -1,6 +1,7 @@
 """SPI(표준강수지수) — 지점 일자료 → 시군구×일 매핑.
 
-원본: db-archive/raw/spi/daily_spi_1991~2026.csv (station_id, Daily_SPI_1)
+원본: db-archive/raw/spi/daily_spi_1971~2020.csv (station_id, Daily_SPI_1)
+  ← 학습·과거용. 당일 예측 SPI는 predict/daily_spi_realtime.py
 매핑: db/processed/sigungu_asos_station.csv (시군구→ASOS 지점)
 출력: db/processed/spi_daily_sigungu.csv
 """
