@@ -41,7 +41,6 @@ python -m predict.daily --date 2026-07-23 --temp-avg 28 --humidity-avg 45 --wind
 |--------|------|------|
 | `GET` | `/health` | 헬스 |
 | `POST` | `/predict/daily` | 당일 예측 |
-| `GET` | `/predict/scenario/defaults` | 시나리오 UI 기본값 |
 | `POST` | `/predict/scenario` | 가정 기상 시나리오 예측 |
 | `POST` | `/sync/wildfires` | OpenAPI 산불 이력 동기화 |
 | `GET` | `/sync/wildfires/status` | 동기화 상태 |

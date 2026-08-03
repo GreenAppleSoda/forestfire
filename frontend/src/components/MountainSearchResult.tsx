@@ -7,7 +7,6 @@ type Props = {
   mountain: MountainInfo;
   mapRegion?: RegionStat | null;
   adminRegion?: AdminRegion | null;
-  historyProb?: number | null;
   mlRiskNorm?: number | null;
   mlRiskRaw?: number | null;
   riskMode: RiskMode;

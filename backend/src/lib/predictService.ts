@@ -12,11 +12,7 @@ type PredictCache = { at: number; data: DailyRiskDto | null };
 
 let predictCache: PredictCache | null = null;
 
-export function getPredictCache(): PredictCache | null {
-  return predictCache;
-}
-
-export function setPredictCache(data: DailyRiskDto | null): void {
+function setPredictCache(data: DailyRiskDto | null): void {
   predictCache = { at: Date.now(), data };
 }
 

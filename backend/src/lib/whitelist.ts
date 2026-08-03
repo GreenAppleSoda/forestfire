@@ -1,9 +1,4 @@
-import type {
-  DailyRiskDto,
-  JsonObject,
-  MlScoresDto,
-  WeatherSource,
-} from "../types.js";
+import type { DailyRiskDto, JsonObject, WeatherSource } from "../types.js";
 
 function asObject(value: unknown): JsonObject | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
@@ -63,34 +58,6 @@ export function whitelistDailyRisk(raw: unknown): DailyRiskDto | null {
         temp_avg: r.temp_avg,
         precip: r.precip,
         wind_avg: r.wind_avg,
-      };
-    }),
-  };
-}
-
-export function whitelistMlScores(raw: unknown): MlScoresDto | null {
-  const obj = asObject(raw);
-  if (!obj) return null;
-
-  const metrics = asObject(obj.metrics) ?? asObject(obj.model_metrics) ?? {};
-  const regions = Array.isArray(obj.regions) ? obj.regions : [];
-
-  return {
-    model: obj.model ?? "xgboost",
-    test_start: obj.test_start,
-    note: String(obj.note || "시군구 ML 위험 점수"),
-    metrics:
-      metrics.roc_auc != null
-        ? { roc_auc: metrics.roc_auc, pr_auc: metrics.pr_auc }
-        : undefined,
-    regions: regions.map((item) => {
-      const r = asObject(item) ?? {};
-      return {
-        code: String(r.code ?? ""),
-        name: r.name,
-        province: r.province,
-        ml_risk: r.ml_risk,
-        ml_risk_norm: r.ml_risk_norm,
       };
     }),
   };

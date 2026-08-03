@@ -10,7 +10,6 @@ type Props = {
   selectedCode?: string | null;
   selectedName?: string | null;
   selectedLevel?: AdminLevel;
-  busy?: boolean;
 };
 
 type Wx = {

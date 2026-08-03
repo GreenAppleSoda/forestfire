@@ -122,21 +122,6 @@ def summarize_weather(cli: dict[str, float], year: int, month: int) -> str:
     )
 
 
-def scenario_defaults(year: int, month: int) -> dict[str, Any]:
-    base = month_baseline(month)
-    return {
-        "year": year,
-        "month": month,
-        "baseline": base,
-        "ranges": SLIDER_RANGES,
-        "presets": [
-            {"id": pid, "label": p["label"], "weather": apply_preset(month, pid)}
-            for pid, p in PRESETS.items()
-        ],
-        "weather": apply_preset(month, "normal"),
-    }
-
-
 def build_scenario(
     *,
     year: int,

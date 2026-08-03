@@ -97,35 +97,6 @@ export type MapData = {
   mountains?: Record<string, MountainInfo>;
 };
 
-export type KoreaPaths = {
-  viewBox: [number, number];
-  fit?: { x: number; y: number; w: number; h: number };
-  regions: Array<{
-    code: string;
-    name: string;
-    province?: string;
-    d: string;
-    label: [number, number];
-  }>;
-};
-
-export type GeoFeatureCollection = {
-  type: "FeatureCollection";
-  features: Array<{
-    type: "Feature";
-    properties: {
-      name: string;
-      name_eng?: string;
-      code?: string;
-      base_year?: string;
-    };
-    geometry: {
-      type: "Polygon" | "MultiPolygon";
-      coordinates: number[][][] | number[][][][];
-    };
-  }>;
-};
-
 export type AdminLevel = "sido" | "sigungu" | "emd" | "li";
 
 export type RiskMode = "history" | "daily" | "scenario";
@@ -175,9 +146,5 @@ export type DailyMlRisk = SigunguMlScores & {
   sample_weather?: Record<string, number | null>;
   n_regions?: number;
   scenario_summary?: string;
-  /** recent_obs(≤7일) | prior_year_month(≥8일) */
-  antecedent_weather_mode?: string;
-  horizon_days?: number;
-  near_horizon_days?: number;
 };
 

@@ -910,7 +910,6 @@ export function KoreaSvgMap({
         <SiteHeader
           right={
             <HistorySyncControl
-              variant="header"
               onUpdated={({ mapData: nextMap, layers: nextLayers }) => {
                 setMapData(nextMap);
                 setLayers(nextLayers);
@@ -1475,7 +1474,6 @@ export function KoreaSvgMap({
               mountain={searchPanelMountain}
               mapRegion={mountainLink?.mapRegion}
               adminRegion={mountainLink?.adminRegion}
-              historyProb={null}
               mlRiskNorm={mountainRisk.norm}
               mlRiskRaw={mountainRisk.raw}
               riskMode={riskMode}
@@ -1525,7 +1523,6 @@ export function KoreaSvgMap({
             mountain={searchPanelMountain}
             mapRegion={mountainLink?.mapRegion}
             adminRegion={mountainLink?.adminRegion}
-            historyProb={null}
             mlRiskNorm={mountainRisk.norm}
             mlRiskRaw={mountainRisk.raw}
             riskMode={riskMode}

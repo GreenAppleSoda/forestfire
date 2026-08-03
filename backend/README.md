@@ -34,10 +34,8 @@ Flask URL: `ML_SERVICE_URL` (기본 `http://127.0.0.1:5000`)
 ## 공개 API (`/api`)
 
 - `GET /api/health`
-- `GET /api/map/data` · `/api/map/admin/:level` · `/api/map/ml-scores` · `/api/map/daily-risk`
-- `GET /api/mountains?q=`
+- `GET /api/map/data` · `/api/map/admin/:level`
 - `POST /api/predict/daily`
-- `GET /api/predict/scenario/defaults`
 - `POST /api/predict/scenario`
 - `POST /api/wildfires/sync` · `GET /api/wildfires/sync/status`
 
@@ -59,7 +57,6 @@ backend/src/
 └── routes/
     ├── health.ts
     ├── map.ts
-    ├── mountains.ts
     ├── predict.ts
     └── wildfires.ts
 ```

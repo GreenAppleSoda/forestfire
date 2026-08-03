@@ -37,20 +37,6 @@ export async function callFlaskHealth(): Promise<FlaskJson> {
   return (await r.json()) as FlaskJson;
 }
 
-export async function callFlaskScenarioDefaults(
-  query: { year?: unknown; month?: unknown },
-): Promise<FlaskResponse> {
-  const qs = new URLSearchParams();
-  if (query.year) qs.set("year", String(query.year));
-  if (query.month) qs.set("month", String(query.month));
-  const url = `${ML_SERVICE_URL}/predict/scenario/defaults${
-    qs.toString() ? `?${qs}` : ""
-  }`;
-  const r = await fetch(url, { signal: AbortSignal.timeout(10_000) });
-  const json = (await r.json().catch(() => ({}))) as FlaskJson;
-  return { status: r.status, json };
-}
-
 export async function callFlaskWildfireSyncStatus(): Promise<{
   ok: boolean;
   status: number;

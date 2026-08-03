@@ -1,12 +1,7 @@
 import type { Response } from "express";
 import { Router } from "express";
 import { readJsonCached } from "../lib/data.js";
-import {
-  whitelistAdmin,
-  whitelistDailyRisk,
-  whitelistMapData,
-  whitelistMlScores,
-} from "../lib/whitelist.js";
+import { whitelistAdmin, whitelistMapData } from "../lib/whitelist.js";
 
 const router = Router();
 
@@ -45,26 +40,6 @@ router.get("/map/admin/:level", async (req, res) => {
     res
       .status(503)
       .json({ ok: false, error: "행정구역 데이터를 불러올 수 없습니다." });
-  }
-});
-
-router.get("/map/ml-scores", async (_req, res) => {
-  try {
-    const raw = await readJsonCached("sigungu_ml_scores.json");
-    setMapCacheHeaders(res);
-    res.json({ ok: true, data: whitelistMlScores(raw) });
-  } catch {
-    res.json({ ok: true, data: null });
-  }
-});
-
-router.get("/map/daily-risk", async (_req, res) => {
-  try {
-    const raw = await readJsonCached("daily_ml_risk.json");
-    setMapCacheHeaders(res);
-    res.json({ ok: true, data: whitelistDailyRisk(raw), cached: true });
-  } catch {
-    res.json({ ok: true, data: null });
   }
 });
 

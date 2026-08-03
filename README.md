@@ -133,11 +133,7 @@ API: `POST /api/wildfires/sync` (Express → Flask)
 - `GET /api/health`
 - `GET /api/map/data`
 - `GET /api/map/admin/:level` (`sido` \| `sigungu` \| `emd`)
-- `GET /api/map/ml-scores`
-- `GET /api/map/daily-risk`
-- `GET /api/mountains?q=`
 - `POST /api/predict/daily` — body: `{ source, force, date?, weather? }`
-- `GET /api/predict/scenario/defaults?year=&month=`
 - `POST /api/predict/scenario` — body: `{ year, month, weather: { temp_avg, humidity_avg, wind_avg, precip } }`
 - `POST /api/wildfires/sync` — OpenAPI 산불 이력 증분 + 맵 갱신
 - `GET /api/wildfires/sync/status`
@@ -146,7 +142,6 @@ API: `POST /api/wildfires/sync` (Express → Flask)
 
 - `GET /health`
 - `POST /predict/daily` — Express만 호출
-- `GET /predict/scenario/defaults`
 - `POST /predict/scenario` — Express만 호출
 - `POST /sync/wildfires` — OpenAPI 이력 동기화
 - `GET /sync/wildfires/status`

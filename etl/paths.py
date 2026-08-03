@@ -20,11 +20,6 @@ FRONTEND = ROOT / "frontend"
 FRONTEND_PUBLIC_DATA = FRONTEND / "public" / "data"
 FRONTEND_ENV_LOCAL = FRONTEND / ".env.local"
 ML_SERVICE_ENV = ROOT / "ml-service" / ".env"
-BACKEND_ENV = ROOT / "backend" / ".env"
-
-# 하위 호환 별칭
-BACKEND = ETL
-SERVER_ENV = BACKEND_ENV
 
 # 서버 배포용 (예측 런타임)
 DB = ROOT / "db"
@@ -54,6 +49,7 @@ RAW_ASOS_DAILY = DATA_RAW / "weather" / "asos_daily_2011_2026.csv"
 ASOS_STATION_SIGUNGU_MAP = DATA_PROCESSED_ETL / "asos_station_sigungu_map.csv"
 # 예측 런타임에 필요 → db/
 WEATHER_DAILY_SIGUNGU = DATA_PROCESSED / "weather_daily_sigungu.csv"
+WEATHER_DAILY_ASOS = DATA_PROCESSED_ETL / "weather_daily_asos.csv"
 SIGUNGU_ASOS_STATION = DATA_PROCESSED / "sigungu_asos_station.csv"
 # SPI (지점 일자료 → 시군구 매핑본은 processed)
 DAILY_SPI_RAW = DATA_RAW / "spi" / "daily_spi_1991~2026.csv"

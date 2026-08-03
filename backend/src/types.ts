@@ -32,20 +32,6 @@ export type DailyRiskDto = {
   regions: DailyRiskRegion[];
 };
 
-export type MlScoresDto = {
-  model: unknown;
-  test_start: unknown;
-  note: string;
-  metrics?: { roc_auc: unknown; pr_auc: unknown };
-  regions: Array<{
-    code: string;
-    name: unknown;
-    province: unknown;
-    ml_risk: unknown;
-    ml_risk_norm: unknown;
-  }>;
-};
-
 export type PredictDailyBody = {
   source?: string;
   force?: boolean;
@@ -73,16 +59,4 @@ export type FlaskJson = JsonObject & {
   error?: string;
   detail?: unknown;
   data?: unknown;
-};
-
-export type MountainHit = {
-  id: string;
-  name: unknown;
-  height: unknown;
-  address: string;
-  fire_count: number;
-  lon: unknown;
-  lat: unknown;
-  svg_x: unknown;
-  svg_y: unknown;
 };

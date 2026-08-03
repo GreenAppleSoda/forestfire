@@ -6,7 +6,6 @@ import express from "express";
 import { FRONTEND_ORIGIN } from "./config.js";
 import healthRoutes from "./routes/health.js";
 import mapRoutes from "./routes/map.js";
-import mountainsRoutes from "./routes/mountains.js";
 import predictRoutes from "./routes/predict.js";
 import wildfiresRoutes from "./routes/wildfires.js";
 
@@ -23,7 +22,6 @@ export function createApp() {
 
   app.use("/api", healthRoutes);
   app.use("/api", mapRoutes);
-  app.use("/api", mountainsRoutes);
   app.use("/api", predictRoutes);
   app.use("/api", wildfiresRoutes);
 

@@ -33,6 +33,7 @@ etl/
 ├── requirements.txt
 ├── pipeline/             # 전처리 · OpenAPI 동기화
 ├── analyze/              # 통계 · 산-산불 매칭
+│   └── analyze_wildfire_mountain_events.py
 ├── map/                  # 행정구역·지도 JSON 생성
 └── ml/
     └── train_wildfire_xgb.py   # 학습만 (predict.dwi / predict.spi import)

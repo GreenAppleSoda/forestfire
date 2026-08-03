@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-from datetime import date as date_cls
 
 from flask import Blueprint, jsonify, request
 
@@ -57,29 +56,6 @@ def predict_daily():
         return jsonify({"ok": False, "error": "predict_failed", "detail": str(e)}), 500
 
 
-@bp.get("/scenario/defaults")
-def predict_scenario_defaults():
-    """월별 평년·슬라이더 범위·프리셋 (UI 초기값)."""
-    from predict.scenario_weather import scenario_defaults
-
-    try:
-        year = int(request.args.get("year") or 0)
-        month = int(request.args.get("month") or 0)
-        today = date_cls.today()
-        if year < 2000 or year > 2100:
-            if today.month == 12:
-                year, month = today.year + 1, 1
-            else:
-                year, month = today.year, today.month + 1
-        if month < 1 or month > 12:
-            month = today.month % 12 + 1
-            year = today.year if today.month < 12 else today.year + 1
-        return jsonify({"ok": True, "data": scenario_defaults(year, month)})
-    except Exception as e:
-        log.exception("scenario defaults failed")
-        return jsonify({"ok": False, "error": "defaults_failed", "detail": str(e)}), 500
-
-
 @bp.post("/scenario")
 def predict_scenario():
     """연·월 + 가정 기상 → 시군구 산불 확률 (사용자 지정 탭)."""
@@ -109,24 +85,13 @@ def predict_scenario():
         )
         out = dict(payload)
         out["weather_source"] = "manual"
-        mode = str(payload.get("antecedent_weather_mode") or "")
-        if mode == "prior_year_month":
-            ant_note = "최근 3·7일 기상=작년 동월"
-        elif mode == "recent_obs":
-            ant_note = "최근 3·7일 기상=실측"
-        else:
-            ant_note = ""
         summary = scenario["summary"]
-        if ant_note:
-            summary = f"{summary} · {ant_note}"
         out["scenario_summary"] = summary
         out["note"] = "가정 시나리오 예측 확률 (실제 예보 아님) · " + summary
         log.info(
-            "scenario ok date=%s n=%s mode=%s horizon=%s summary=%s",
+            "scenario ok date=%s n=%s summary=%s",
             out.get("predict_date"),
             out.get("n_regions"),
-            mode,
-            payload.get("horizon_days"),
             summary,
         )
         return jsonify({"ok": True, "data": out})
