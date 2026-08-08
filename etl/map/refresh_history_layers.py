@@ -1,6 +1,7 @@
-"""refined_wildfire 기준으로 admin-*.json / map-data.json 이력 수치·색만 갱신.
+"""MariaDB forestfire_stats 기준으로 admin-*.json / map-data.json 이력 수치·색 갱신.
 
 shapefile 재생성 없이 빠르게 돌릴 수 있습니다.
+산불 원본은 MariaDB 우선, 실패 시에만 refined CSV 폴백.
 """
 
 from __future__ import annotations
@@ -9,6 +10,9 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+_ML = Path(__file__).resolve().parents[2] / "ml-service"
+if str(_ML) not in sys.path:
+    sys.path.insert(0, str(_ML))
 
 import json
 from collections import defaultdict
@@ -29,33 +33,18 @@ from paths import (
     ADMIN_SIDO_JSON,
     ADMIN_SIGUNGU_JSON,
     MAP_DATA_JSON,
-    REFINED_WILDFIRE,
     ensure_dirs,
+    sync_backend_data,
 )
 
 
-def _patch_admin_layer(path: Path, by_code_count: dict[str, int]) -> int:
-    if not path.exists():
-        return 0
-    data = json.loads(path.read_text(encoding="utf-8"))
-    updated = 0
-    for item in data.get("regions") or []:
-        code = str(item.get("code") or "")
-        if not code:
-            continue
-        if code in by_code_count:
-            item["fire_count"] = int(by_code_count[code])
-            updated += 1
-    mx = recolor_regions_by_fire_count(data.get("regions") or [])
-    data["meta"] = data.get("meta") or {}
-    data["meta"]["max_fire_count"] = mx
-    data["meta"]["prob_note"] = "과거 산불 발생 건수 상대 빈도(같은 행정 레벨 내 비교)"
-    data["meta"]["synced_at"] = datetime.now().isoformat(timespec="seconds")
-    path.write_text(
-        json.dumps(data, ensure_ascii=False, separators=(",", ":")),
-        encoding="utf-8",
-    )
-    return updated
+def _load_fire_source(fires_df: pd.DataFrame | None = None) -> pd.DataFrame:
+    """MariaDB forestfire_stats 우선, 없으면 refined CSV."""
+    if fires_df is not None:
+        return fires_df.copy()
+    from pipeline.load_wildfire_history import load_wildfire_history_raw
+
+    return load_wildfire_history_raw()
 
 
 def _recount_admin_from_indexes(fires: pd.DataFrame) -> dict:
@@ -89,28 +78,29 @@ def _recount_admin_from_indexes(fires: pd.DataFrame) -> dict:
                 ("전북특별자치도", "전북"),
                 ("전라북도", "전북"),
                 ("전라남도", "전남"),
+                ("전남광주통합특별시", "전남"),
                 ("경상북도", "경북"),
                 ("경상남도", "경남"),
                 ("제주특별자치도", "제주"),
             ):
-                if prov == full or full in prov:
+                if prov == full or name == full or full in prov or full in name:
                     short = s
                     break
             key = strip_admin(name)
             if level == "sido":
-                # 시도명은 풀네임일 수 있음
+                # 시도: DB 공식명·약칭·통합 폴리곤 모두 반영
                 c = 0
                 for sk, cnt in by_prov.items():
                     if sk in name or name.startswith(sk) or key == strip_admin(sk):
                         c += cnt
-                if "전남" in name and "광주" in name:
+                # shapefile 통합 영역(전남+광주) — DB의 전남·광주 건수 합산
+                if ("전남" in name and "광주" in name) or name == "전남광주통합특별시":
                     c = by_prov.get("전남", 0) + by_prov.get("광주", 0)
                 elif not c:
                     c = by_prov.get(short, 0) or by_prov.get(key, 0)
             elif level == "sigungu":
                 c = by_city.get(f"{short}|{key}", 0)
                 if not c:
-                    # province short 재추정
                     for sk, cnt in by_city.items():
                         if sk.endswith(f"|{key}"):
                             c = cnt
@@ -147,7 +137,9 @@ def _clean_region_path(path: object) -> str:
     return normalize_region_path_string(str(path or ""))
 
 
-def _refresh_map_data(fires: pd.DataFrame) -> dict:
+def _refresh_map_data(
+    fires: pd.DataFrame, *, total_fires: int | None = None
+) -> dict:
     if not MAP_DATA_JSON.exists():
         return {"updated": False, "reason": "map-data.json missing"}
     data = json.loads(MAP_DATA_JSON.read_text(encoding="utf-8"))
@@ -160,14 +152,11 @@ def _refresh_map_data(fires: pd.DataFrame) -> dict:
         by_city[f"{p}|{strip_admin(c)}"].append(r)
 
     regions = data.get("regions") or data.get("provinces") or []
-    max_count = 1
-    # first pass counts
     counts = []
     for reg in regions:
         prov = str(reg.get("province") or "").strip()
         name = strip_admin(str(reg.get("name") or ""))
         key = f"{prov}|{name}"
-        # province may be full name in map-data
         rows = by_city.get(key, [])
         if not rows:
             for k, v in by_city.items():
@@ -204,7 +193,7 @@ def _refresh_map_data(fires: pd.DataFrame) -> dict:
                     "village": str(r.get("village") or ""),
                     "damage_area": float(r.get("damage_area") or 0),
                     "mountains": "",
-                    "match_level": "openapi",
+                    "match_level": "db",
                 }
             )
         if code:
@@ -212,14 +201,13 @@ def _refresh_map_data(fires: pd.DataFrame) -> dict:
 
     if data.get("regions"):
         data["regions"] = regions
-    # provinces 중복 제거 유지
     data["provinces"] = []
 
     data["history"] = {**(data.get("history") or {}), **history}
     meta = data.get("meta") or {}
-    meta["total_fires"] = int(len(fires))
+    meta["total_fires"] = int(total_fires if total_fires is not None else len(fires))
     meta["synced_at"] = datetime.now().isoformat(timespec="seconds")
-    meta["source"] = "wildfire-atlas+openapi"
+    meta["source"] = "mariadb:forestfire_stats"
     data["meta"] = meta
 
     MAP_DATA_JSON.write_text(
@@ -229,21 +217,25 @@ def _refresh_map_data(fires: pd.DataFrame) -> dict:
     return {
         "updated": True,
         "regions": len(regions),
-        "total_fires": int(len(fires)),
+        "total_fires": int(meta["total_fires"]),
         "history_keys": len(history),
     }
 
 
-def refresh_history_layers() -> dict:
+def refresh_history_layers(fires_df: pd.DataFrame | None = None) -> dict:
     ensure_dirs()
-    if not REFINED_WILDFIRE.exists():
-        raise FileNotFoundError(str(REFINED_WILDFIRE))
-    fires = load_fires()
+    raw = _load_fire_source(fires_df)
+    total_fires = int(len(raw))
+    fires = load_fires(raw)
+    unmatched = total_fires - int(len(fires))
     admin = _recount_admin_from_indexes(fires)
-    map_info = _refresh_map_data(fires)
+    map_info = _refresh_map_data(fires, total_fires=total_fires)
+    sync_backend_data()
     return {
         "ok": True,
         "fire_rows": int(len(fires)),
+        "fire_rows_raw": total_fires,
+        "unmatched_province": int(unmatched),
         "admin": admin,
         "map_data": map_info,
         "refreshed_at": datetime.now().isoformat(timespec="seconds"),

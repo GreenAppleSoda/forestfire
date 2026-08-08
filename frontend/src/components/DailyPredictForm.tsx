@@ -1,6 +1,7 @@
 "use client";
 
 import type { AdminLevel, DailyMlRisk, SigunguMlRegion } from "@/lib/types";
+import { readApiJson } from "@/lib/apiJson";
 import { useMemo, useState } from "react";
 
 type Props = {
@@ -119,7 +120,7 @@ export function DailyPredictForm({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ source: "kma", force }),
       });
-      const json = await res.json();
+      const json = await readApiJson(res);
       if (!res.ok || !json.ok) {
         throw new Error(json.error || "예측 요청 실패");
       }

@@ -21,6 +21,7 @@ from paths import (
     ADMIN_SIDO_JSON,
     ADMIN_SIGUNGU_JSON,
     MAP_DATA_JSON,
+    sync_backend_data,
 )
 
 NUM = re.compile(r"[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?")
@@ -295,6 +296,8 @@ def main() -> None:
         compress_map_data(MAP_DATA_JSON)
     else:
         print(f"skip missing {MAP_DATA_JSON}")
+
+    sync_backend_data()
 
 
 if __name__ == "__main__":

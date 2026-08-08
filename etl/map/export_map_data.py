@@ -1,12 +1,12 @@
 """
-이력 기반 지도용 — 시군구별 요약 + 산불 이력 + 산 메타 → map-data.json
+이력 기반 지도용 — 시군구별 요약 + 산불 이력 + 산 정보 → map-data.json
 
 입력 (주로 예전 산-산불 매칭 파이프라인 산출물)
   - korea-sigungu-paths.json     시군구 SVG/라벨
   - wildfire_with_mountains.csv  산불이 어떤 산과 연결됐는지
   - wildfire_mountain_events.csv 산불×산 이벤트
   - mountain_data / location / coords
-  - refined_wildfire_data.csv    meta.total_fires 건수용
+  - refined_wildfire_data.csv    (폴백) meta.total_fires — 기본은 MariaDB
 
 출력
   - frontend/public/data/map-data.json
@@ -37,12 +37,13 @@ from paths import (
     MOUNTAIN_COORDS,
     MOUNTAIN_DATA,
     MOUNTAIN_LOCATION,
-    REFINED_WILDFIRE,
     WILDFIRE_BY_MOUNTAIN,
     WILDFIRE_MOUNTAIN_EVENTS,
     WILDFIRE_WITH_MOUNTAINS,
     ensure_dirs,
+    sync_backend_data,
 )
+from pipeline.load_wildfire_history import count_wildfire_history
 from pipeline.normalize_region_names import normalize_region_path_string
 
 OUT = MAP_DATA_JSON
@@ -639,8 +640,8 @@ def main() -> None:
             "source": "korea_mountains.json + wildfire_with_mountains + sigungu + kakao_geocode",
             "unit": "시군구",
             "color": "blue(safe) → red(many fires)",
-            # 건수 표시만 최신 refined 사용 (이력 상세는 with_mountains 기준)
-            "total_fires": int(len(pd.read_csv(REFINED_WILDFIRE))),
+            # 건수 표시 — MariaDB forestfire_stats (실패 시 refined CSV)
+            "total_fires": count_wildfire_history(),
             "total_mountains": int(len(mountain_index)),
             "mountains_with_coords": n_with_xy,
             "matched_fires": int((fires["match_level"] != "none").sum())
@@ -665,6 +666,8 @@ def main() -> None:
         f"저장: {OUT} ({len(regions_out)} 시군구, 산불있는곳 {with_fire}, "
         f"산 {len(mountain_index)}개 중 좌표 {n_with_xy}, {size_mb:.2f}MB)"
     )
+
+    sync_backend_data()
 
 
 if __name__ == "__main__":

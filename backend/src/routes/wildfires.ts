@@ -26,7 +26,7 @@ router.get("/wildfires/sync/status", async (_req, res) => {
   }
 });
 
-/** OpenAPI 산불 통계 증분 → 이력 맵 갱신 */
+/** MariaDB 산불이력 → 이력 맵 갱신 */
 router.post("/wildfires/sync", async (req, res) => {
   try {
     const body = (req.body || {}) as JsonObject;
@@ -41,7 +41,7 @@ router.post("/wildfires/sync", async (req, res) => {
         typeof json.detail === "string" ? json.detail.trim() : "";
       const msg =
         json.error === "config_error"
-          ? "산불 OpenAPI 키가 없습니다. ml-service/.env 의 FOREST_FIRE_SERVICE_KEY 를 확인하세요."
+          ? "MariaDB 접속 정보가 없습니다. ml-service/.env 의 DB_* 를 확인하세요."
           : detail
             ? `산불 이력 동기화 실패: ${detail}`
             : "산불 이력 동기화에 실패했습니다.";

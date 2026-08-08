@@ -19,15 +19,15 @@ import pandas as pd
 
 from paths import (
     MOUNTAIN_LOCATION,
-    REFINED_WILDFIRE,
     WILDFIRE_BY_MOUNTAIN,
     WILDFIRE_MOUNTAIN_EVENTS,
     WILDFIRE_MOUNTAIN_EVENTS_SUMMARY,
     WILDFIRE_WITH_MOUNTAINS,
     ensure_dirs,
 )
+from pipeline.load_wildfire_history import load_wildfire_history_raw
 
-FIRE_CSV = REFINED_WILDFIRE
+FIRE_CSV = None  # 하위 호환 — load_fire() 가 DB 우선 로드
 MOUNTAIN_LOC = MOUNTAIN_LOCATION
 
 OUT_EVENTS = WILDFIRE_MOUNTAIN_EVENTS
@@ -37,7 +37,8 @@ OUT_JSON = WILDFIRE_MOUNTAIN_EVENTS_SUMMARY
 
 
 def load_fire() -> pd.DataFrame:
-    df = pd.read_csv(FIRE_CSV)
+    """산불 이력 — MariaDB forestfire_stats 우선."""
+    df = load_wildfire_history_raw()
     df["date"] = pd.to_datetime(df["date"])
     df["datetime"] = pd.to_datetime(df.get("datetime"), errors="coerce")
     for c in ["province", "city", "town", "village", "time", "cause"]:
@@ -324,6 +325,7 @@ def main() -> None:
         "top_mountains_by_fire_events": top_mountains.to_dict(orient="records"),
         "recent_fires_with_names": recent_fires.round(4).to_dict(orient="records"),
         "notes": [
+            "산불 원본: MariaDB forestfire_stats (실패 시 refined CSV)",
             "산 목록 출처: korea_mountains.json (전국 산 정보)",
             "산불 원본에 산 이름이 없어, 동일 읍면(우선)·시군구(보조)에 소재한 산을 후보로 연결",
             "match_level=town: 같은 읍면의 산 / city: 같은 시군구의 산 / none: 매칭 실패",

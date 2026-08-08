@@ -18,10 +18,8 @@ import sys
 from pathlib import Path
 
 _SERVICE_DIR = Path(__file__).resolve().parents[1]
-_ETL_DIR = _SERVICE_DIR.parent / "etl"
-for _p in (_SERVICE_DIR, _ETL_DIR):
-    if str(_p) not in sys.path:
-        sys.path.insert(0, str(_p))
+if str(_SERVICE_DIR) not in sys.path:
+    sys.path.insert(0, str(_SERVICE_DIR))
 
 import argparse
 import json
@@ -32,9 +30,8 @@ import urllib.request
 import pandas as pd
 from xgboost import XGBClassifier
 
-from paths import (
+from ml_paths import (
     DAILY_ML_RISK,
-    ROOT,
     SIGUNGU_ASOS_STATION,
     SIGUNGU_HIST_STATE,
     SPI_DAILY_SIGUNGU,
@@ -157,7 +154,8 @@ FEATURE_COLS = [
     "spi",
 ]
 
-_weather_lag_index: dict[str, dict[pd.Timestamp, tuple[float | None, float | None]]] | None = None
+# CSV 폴백용 전체 인덱스 (MariaDB 우선; DB 실패·미설정 시에만 사용)
+_weather_lag_index_csv: dict[str, dict[pd.Timestamp, tuple[float | None, float | None]]] | None = None
 _spi_index: dict[tuple[str, str], float] | None = None
 _spi_day_cache: dict[str, dict[str, float]] = {}
 
@@ -257,11 +255,11 @@ def _lookup_spi(date: str, code: str, spi_by_code: dict[str, float] | None = Non
     return float(v)
 
 
-def _ensure_lag_index() -> dict[str, dict[pd.Timestamp, tuple[float | None, float | None]]]:
-    """sigungu_code → {date → (humidity_avg, precip)}."""
-    global _weather_lag_index
-    if _weather_lag_index is not None:
-        return _weather_lag_index
+def _ensure_lag_index_csv() -> dict[str, dict[pd.Timestamp, tuple[float | None, float | None]]]:
+    """CSV 폴백: sigungu_code → {date → (humidity_avg, precip)}."""
+    global _weather_lag_index_csv
+    if _weather_lag_index_csv is not None:
+        return _weather_lag_index_csv
 
     idx: dict[str, dict[pd.Timestamp, tuple[float | None, float | None]]] = {}
     if WEATHER_DAILY_SIGUNGU.exists():
@@ -285,13 +283,12 @@ def _ensure_lag_index() -> dict[str, dict[pd.Timestamp, tuple[float | None, floa
                 pr = float(pr)
             bucket = idx.setdefault(str(r.sigungu_code), {})
             bucket[pd.Timestamp(r.date)] = (hum, pr)
-    _weather_lag_index = idx
+    _weather_lag_index_csv = idx
     return idx
 
 
-def _lag_weather_lookup(date: str, code: str) -> dict[str, float | None]:
-    """1·2일전 습도·강수. 없으면 None → compute_dwi가 당일로 대체."""
-    idx = _ensure_lag_index()
+def _lag_from_csv(date: str, code: str) -> dict[str, float | None]:
+    idx = _ensure_lag_index_csv()
     by_date = idx.get(str(code), {})
     dt = pd.Timestamp(date).normalize()
     d1 = dt - pd.Timedelta(days=1)
@@ -304,6 +301,33 @@ def _lag_weather_lookup(date: str, code: str) -> dict[str, float | None]:
         "precip_lag1": p1,
         "precip_lag2": p2,
     }
+
+
+def _lag_weather_lookup(date: str, code: str) -> dict[str, float | None]:
+    """1·2일전 습도·강수. MariaDB 우선, 없으면 CSV 폴백. 둘 다 없으면 None → DWI가 당일 대체."""
+    from datetime import timedelta
+
+    from predict.weather_db import fetch_lag_index_for_pred_date
+
+    db_idx = fetch_lag_index_for_pred_date(date)
+    if db_idx:
+        by_date = db_idx.get(str(code), {})
+        dt = pd.Timestamp(date).normalize().date()
+        d1 = dt - timedelta(days=1)
+        d2 = dt - timedelta(days=2)
+        h1, p1 = by_date.get(d1, (None, None))
+        h2, p2 = by_date.get(d2, (None, None))
+        if any(v is not None for v in (h1, p1, h2, p2)):
+            return {
+                "humidity_lag1": h1,
+                "humidity_lag2": h2,
+                "precip_lag1": p1,
+                "precip_lag2": p2,
+            }
+        # 해당 시군구만 비어 있으면 CSV 폴백
+        return _lag_from_csv(date, code)
+
+    return _lag_from_csv(date, code)
 
 
 def build_features_for_day(
@@ -455,13 +479,13 @@ def resolve_weather(
 
     # 2) 기상청 ASOS (시간자료 우선, 없으면 일자료)
     if use_kma:
-        from kma_asos_client import fetch_now_weather_by_station
+        from predict.kma_client import fetch_now_weather_by_station
 
         obs_date, stn_wx, src = fetch_now_weather_by_station()
         # 요청일이 오늘이 아니면 일자료 API로 재조회
         today = pd.Timestamp.now(tz="Asia/Seoul").strftime("%Y-%m-%d")
         if date != today and date != obs_date:
-            from kma_asos_client import fetch_daily
+            from predict.kma_client import fetch_daily
 
             tm = date.replace("-", "")
             daily_rows = fetch_daily(tm=tm, stn=0)

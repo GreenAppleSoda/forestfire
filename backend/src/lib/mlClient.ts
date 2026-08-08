@@ -8,14 +8,32 @@ async function postJson(
   body: unknown,
   timeoutMs: number,
 ): Promise<FlaskResponse> {
-  const r = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-    signal: AbortSignal.timeout(timeoutMs),
-  });
-  const json = (await r.json().catch(() => ({}))) as FlaskJson;
-  return { status: r.status, json };
+  try {
+    const r = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    const text = await r.text();
+    let json: FlaskJson = {};
+    try {
+      json = JSON.parse(text) as FlaskJson;
+    } catch {
+      json = {
+        ok: false,
+        error: "ml_service_non_json",
+        detail: text.slice(0, 200),
+      };
+    }
+    return { status: r.status, json };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return {
+      status: 502,
+      json: { ok: false, error: "ml_service_unreachable", detail: msg },
+    };
+  }
 }
 
 export async function callFlaskPredict(

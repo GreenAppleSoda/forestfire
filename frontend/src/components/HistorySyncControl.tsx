@@ -1,6 +1,7 @@
 "use client";
 
 import type { AdminLayer, MapData } from "@/lib/types";
+import { readApiJson } from "@/lib/apiJson";
 import { useEffect, useState } from "react";
 
 type SyncInfo = {
@@ -8,8 +9,7 @@ type SyncInfo = {
   added?: number;
   fetched?: number;
   refined_total?: number;
-  query_start?: string;
-  query_end?: string;
+  source?: string;
 };
 
 type Props = {
@@ -30,7 +30,7 @@ export function HistorySyncControl({ onUpdated }: Props) {
     (async () => {
       try {
         const res = await fetch("/api/wildfires/sync/status");
-        const json = await res.json();
+        const json = await readApiJson(res);
         if (!cancelled && json.ok && json.data) setInfo(json.data as SyncInfo);
       } catch {
         /* ignore */
@@ -41,20 +41,6 @@ export function HistorySyncControl({ onUpdated }: Props) {
     };
   }, []);
 
-  const readJson = async (res: Response) => {
-    const text = await res.text();
-    try {
-      return JSON.parse(text) as { ok?: boolean; error?: string; data?: unknown };
-    } catch {
-      const snippet = text.replace(/\s+/g, " ").trim().slice(0, 80);
-      throw new Error(
-        snippet
-          ? `서버 오류 (${res.status}): ${snippet}`
-          : `서버 오류 (${res.status})`,
-      );
-    }
-  };
-
   const run = async () => {
     setLoading(true);
     setError(null);
@@ -62,9 +48,9 @@ export function HistorySyncControl({ onUpdated }: Props) {
       const syncRes = await fetch("/api/wildfires/sync", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ days: 120 }),
+        body: JSON.stringify({}),
       });
-      const syncJson = await readJson(syncRes);
+      const syncJson = await readApiJson(syncRes);
       if (!syncRes.ok || !syncJson.ok) {
         throw new Error(syncJson.error || "동기화 실패");
       }
@@ -78,10 +64,10 @@ export function HistorySyncControl({ onUpdated }: Props) {
         fetch("/api/map/admin/emd"),
       ]);
       const [mapJson, sidoJson, sigunguJson, emdJson] = await Promise.all([
-        readJson(mapRes),
-        readJson(sidoRes),
-        readJson(sigunguRes),
-        readJson(emdRes),
+        readApiJson(mapRes),
+        readApiJson(sidoRes),
+        readApiJson(sigunguRes),
+        readApiJson(emdRes),
       ]);
       if (!mapJson.ok || !sidoJson.ok || !sigunguJson.ok || !emdJson.ok) {
         throw new Error("맵 데이터 갱신 실패");
@@ -111,14 +97,13 @@ export function HistorySyncControl({ onUpdated }: Props) {
         {info?.last_sync_at ? (
           <p className="mt-0.5 truncate text-[10px] text-[#78716c]">
             최근 {info.last_sync_at}
-            {typeof info.added === "number" ? ` · +${info.added}건` : ""}
             {typeof info.refined_total === "number"
               ? ` · 전체 ${info.refined_total.toLocaleString()}건`
               : ""}
           </p>
         ) : (
           <p className="mt-0.5 text-[10px] text-[#78716c]">
-            OpenAPI로 이력 증분 반영
+            버튼을 눌러 최신 이력 반영
           </p>
         )}
         {error && (
@@ -131,7 +116,7 @@ export function HistorySyncControl({ onUpdated }: Props) {
         onClick={run}
         className="shrink-0 rounded-md bg-[#1c1917] px-3 py-1.5 text-[12px] font-medium whitespace-nowrap text-white disabled:opacity-50"
       >
-        {loading ? "갱신 중…" : "OpenAPI로 이력 갱신"}
+        {loading ? "갱신 중…" : "산불이력 갱신"}
       </button>
     </div>
   );

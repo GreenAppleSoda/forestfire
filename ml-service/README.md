@@ -1,6 +1,7 @@
 # ForestFire ML Service (Flask)
 
-당일·시나리오 산불 위험 예측 — **localhost 전용**. Express(`backend/`)만 호출하세요.
+당일·시나리오 산불 위험 예측과 산불이력(DB) 맵 갱신 — **localhost 전용**.  
+Express(`backend/`)만 호출하세요.
 
 ```powershell
 cd ml-service
@@ -16,11 +17,20 @@ python app.py
 | 키 | 용도 |
 |----|------|
 | `KMA_API_AUTH_KEY` | 기상청 ASOS (당일 예측) |
-| `FOREST_FIRE_SERVICE_KEY` | 산불발생통계 OpenAPI 동기화 |
+| `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME` | MariaDB (산불 `forestfire_stats`, 기상 `weather_daily_sigungu`) |
 | `ML_HOST` | 기본 `127.0.0.1` |
 | `ML_PORT` | 기본 `5000` |
+| `FOREST_FIRE_SERVICE_KEY` | (선택) 레거시 OpenAPI ETL 스크립트용 — 웹 동기화에는 불필요 |
 
-경로·기상 클라이언트는 `etl/paths.py`, `etl/kma_asos_client.py` 를 import path에 넣어 공유합니다.
+예측(`predict/daily.py` 등)은 `ml_paths.py`, `predict/kma_client.py`로 `etl/` 없이도 동작합니다.  
+**예외:** 이력 동기화(`routes/sync.py`)는 `etl/pipeline/sync_wildfire_history.py`를 쓰므로 `etl/` 폴더가 필요합니다.
+
+## 예측 시 기상 출처
+
+| 구간 | 소스 |
+|------|------|
+| 예측일 당일 | 기상청 ASOS API |
+| lag-1 · lag-2 (어제·그저께) | MariaDB `weather_daily_sigungu` (실패 시 CSV) |
 
 ## 예측 엔진 (`predict/`)
 
@@ -33,9 +43,7 @@ python -m predict.daily --date 2026-07-23 --temp-avg 28 --humidity-avg 45 --wind
 ```
 
 피처 (8): 기상 4 + 산불이력 2 + DWI + SPI  
-SPI 학습: `daily_spi_1971~2020.csv` → `spi.py` 시군구 매핑  
-SPI 당일 예측: `daily_spi_realtime.py` (강수 CSV + 기상청 API)  
-학습은 `etl/ml/train_wildfire_xgb.py` (여기서 DWI/SPI 모듈을 import).
+학습은 `etl/ml/train_wildfire_xgb.py`.
 
 ## HTTP (내부)
 
@@ -44,28 +52,30 @@ SPI 당일 예측: `daily_spi_realtime.py` (강수 CSV + 기상청 API)
 | `GET` | `/health` | 헬스 |
 | `POST` | `/predict/daily` | 당일 예측 |
 | `POST` | `/predict/scenario` | 가정 기상 시나리오 예측 |
-| `POST` | `/sync/wildfires` | OpenAPI 산불 이력 동기화 |
+| `POST` | `/sync/wildfires` | MariaDB 산불 이력 → 맵 JSON 갱신 |
 | `GET` | `/sync/wildfires/status` | 동기화 상태 |
 
 ## 폴더 구조
 
 ```
 ml-service/
-├── app.py                 # 진입점 (create_app · run)
-├── config.py              # .env · HOST/PORT · etl path
+├── app.py
+├── config.py              # .env · HOST/PORT · etl path (동기화용)
+├── ml_paths.py            # 예측용 경로
 ├── requirements.txt
-├── predict/               # 예측 엔진 (라우트·CLI·학습이 공유)
-│   ├── daily.py           # run_daily_predict · CLI
-│   ├── dwi.py             # 일기상지수
-│   ├── daily_spi_realtime.py  # 당일 SPI (강수 CSV + KMA API)
-│   ├── spi.py             # 지점 SPI → 시군구 매핑 (학습)
+├── predict/
+│   ├── daily.py
+│   ├── weather_db.py      # MariaDB lag/학습 기상
+│   ├── fire_db.py         # MariaDB forestfire_stats
+│   ├── dwi.py · spi.py · daily_spi_realtime.py
+│   ├── kma_client.py
 │   └── scenario_weather.py
 ├── routes/
 │   ├── health.py
-│   ├── predict.py         # /predict/*
-│   └── sync.py            # /sync/wildfires*
+│   ├── predict.py
+│   └── sync.py            # → etl sync_wildfire_history
 └── services/
-    └── weather.py         # 요청 기상 파싱 · 소스 라벨
+    └── weather.py
 ```
 
-런타임 데이터·모델은 저장소 루트의 `db/` 를 읽습니다. 자세한 경로는 `etl/paths.py` 참고.
+런타임 모델·hist 등은 저장소 루트 `db/` 를 읽습니다.

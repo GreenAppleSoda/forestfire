@@ -3,7 +3,7 @@
 
 입력
   - db-archive/raw/geo/          시도·시군구·읍면동 shapefile
-  - refined_wildfire_data.csv    전처리된 산불 (2단계 결과)
+  - MariaDB forestfire_stats     산불 이력 (실패 시 refined CSV 폴백)
 
 출력 (frontend/public/data/)
   - admin-sido.json
@@ -32,7 +32,12 @@ import pandas as pd
 import shapefile  # pyshp: .shp 행정경계 읽기
 from pyproj import Transformer  # 위도(lat)와 경도(lng)를 TM(한국통합좌표계) 미터 좌표로 변환하는 데 사용
 
-from paths import FRONTEND_PUBLIC_DATA, GEO_DIR, REFINED_WILDFIRE, ensure_dirs
+from paths import (
+    FRONTEND_PUBLIC_DATA,
+    GEO_DIR,
+    ensure_dirs,
+    sync_backend_data,
+)
 
 OUT_DIR = FRONTEND_PUBLIC_DATA
 
@@ -111,6 +116,12 @@ PROV_FULL = {
     "제주": "제주특별자치도",
 }
 PROV_FULL_TO_SHORT = {v: k for k, v in PROV_FULL.items()}
+# DB/지도에 남는 통합·구표기 → 시군구 매칭용 약칭
+PROV_ALIAS_TO_SHORT = {
+    "전남광주통합특별시": "전남",
+    "전라북도": "전북",
+    "강원도": "강원",
+}
 
 # ---------------------------------------------------------------------------
 # 좌표 변환 · 이름 정규화 · 폴리곤 → SVG path
@@ -155,6 +166,14 @@ def normalize_province(name: str) -> str:
         return raw
     if raw in PROV_FULL_TO_SHORT:
         return PROV_FULL_TO_SHORT[raw]
+    if raw in PROV_ALIAS_TO_SHORT:
+        return PROV_ALIAS_TO_SHORT[raw]
+    compact = re.sub(r"\s+", "", raw)
+    if compact in PROV_ALIAS_TO_SHORT:
+        return PROV_ALIAS_TO_SHORT[compact]
+    # 전남·광주 통합 표기 (DB/구 shapefile)
+    if "전남광주" in compact:
+        return "전남"
     short = strip_admin(raw)
     if short in PROV_FULL:
         return short
@@ -349,14 +368,24 @@ def roll_up_from_children(
 # 산불 CSV → 집계 인덱스 (시도 / 시군구 / 읍면 / 동리)
 # ---------------------------------------------------------------------------
 
-def load_fires() -> pd.DataFrame:
-    """2단계 refined CSV 로드. province 없는 행은 제외."""
-    df = pd.read_csv(REFINED_WILDFIRE)
+def load_fires(df: pd.DataFrame | None = None) -> pd.DataFrame:
+    """산불 이력 로드. province 없는 행은 제외.
+
+    df 를 넘기면 그 프레임을 쓰고, 없으면 MariaDB → refined CSV 순으로 로드.
+    """
+    if df is None:
+        from pipeline.load_wildfire_history import load_wildfire_history_raw
+
+        df = load_wildfire_history_raw()
+    else:
+        df = df.copy()
     for c in ["province", "city", "town", "village"]:
+        if c not in df.columns:
+            df[c] = ""
         df[c] = df[c].fillna("").astype(str).str.strip()
-    # refined 는 공식명(예: 강원특별자치도), shp 매칭은 약칭(강원)을 쓰므로 통일
+    # DB 공식명(예: 강원특별자치도, 전남광주통합특별시) → 지도 약칭(강원, 전남)
     df["province"] = df["province"].map(normalize_province)
-    return df[df["province"].ne("")]
+    return df[df["province"].ne("")].copy()
 
 
 def build_fire_indexes(fires: pd.DataFrame):
@@ -543,6 +572,8 @@ def main() -> None:
     ]:
         p = OUT_DIR / name
         print(f"{name}: {p.stat().st_size / 1e6:.2f} MB")
+
+    sync_backend_data()
 
 
 if __name__ == "__main__":

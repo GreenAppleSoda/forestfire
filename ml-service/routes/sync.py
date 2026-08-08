@@ -1,11 +1,11 @@
-"""산불 OpenAPI 증분 동기화."""
+"""산불 이력 동기화 — MariaDB forestfire_stats → 맵 갱신."""
 
 from __future__ import annotations
 
 import json
 import logging
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify
 
 bp = Blueprint("sync", __name__, url_prefix="/sync")
 log = logging.getLogger("ml-service.sync")
@@ -24,8 +24,7 @@ def sync_wildfires_status():
                 "ok": True,
                 "data": {
                     "last_sync_at": data.get("last_sync_at"),
-                    "query_start": data.get("query_start"),
-                    "query_end": data.get("query_end"),
+                    "source": data.get("source"),
                     "fetched": data.get("fetched"),
                     "added": data.get("added"),
                     "refined_total": data.get("refined_total"),
@@ -38,28 +37,23 @@ def sync_wildfires_status():
 
 @bp.post("/wildfires")
 def sync_wildfires():
-    """OpenAPI 산불 통계 증분 → refined → 이력 맵 갱신."""
-    body = request.get_json(silent=True) or {}
-    days = int(body.get("days") or 120)
-    start = body.get("start")
-    end = body.get("end")
+    """MariaDB forestfire_stats → refined CSV → 이력 맵 갱신."""
     try:
-        from pipeline.sync_wildfire_openapi import run_sync
+        from pipeline.sync_wildfire_history import run_sync
 
-        result = run_sync(start=start, end=end, days=days)
+        result = run_sync()
         public = {
             "last_sync_at": result.get("last_sync_at"),
-            "query_start": result.get("query_start"),
-            "query_end": result.get("query_end"),
+            "source": result.get("source"),
             "fetched": result.get("fetched"),
             "added": result.get("added"),
             "refined_total": result.get("refined_total"),
             "map_refreshed": bool(result.get("map_refresh")),
         }
         log.info(
-            "wildfire sync ok added=%s total=%s",
-            public["added"],
+            "wildfire sync ok total=%s source=%s",
             public["refined_total"],
+            public["source"],
         )
         return jsonify({"ok": True, "data": public})
     except RuntimeError as e:

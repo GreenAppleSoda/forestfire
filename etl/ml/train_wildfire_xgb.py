@@ -1,7 +1,8 @@
 """
 시군구×일 산불 발생 예측 — XGBoost
 
-1) weather_daily_sigungu + refined_wildfire → 학습 테이블 (y=당일 산불 여부)
+1) MariaDB weather_daily_sigungu + MariaDB forestfire_stats → 학습 테이블 (y=당일 산불 여부)
+   (DB 실패 시에만 로컬 CSV 폴백)
 2) 시간 분할 검증 (train: ~2024-12-31 / test: 2025-01-01~)
 3) 시군구별 ML 위험점수 저장
 
@@ -43,7 +44,6 @@ from xgboost import XGBClassifier
 from paths import (
     ADMIN_SIGUNGU_JSON,
     DATA_PROCESSED_ETL,
-    REFINED_WILDFIRE,
     ROOT,
     SIGUNGU_HIST_STATE,
     SIGUNGU_ML_SCORES_WEB,
@@ -354,11 +354,44 @@ def region_scores(test_out: pd.DataFrame, full_df: pd.DataFrame, model: XGBClass
     return out.sort_values("ml_risk", ascending=False).reset_index(drop=True)
 
 
+def load_weather_for_train() -> pd.DataFrame:
+    """학습용 기상: MariaDB 우선, 실패 시 로컬 CSV."""
+    try:
+        from predict.weather_db import fetch_weather_daily_sigungu_df
+
+        weather = fetch_weather_daily_sigungu_df()
+        print(
+            f"   기상 소스=MariaDB  rows={len(weather):,}  "
+            f"{weather['date'].min().date()} ~ {weather['date'].max().date()}"
+        )
+        return weather
+    except Exception as e:
+        print(f"   MariaDB 기상 로드 실패 → CSV 폴백: {e}")
+        if not WEATHER_DAILY_SIGUNGU.exists():
+            raise FileNotFoundError(
+                f"MariaDB 실패 후 CSV도 없음: {WEATHER_DAILY_SIGUNGU}"
+            ) from e
+        weather = pd.read_csv(WEATHER_DAILY_SIGUNGU, encoding="utf-8-sig")
+        print(f"   기상 소스=CSV  rows={len(weather):,}  ({WEATHER_DAILY_SIGUNGU.name})")
+        return weather
+
+
+def load_fires_for_train() -> pd.DataFrame:
+    """학습용 산불: MariaDB 우선 → 지도와 동일한 시도 약칭 정규화. CSV 폴백."""
+    from map.build_admin_layers import load_fires
+    from pipeline.load_wildfire_history import load_wildfire_history_raw
+
+    raw = load_wildfire_history_raw()
+    fires = load_fires(raw)
+    print(f"   산불 정규화 후 rows={len(fires):,}  (raw {len(raw):,})")
+    return fires
+
+
 def main() -> None:
     ensure_dirs()
     print("1) 데이터 로드…")
-    weather = pd.read_csv(WEATHER_DAILY_SIGUNGU, encoding="utf-8-sig")
-    fires = pd.read_csv(REFINED_WILDFIRE)
+    weather = load_weather_for_train()
+    fires = load_fires_for_train()
     fires["date"] = pd.to_datetime(fires["date"], errors="coerce")
     fires = fires.dropna(subset=["date"])
     sig = load_sigungu()

@@ -10,6 +10,7 @@
   db-archive/   ETL·분석 원본·중간 산출물 보관
 """
 
+import shutil
 from pathlib import Path
 
 # ForestFire/ (프로젝트 루트)
@@ -20,6 +21,16 @@ FRONTEND = ROOT / "frontend"
 FRONTEND_PUBLIC_DATA = FRONTEND / "public" / "data"
 FRONTEND_ENV_LOCAL = FRONTEND / ".env.local"
 ML_SERVICE_ENV = ROOT / "ml-service" / ".env"
+
+# backend가 자기 폴더 안에서 읽을 수 있도록 지도 JSON을 복사해 두는 위치.
+# backend는 frontend 폴더를 직접 읽지 않고 이 사본(backend/data)을 읽는다.
+BACKEND_DATA = ROOT / "backend" / "data"
+WEB_MIRROR_FILES = (
+    "map-data.json",
+    "admin-sido.json",
+    "admin-sigungu.json",
+    "admin-emd.json",
+)
 
 # 서버 배포용 (예측 런타임)
 DB = ROOT / "db"
@@ -93,5 +104,20 @@ def ensure_dirs() -> None:
         DATA_OUTPUT_ETL,
         GEO_DIR,
         FRONTEND_PUBLIC_DATA,
+        BACKEND_DATA,
     ):
         d.mkdir(parents=True, exist_ok=True)
+
+
+def sync_backend_data() -> None:
+    """지도 JSON(WEB_MIRROR_FILES)을 frontend/public/data → backend/data로 복사.
+
+    backend는 이 사본을 읽으므로(backend/.env의 DATA_DIR), frontend/public/data를
+    갱신하는 스크립트(build_admin_layers · export_map_data · compress_web_data ·
+    refresh_history_layers)는 마지막에 이 함수를 호출해 backend도 최신 상태로 맞춘다.
+    """
+    BACKEND_DATA.mkdir(parents=True, exist_ok=True)
+    for name in WEB_MIRROR_FILES:
+        src = FRONTEND_PUBLIC_DATA / name
+        if src.exists():
+            shutil.copy2(src, BACKEND_DATA / name)

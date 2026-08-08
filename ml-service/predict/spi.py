@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from paths import DAILY_SPI_RAW, SIGUNGU_ASOS_STATION, SPI_DAILY_SIGUNGU, ensure_dirs
+from ml_paths import DAILY_SPI_RAW, SIGUNGU_ASOS_STATION, SPI_DAILY_SIGUNGU, ensure_dirs
 
 
 def build_spi_daily_sigungu(

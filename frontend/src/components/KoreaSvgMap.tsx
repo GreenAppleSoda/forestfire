@@ -14,6 +14,7 @@ import type {
   SigunguMlScores,
 } from "@/lib/types";
 import { intensityToColor, probToColor } from "@/lib/choropleth";
+import { readApiJson } from "@/lib/apiJson";
 import {
   kakaoToSvgView,
   svgToWgs84,
@@ -280,7 +281,7 @@ export function KoreaSvgMap({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ source: "kma", force }),
         });
-        const json = await res.json();
+        const json = await readApiJson(res);
         if (!res.ok || !json.ok) {
           throw new Error(json.error || "기상청 예측 실패");
         }

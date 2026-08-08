@@ -1,6 +1,7 @@
 "use client";
 
 import type { DailyMlRisk } from "@/lib/types";
+import { readApiJson } from "@/lib/apiJson";
 import { useMemo, useState } from "react";
 
 type Props = {
@@ -131,7 +132,7 @@ export function ScenarioPredictForm({ onPredicted }: Props) {
           },
         }),
       });
-      const json = await res.json();
+      const json = await readApiJson(res);
       if (!res.ok || !json.ok) {
         throw new Error(json.error || "시나리오 예측 실패");
       }
