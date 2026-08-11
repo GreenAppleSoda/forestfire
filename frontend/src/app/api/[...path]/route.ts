@@ -60,14 +60,18 @@ async function proxy(
     const disconnected = /ECONNRESET|ECONNREFUSED|fetch failed|socket hang up/i.test(
       msg,
     );
+    // HMR/재컴파일 중 빈 응답 파싱 실패 등 — plain 500 대신 JSON으로 돌려 프론트 안내가 가능하게 함
+    const transient =
+      e instanceof SyntaxError ||
+      /Unexpected end of JSON|JSON\.parse/i.test(msg);
 
     let error =
       "API 서버(backend)에 연결할 수 없습니다. backend(:4000)가 실행 중인지 확인해 주세요.";
     if (timedOut) {
       error = "요청 시간이 초과되었습니다. 잠시 후 다시 시도해 주세요.";
-    } else if (disconnected) {
+    } else if (disconnected || transient) {
       error =
-        "API 서버 연결이 끊겼습니다. backend를 재시작한 뒤 다시 시도해 주세요.";
+        "서버가 일시적으로 응답하지 못했습니다. 잠시 후 다시 시도해 주세요.";
     }
 
     return Response.json(

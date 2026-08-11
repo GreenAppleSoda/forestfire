@@ -267,18 +267,16 @@ def train_and_eval(df: pd.DataFrame) -> tuple[XGBClassifier, dict, pd.DataFrame]
     # 학습: X_train 으로 y_train(0/1)을 맞추도록 트리들을 업데이트
     model.fit(X_train, y_train)
 
-    # --- 예측: 0/1 이 아니라 "발생할 확률" ---
-    # predict_proba 는 [P(y=0), P(y=1)] 두 열을 줌
-    # [:, 1] = 산불 발생(양성 클래스) 확률 → 지도 ml_risk 에 쓰는 값과 같은 종류
+    # 모델은 "불 났다(1) / 안 났다(0)"로 학습했지만,
+    # 예측할 때는 0/1이 아니라 "불 날 확률"(0~1)을 낸다.
+    # predict_proba 결과 예: [안 날 확률, 날 확률]
+    # 그래서 [:, 1] = 산불 발생 확률. 지도 색(ml_risk)에 쓰는 값과 같다.
     proba = model.predict_proba(X_test)[:, 1]
 
-    # --- 평가용 0/1 절단 (threshold) ---
-    # 지도 색칠에는 proba 를 그대로 쓰고,
-    # precision/recall/F1 을 계산하려면 어디부터를 "발생으로 본다"는 선이 필요함.
-    # 산불이 드무니 0.5 고정은 부적절 → 테스트 양성 비율을 참고해
-    # "확률이 상위 몇 %인 경우만 1" 이 되도록 분위수(quantile)로 thr 결정
-    #   y_test.mean() = 테스트에서 실제 산불 비율
-    #   그 비율×10 (최대 5%) 정도를 '양성으로 찍을 비율'로 잡음
+    # 아래 thr / pred 는 지도용이 아니다.
+    # precision·recall 같은 점수를 내려면 확률을 다시 0/1로 잘라야 한다.
+    # 산불은 드물어서 0.5 기준은 거의 전부 0이 됨 →
+    # "확률이 높은 상위 일부만 1로 본다"는 분위수(thr)를 쓴다.
     thr = float(np.quantile(proba, 1 - min(0.05, max(y_test.mean() * 10, 0.01))))
     # 확률이 thr 이상이면 1(발생으로 판정), 아니면 0
     pred = (proba >= thr).astype(int)
