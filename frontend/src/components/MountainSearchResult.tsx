@@ -46,9 +46,9 @@ export function MountainSearchResult({
 
   const modeLabel =
     riskMode === "daily"
-      ? "당일 예측 "
+      ? "당일 산불위험지수"
       : riskMode === "scenario"
-        ? "시나리오 예측 "
+        ? "시나리오 산불위험지수"
         : null;
 
   const isPredict = riskMode === "daily" || riskMode === "scenario";
@@ -93,7 +93,7 @@ export function MountainSearchResult({
                       {modeLabel}
                     </span>
                     <span className="text-2xl font-bold text-[#e03131]">
-                      {(display * 100).toFixed(1)}%
+                      {(display * 100).toFixed(1)}
                     </span>
                   </>
                 ) : (
@@ -130,7 +130,7 @@ export function MountainSearchResult({
               )}
               <div className="mt-1.5 space-y-0.5 text-[12px] text-[#4b5563]">
                 {isPredict && mlRiskRaw != null && (
-                  <p>모델 발생 확률 {(mlRiskRaw * 100).toFixed(1)}%</p>
+                  <p>산불위험지수 {(mlRiskRaw * 100).toFixed(1)} (raw×100)</p>
                 )}
                 {mapRegion && (
                   <p>

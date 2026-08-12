@@ -124,11 +124,11 @@ function riskLabel(norm: unknown): string {
   return "매우 낮음";
 }
 
-/** 예측확률 0~1 → 웹 당일예측과 동일하게 "xx.x%" */
+/** 예측확률 0~1 → 산불위험지수 0~100 (raw×100) */
 function formatProbPct(prob: unknown): string {
   const n = Number(prob);
   if (!Number.isFinite(n)) return "-";
-  return `${(n * 100).toFixed(1)}%`;
+  return (n * 100).toFixed(1);
 }
 
 /**
@@ -159,7 +159,7 @@ async function runTool(name: string, args: unknown): Promise<unknown> {
     top: sorted.slice(0, 5).map((r) => ({
       name: r.name,
       province: r.province,
-      // 웹 당일예측과 동일: (ml_risk * 100).toFixed(1) + "%"
+      // 웹 당일예측과 동일: ml_risk * 100 (산불위험지수)
       ml_risk_pct: formatProbPct(r.ml_risk),
       risk_norm: r.ml_risk_norm,
       risk_label: riskLabel(r.ml_risk_norm),

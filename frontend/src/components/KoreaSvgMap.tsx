@@ -912,23 +912,10 @@ export function KoreaSvgMap({
 
   const probLabel =
     riskMode === "daily"
-      ? `당일 예측${daily?.predict_date ? ` (${daily.predict_date})` : ""}`
+      ? `산불위험지수${daily?.predict_date ? ` (${daily.predict_date})` : ""}`
       : riskMode === "scenario"
-        ? `사용자 지정${scenario?.predict_date ? ` (${scenario.predict_date})` : ""}`
+        ? `시나리오 위험지수${scenario?.predict_date ? ` (${scenario.predict_date})` : ""}`
         : "과거 산불 발생 건수";
-
-  const overlayRisk =
-    isPredictMode && (hovered || selectedAdmin)
-      ? labelProb((hovered || selectedAdmin)!, level)
-      : isPredictMode && activePredict?.regions?.length
-        ? (() => {
-            const vals = activePredict.regions
-              .map((r) => r.ml_risk)
-              .filter((v) => typeof v === "number" && !Number.isNaN(v));
-            if (!vals.length) return null;
-            return vals.reduce((a, b) => a + b, 0) / vals.length;
-          })()
-        : null;
 
   const zoomLabel =
     mapMode === "satellite"
@@ -1407,9 +1394,9 @@ export function KoreaSvgMap({
                     const p = labelProb(m, level);
                     const modeLabel =
                       riskMode === "daily"
-                        ? "당일 예측 "
+                        ? "당일예측 위험도"
                         : riskMode === "scenario"
-                          ? "시나리오 "
+                          ? "가상 위험도"
                           : null;
                     return (
                       <>
@@ -1426,7 +1413,7 @@ export function KoreaSvgMap({
                                 {modeLabel}
                               </span>
                               <span className="text-2xl font-bold text-[#e03131]">
-                                {(p * 100).toFixed(1)}%
+                                {(p * 100).toFixed(1)}
                               </span>
                               <span className="ml-2 text-xs text-[#6b7280]">
                                 과거 {m.fire_count.toLocaleString()}건
@@ -1502,12 +1489,6 @@ export function KoreaSvgMap({
                     : undefined
                 }
                 predictDate={activePredict?.predict_date}
-                riskValue={overlayRisk}
-                riskTitle={
-                  hovered || selectedAdmin
-                    ? `${(hovered || selectedAdmin)!.name} 위험`
-                    : undefined
-                }
               />
             </div>
           </div>

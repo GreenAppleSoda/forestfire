@@ -184,10 +184,10 @@ export function FireHistoryPanel({
                 {probability != null && (
                   <>
                     <span className="text-[#6b7280]">
-                      {probabilityLabel ?? "예측 발생 확률"}{" "}
+                      {probabilityLabel ?? "산불위험지수"}{" "}
                     </span>
                     <span className="text-xl font-bold text-[#e03131]">
-                      {(probability * 100).toFixed(1)}%
+                      {(probability * 100).toFixed(1)}
                     </span>
                     <span className="text-[#d1d5db]"> · </span>
                   </>

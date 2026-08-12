@@ -39,7 +39,6 @@ from ml_paths import (
     WILDFIRE_XGB_MODEL,
     ensure_dirs,
 )
-from predict.calibration import apply_calibration, load_calibrator
 from predict.dwi import compute_dwi
 from predict.precip_features import (
     PRECIP_LOOKBACK_DAYS,
@@ -523,11 +522,10 @@ def run_daily_predict(
 
     model = XGBClassifier()
     model.load_model(str(WILDFIRE_XGB_MODEL))
+    # Isotonic 보정 없이 raw 확률 사용 (화면 0~100 위험지수와 동일 스케일)
     raw = model.predict_proba(feats[FEATURE_COLS])[:, 1]
-    calibrator = load_calibrator()
-    proba = apply_calibration(raw, calibrator)
     feats = feats.copy()
-    feats["y_prob"] = proba
+    feats["y_prob"] = raw
     feats["y_prob_raw"] = raw
 
     mn, mx = float(feats["y_prob"].min()), float(feats["y_prob"].max())
@@ -539,7 +537,6 @@ def run_daily_predict(
 
     sample_code = "11110" if "11110" in weather_by_code else next(iter(weather_by_code))
     sample_wx = weather_by_code[sample_code]
-    cal_note = "isotonic 보정" if calibrator is not None else "raw(보정기 없음)"
 
     payload = {
         "predict_date": pred_date,
@@ -548,13 +545,12 @@ def run_daily_predict(
             k: round(float(v), 2) if v == v else None for k, v in sample_wx.items()
         },
         "model_metrics": bundle.get("metrics", {}),
-        "calibration": bundle.get("calibration")
-        if calibrator is not None
-        else None,
+        "calibration": None,
         "n_regions": int(len(feats)),
         "note": (
-            f"y_prob=산불 발생 예측확률({cal_note}) · "
-            "ml_risk_norm=지도 색용 당일 min-max 정규화 "
+            "y_prob=XGB raw 산불 확률(보정 없음) · "
+            "ml_risk×100 ≈ 산불위험지수 0~100 · "
+            "ml_risk_norm=지도 상대 정규화 "
             "(기상4 + 이력2 + DWI + 강수파생3)"
         ),
         "regions": [
