@@ -14,7 +14,7 @@ const EXPRESS_URL = (
 
 function timeoutMsFor(pathParts: string[]): number {
   const root = pathParts[0] || "";
-  if (root === "predict" || root === "wildfires") return 180_000;
+  if (root === "predict" || root === "wildfires" || root === "chat") return 180_000;
   return 60_000;
 }
 

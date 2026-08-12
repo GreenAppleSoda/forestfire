@@ -6,7 +6,7 @@ import {
   type LegalDongLookup,
 } from "@/lib/legalDong";
 import { useEffect, useMemo, useState } from "react";
-import { MountainChip, MountainDetail } from "./MountainDetail";
+import { MountainDetail } from "./MountainDetail";
 
 type Props = {
   province: ProvinceStat | null;
@@ -45,6 +45,26 @@ function resolveMountains(
     );
   }
   return [];
+}
+
+function FlameTiny() {
+  return (
+    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#fff1f0] text-[#e03131]">
+      <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor" aria-hidden>
+        <path d="M12 2c.4 2.2-.3 3.8-1.4 5.2-.9 1.1-1.6 2-1.6 3.4 0 1.7 1.2 3 2.8 3.4-.6-1.3-.4-2.5.5-3.6 1.2-1.5 2.9-2.4 3.5-4.6.8 1.4 1.2 2.8 1.2 4.3 0 4.3-3 7.9-7 7.9S3 16.1 3 11.8C3 7.6 6.2 4.2 12 2z" />
+      </svg>
+    </span>
+  );
+}
+
+function MountainGlyph() {
+  return (
+    <span className="mx-auto flex h-10 w-10 items-center justify-center rounded-xl bg-[#f3f4f6] text-[#6b7280]">
+      <svg viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor" aria-hidden>
+        <path d="M3 18h18l-5.5-8-3.2 4.6L9.5 10 3 18zm11.2-9.2 1.3-1.9L18 12h-2.4l-1.4-3.2z" />
+      </svg>
+    </span>
+  );
 }
 
 export function FireHistoryPanel({
@@ -116,31 +136,27 @@ export function FireHistoryPanel({
   const catalog = province?.catalog_mountains ?? [];
 
   return (
-    <aside className="flex h-full w-full flex-col border-l border-[#d6d3d1] bg-[#F7F5F1]">
-      <div className="shrink-0 border-b border-[#e7e5e4] px-5 py-4">
-        <p className="text-[12px] font-medium text-[#78716c]">
-          전체 산불 이력
-        </p>
-        <p className="mt-1 text-2xl font-bold text-[#1c1917]">
+    <aside className="flex h-full w-full flex-col border-l border-[#e5e7eb] bg-white">
+      <div className="shrink-0 border-b border-[#e5e7eb] px-5 py-4">
+        <p className="text-[12px] font-medium text-[#6b7280]">전체 산불 이력</p>
+        <p className="mt-1 text-[1.75rem] font-bold tracking-tight text-[#111827]">
           {totalFires.toLocaleString()}
+          <span className="ml-1 text-base font-semibold text-[#6b7280]">건</span>
         </p>
-        <p className="mt-0.5 text-[12px] text-[#78716c]">
-          2011년부터 현재까지 · 산불
-          {totalMountains != null
-            ? ` · 산 ${totalMountains.toLocaleString()}개`
-            : ""}
-          {matchedFires != null
-            ? ` · 발생지 일치 ${matchedFires.toLocaleString()}`
-            : ""}
-        </p>
+        <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[12px] text-[#6b7280]">
+          {totalMountains != null ? (
+            <span>산 {totalMountains.toLocaleString()}개</span>
+          ) : null}
+          {matchedFires != null ? (
+            <span>발생지 일치 {matchedFires.toLocaleString()}</span>
+          ) : null}
+        </div>
       </div>
 
       {!province ? (
         <div className="flex flex-1 flex-col items-start justify-center px-5 py-8">
-          <p className="font-[family-name:var(--font-display)] text-xl text-[#1c1917]">
-            지역을 선택하세요
-          </p>
-          <p className="mt-2 text-sm leading-relaxed text-[#78716c]">
+          <p className="text-xl font-semibold text-[#111827]">지역을 선택하세요</p>
+          <p className="mt-2 text-sm leading-relaxed text-[#6b7280]">
             스크롤로 행정구역을 세분화한 뒤, 색이 입혀진 지역을 클릭하면 산불
             이력과 추정치가 표시됩니다.
           </p>
@@ -154,48 +170,42 @@ export function FireHistoryPanel({
         </div>
       ) : (
         <>
-          <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[#e7e5e4] px-5 py-2.5">
+          <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[#e5e7eb] px-5 py-3">
             <div className="min-w-0">
               <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                <h2 className="font-[family-name:var(--font-display)] text-lg tracking-tight text-[#1c1917]">
+                <h2 className="text-lg font-semibold tracking-tight text-[#111827]">
                   {province.name}
                 </h2>
-                <p className="text-[12px] text-[#78716c]">
+                <p className="text-[12px] text-[#6b7280]">
                   {province.province_name ?? province.province ?? ""}
                 </p>
               </div>
-              <p className="mt-0.5 text-[12px] leading-snug text-[#57534e]">
+              <p className="mt-0.5 text-[12px] leading-snug text-[#4b5563]">
                 {probability != null && (
                   <>
-                    <span className="text-[#78716c]">
+                    <span className="text-[#6b7280]">
                       {probabilityLabel ?? "예측 발생 확률"}{" "}
                     </span>
-                    <span className="text-2xl font-bold text-[#b91c1c]">
+                    <span className="text-xl font-bold text-[#e03131]">
                       {(probability * 100).toFixed(1)}%
                     </span>
-                    <span className="text-[#d6d3d1]"> · </span>
+                    <span className="text-[#d1d5db]"> · </span>
                   </>
                 )}
                 산불 {province.fire_count.toLocaleString()}건 · 산{" "}
                 {(province.mountain_count ?? 0).toLocaleString()}개
-                {probability != null ? (
-                  <>
-                    {" "}
-                    · 위험 {province.risk_score}
-                  </>
-                ) : null}
               </p>
             </div>
             <button
               type="button"
               onClick={onClose}
-              className="shrink-0 rounded-md border border-[#d6d3d1] bg-white px-2.5 py-1 text-[13px] text-[#44403c] transition hover:bg-[#f5f5f4]"
+              className="shrink-0 rounded-xl px-2.5 py-1.5 text-[13px] text-[#4b5563] ring-1 ring-[#e5e7eb] transition hover:bg-[#f9fafb]"
             >
               닫기
             </button>
           </div>
 
-          <div className="flex shrink-0 border-b border-[#e7e5e4] px-5">
+          <div className="flex shrink-0 gap-1 border-b border-[#e5e7eb] px-4 pt-2">
             {(
               [
                 ["fires", "산불 이력"],
@@ -207,10 +217,10 @@ export function FireHistoryPanel({
                 key={id}
                 type="button"
                 onClick={() => setTab(id)}
-                className={`mr-4 border-b-2 py-2.5 text-sm transition ${
+                className={`rounded-t-lg px-3 py-2.5 text-sm transition ${
                   tab === id
-                    ? "border-[#1c1917] font-medium text-[#1c1917]"
-                    : "border-transparent text-[#78716c] hover:text-[#44403c]"
+                    ? "bg-[#f9fafb] font-semibold text-[#111827]"
+                    : "text-[#6b7280] hover:text-[#111827]"
                 }`}
               >
                 {label}
@@ -219,58 +229,51 @@ export function FireHistoryPanel({
           </div>
 
           {tab === "fires" ? (
-            <div className="min-h-0 flex-1 overflow-y-auto px-5 py-3">
+            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
+              <p className="mb-2 px-1 text-[12px] font-medium text-[#6b7280]">
+                산불 이력 목록
+              </p>
               {events.length === 0 ? (
-                <p className="text-sm text-[#a8a29e]">
-                  표시할 이력이 없습니다.
-                </p>
+                <p className="text-sm text-[#9ca3af]">표시할 이력이 없습니다.</p>
               ) : (
-                <ul className="space-y-4">
+                <ul className="space-y-2">
                   {events.map((ev, i) => {
                     const mountains = resolveMountains(ev, mountainIndex);
                     return (
                       <li
                         key={`${ev.datetime}-${ev.region}-${i}`}
-                        className="border-b border-[#e7e5e4] pb-4"
+                        className="rounded-xl bg-[#f9fafb] px-3 py-3 ring-1 ring-[#eef2f6]"
                       >
-                        <div className="flex items-baseline justify-between gap-3">
-                          <time className="text-sm font-medium text-[#1c1917]">
-                            {formatWhen(ev.datetime)}
-                          </time>
-                          <span className="text-xs text-[#78716c]">
-                            {ev.damage_area.toLocaleString()} ha
-                          </span>
-                        </div>
-                        <p className="mt-1 text-sm text-[#44403c]">
-                          {formatRegionPath(ev.region, legalDong)}
-                        </p>
-                          {mountains.length > 0 && (
-                            <div className="mt-2">
-                              <p className="text-[11px] font-medium text-[#78716c]">
-                                발생지 일치 산 · 클릭하면 지도 표시·상세
-                              </p>
-                              <div className="mt-1.5 flex flex-wrap gap-1">
+                        <div className="flex items-start gap-3">
+                          <FlameTiny />
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-baseline justify-between gap-3">
+                              <time className="text-sm font-medium text-[#111827]">
+                                {formatWhen(ev.datetime)}
+                              </time>
+                              <span className="shrink-0 text-xs font-medium tabular-nums text-[#6b7280]">
+                                {ev.damage_area.toLocaleString()} ha
+                              </span>
+                            </div>
+                            <p className="mt-1 text-[13px] leading-snug text-[#4b5563]">
+                              {formatRegionPath(ev.region, legalDong)}
+                            </p>
+                            {mountains.length > 0 && (
+                              <div className="mt-2 flex flex-wrap gap-1">
                                 {mountains.map((m) => (
                                   <button
                                     key={m.id || m.name}
                                     type="button"
                                     onClick={() => openMountain(m)}
-                                    className="rounded bg-[#1c1917] px-2 py-0.5 text-[12px] text-[#fafaf9] transition hover:bg-[#44403c]"
-                                    title={
-                                      m.height && m.height > 0
-                                        ? `${m.height}m · ${m.address}`
-                                        : m.address
-                                    }
+                                    className="rounded-lg bg-[#111827] px-2 py-0.5 text-[11px] text-white transition hover:bg-[#374151]"
                                   >
                                     {m.name}
-                                    {m.height && m.height > 0
-                                      ? ` ${Math.round(m.height)}m`
-                                      : ""}
                                   </button>
                                 ))}
                               </div>
-                            </div>
-                          )}
+                            )}
+                          </div>
+                        </div>
                       </li>
                     );
                   })}
@@ -278,61 +281,86 @@ export function FireHistoryPanel({
               )}
             </div>
           ) : tab === "linked" ? (
-            <div className="min-h-0 flex-1 overflow-y-auto px-5 py-3">
-              <p className="mb-3 text-[13px] text-[#78716c]">
-                같은 읍면·시군구로 자주 연결된 산 · 클릭하면 지도 표시·상세
+            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
+              <p className="mb-3 px-1 text-[12px] text-[#6b7280]">
+                같은 읍면·시군구로 자주 연결된 산
               </p>
               {topMountains.length === 0 ? (
-                <p className="text-sm text-[#a8a29e]">표시할 산이 없습니다.</p>
+                <p className="text-sm text-[#9ca3af]">표시할 산이 없습니다.</p>
               ) : (
-                <div className="flex flex-wrap gap-1.5">
+                <div className="grid grid-cols-2 gap-2">
                   {topMountains.map((m) => (
-                    <MountainChip
+                    <button
                       key={m.id || m.name}
-                      mountain={m}
-                      onSelect={openMountain}
-                    />
+                      type="button"
+                      onClick={() => openMountain(m)}
+                      className="rounded-2xl bg-[#f9fafb] px-3 py-3 text-center ring-1 ring-[#eef2f6] transition hover:bg-white hover:ring-[#d1d5db]"
+                    >
+                      <MountainGlyph />
+                      <p className="mt-2 truncate text-sm font-semibold text-[#111827]">
+                        {m.name}
+                      </p>
+                      <p className="mt-0.5 text-[11px] text-[#6b7280]">
+                        {m.height && m.height > 0
+                          ? `${m.height.toLocaleString()} m`
+                          : "고도 미상"}
+                      </p>
+                      <p className="mt-1 text-[11px] font-medium text-[#e03131]">
+                        {m.fire_count > 0 ? `${m.fire_count}건` : "이력 없음"}
+                      </p>
+                    </button>
                   ))}
                 </div>
               )}
             </div>
           ) : (
-            <div className="min-h-0 flex-1 overflow-y-auto px-5 py-3">
-              <p className="mb-3 text-[13px] text-[#78716c]">
-                전국 산 정보({province.mountain_count?.toLocaleString()}개 중
-                대표) · 클릭하면 지도에 위치 표시
+            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
+              <p className="mb-3 px-1 text-[12px] text-[#6b7280]">
+                전국 산 정보(
+                {province.mountain_count?.toLocaleString()}개 중 대표)
               </p>
               {catalog.length === 0 ? (
-                <p className="text-sm text-[#a8a29e]">등록된 산이 없습니다.</p>
+                <p className="text-sm text-[#9ca3af]">등록된 산이 없습니다.</p>
               ) : (
-                <ul className="space-y-3">
+                <ul className="space-y-2">
                   {catalog.map((m) => (
                     <li key={m.id || m.name}>
                       <button
                         type="button"
                         onClick={() => openMountain(m)}
-                        className="w-full rounded-md border border-[#e7e5e4] bg-white px-3.5 py-3 text-left transition hover:border-[#a8a29e]"
+                        className="flex w-full items-center gap-3 rounded-xl bg-[#f9fafb] px-3 py-3 text-left ring-1 ring-[#eef2f6] transition hover:bg-white hover:ring-[#d1d5db]"
                       >
-                        <div className="flex items-baseline justify-between gap-3">
-                          <span className="font-medium text-[#1c1917]">
-                            {m.name}
+                        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-[#e5e7eb] text-[#6b7280]">
+                          <svg
+                            viewBox="0 0 24 24"
+                            className="h-5 w-5"
+                            fill="currentColor"
+                            aria-hidden
+                          >
+                            <path d="M3 18h18l-5.5-8-3.2 4.6L9.5 10 3 18z" />
+                          </svg>
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="flex items-baseline justify-between gap-2">
+                            <span className="truncate font-semibold text-[#111827]">
+                              {m.name}
+                            </span>
+                            <span className="shrink-0 text-[11px] text-[#6b7280]">
+                              {m.height && m.height > 0
+                                ? `${m.height.toLocaleString()} m`
+                                : "—"}
+                            </span>
                           </span>
-                          <span className="text-xs text-[#78716c]">
-                            {m.height && m.height > 0
-                              ? `${m.height.toLocaleString()} m`
-                              : "고도 미상"}
+                          <span className="mt-0.5 block truncate text-[12px] text-[#6b7280]">
+                            {m.address || "주소 없음"}
+                            {m.fire_count > 0
+                              ? ` · ${m.fire_count}건`
+                              : ""}
                           </span>
-                        </div>
-                        {m.address && (
-                          <p className="mt-1 text-[12px] text-[#78716c]">
-                            {m.address}
-                          </p>
-                        )}
-                        {(m.notable || m.details) && (
-                          <p className="mt-1.5 line-clamp-2 text-[13px] leading-snug text-[#57534e]">
-                            {m.notable || m.details}
-                          </p>
-                        )}
+                        </span>
+                        <span className="text-[#9ca3af]" aria-hidden>
+                          ›
+                        </span>
                       </button>
                     </li>
                   ))}
@@ -341,11 +369,9 @@ export function FireHistoryPanel({
             </div>
           )}
 
-          <div className="shrink-0 border-t border-[#e7e5e4] px-5 py-2.5 text-[11px] leading-relaxed text-[#78716c]">
-            산 정보는 전국 산 목록(korea_mountains) 기준입니다. 산불
-            원본에 산 이름이 없어, 발생 읍면(없으면 시군구)과 산소재지가
-            같은 산을 &apos;발생지 일치 산&apos;으로 연결합니다. 발화
-            봉우리 확정이 아닙니다.
+          <div className="shrink-0 border-t border-[#e5e7eb] px-5 py-2.5 text-[11px] leading-relaxed text-[#9ca3af]">
+            산 정보는 전국 산 목록 기준입니다. 발생 읍면(없으면 시군구)과
+            산소재지가 같은 산을 연결하며, 발화 봉우리 확정이 아닙니다.
           </div>
         </>
       )}

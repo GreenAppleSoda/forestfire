@@ -62,10 +62,6 @@ ASOS_STATION_SIGUNGU_MAP = DATA_PROCESSED_ETL / "asos_station_sigungu_map.csv"
 WEATHER_DAILY_SIGUNGU = DATA_PROCESSED / "weather_daily_sigungu.csv"
 WEATHER_DAILY_ASOS = DATA_PROCESSED_ETL / "weather_daily_asos.csv"
 SIGUNGU_ASOS_STATION = DATA_PROCESSED / "sigungu_asos_station.csv"
-# SPI (당일: daily_spi_realtime.py, 학습 매핑본: processed)
-DAILY_PRECIP_FILLED = DATA_RAW / "spi" / "daily_precipitation_filled.csv"
-DAILY_SPI_RAW = DATA_RAW / "spi" / "daily_spi_1971~2020.csv"
-SPI_DAILY_SIGUNGU = DATA_PROCESSED / "spi_daily_sigungu.csv"
 
 # 분석 결과 (archive)
 CITY_RISK = DATA_OUTPUT_ETL / "city_wildfire_risk.csv"
@@ -76,10 +72,12 @@ WILDFIRE_BY_MOUNTAIN = DATA_OUTPUT_ETL / "wildfire_by_mountain.csv"
 WILDFIRE_MOUNTAIN_EVENTS_SUMMARY = DATA_OUTPUT_ETL / "wildfire_mountain_events_summary.json"
 
 # XGBoost — 모델·번들은 서버용 db/, 학습 로그는 archive
+ML_TRAIN_SIGUNGU_DAILY_1Y = DATA_PROCESSED_ETL / "ml_train_sigungu_daily_1y.csv"
 WILDFIRE_XGB_METRICS = DATA_OUTPUT_ETL / "wildfire_xgb_metrics.json"
 SIGUNGU_ML_RISK_SCORES = DATA_OUTPUT_ETL / "sigungu_ml_risk_scores.csv"
 WILDFIRE_XGB_IMPORTANCE = DATA_OUTPUT_ETL / "wildfire_xgb_feature_importance.csv"
 WILDFIRE_XGB_MODEL = DATA_OUTPUT / "wildfire_xgb_model.json"
+WILDFIRE_XGB_CALIBRATOR = DATA_OUTPUT / "wildfire_xgb_calibrator.joblib"
 WILDFIRE_XGB_BUNDLE = DATA_OUTPUT / "wildfire_xgb_bundle.json"
 SIGUNGU_HIST_STATE = DATA_PROCESSED / "sigungu_hist_state.csv"
 DAILY_ML_RISK = FRONTEND_PUBLIC_DATA / "daily_ml_risk.json"

@@ -1,13 +1,18 @@
 @import "tailwindcss";
 
 :root {
-  --background: #c5d4e4;
-  --foreground: #1c1917;
-  --safe: #2563eb;
-  --danger: #dc2626;
-  --panel: #e8d5cf;
-  --header: #cdf4cb;
-  --sea: #c5d4e4;
+  --background: #f4f7f9;
+  --foreground: #1a1d21;
+  --surface: #ffffff;
+  --muted: #6b7280;
+  --border: #e5e7eb;
+  --accent: #111827;
+  --danger: #e03131;
+  --safe: #2f9e44;
+  --sea: #e8eef3;
+  --panel: #ffffff;
+  --header: #ffffff;
+  --shadow-card: 0 1px 3px rgba(17, 24, 39, 0.06), 0 4px 16px rgba(17, 24, 39, 0.04);
 }
 
 @theme inline {
@@ -26,7 +31,7 @@ body {
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-sans), "Apple SD Gothic Neo", sans-serif;
+  font-family: var(--font-sans), "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
 }
 
 * {

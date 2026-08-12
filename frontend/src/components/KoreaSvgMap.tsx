@@ -27,10 +27,9 @@ import { ScenarioPredictForm } from "./ScenarioPredictForm";
 import { FireHistoryPanel } from "./FireHistoryPanel";
 import { HistorySyncControl } from "./HistorySyncControl";
 import { MapLegend } from "./MapLegend";
-import { MountainSearch } from "./MountainSearch";
+import { AppSidebar } from "./AppSidebar";
 import { MountainSearchResult } from "./MountainSearchResult";
 import { SatelliteMap, type SatelliteViewState } from "./SatelliteMap";
-import { SiteHeader } from "./SiteHeader";
 import {
   linkMountainToRegions,
   type MountainRegionLink,
@@ -226,6 +225,7 @@ export function KoreaSvgMap({
   const [view, setView] = useState<View>(INITIAL_VIEW);
   const [mapMode, setMapMode] = useState<MapDisplayMode>("choropleth");
   const [rightPanelOpen, setRightPanelOpen] = useState(true);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [satView, setSatView] = useState<SatelliteViewState>(() =>
     svgViewToKakao(INITIAL_VIEW),
   );
@@ -505,6 +505,45 @@ export function KoreaSvgMap({
     };
     stage.addEventListener("wheel", onWheel, { passive: false });
     return () => stage.removeEventListener("wheel", onWheel);
+  }, []);
+
+  const stepZoom = useCallback((direction: 1 | -1) => {
+    if (mapModeRef.current === "satellite") {
+      setSatView((v) => ({
+        ...v,
+        level: Math.max(1, Math.min(14, v.level - direction)),
+      }));
+      setSatSyncKey((k) => k + 1);
+      return;
+    }
+    const svg = svgRef.current;
+    const prev = viewRef.current;
+    const factor = direction > 0 ? 1.35 : 1 / 1.35;
+    const nextScale = Math.min(
+      MAX_SCALE,
+      Math.max(MIN_SCALE, prev.scale * factor),
+    );
+    if (nextScale === prev.scale) return;
+    if (nextScale <= MIN_SCALE + 0.001) {
+      setView(INITIAL_VIEW);
+      return;
+    }
+    if (!svg) {
+      setView({ ...prev, scale: nextScale });
+      return;
+    }
+    const rect = svg.getBoundingClientRect();
+    const { x: ux, y: uy } = clientToSvg(
+      svg,
+      rect.left + rect.width / 2,
+      rect.top + rect.height / 2,
+    );
+    const k = nextScale / prev.scale;
+    setView({
+      scale: nextScale,
+      tx: ux - (ux - prev.tx) * k,
+      ty: uy - (uy - prev.ty) * k,
+    });
   }, []);
 
   /** 화면 픽셀 이동량 → SVG viewBox 단위 */
@@ -878,6 +917,72 @@ export function KoreaSvgMap({
         ? `사용자 지정${scenario?.predict_date ? ` (${scenario.predict_date})` : ""}`
         : "과거 산불 발생 건수";
 
+  const overlayRisk =
+    isPredictMode && (hovered || selectedAdmin)
+      ? labelProb((hovered || selectedAdmin)!, level)
+      : isPredictMode && activePredict?.regions?.length
+        ? (() => {
+            const vals = activePredict.regions
+              .map((r) => r.ml_risk)
+              .filter((v) => typeof v === "number" && !Number.isNaN(v));
+            if (!vals.length) return null;
+            return vals.reduce((a, b) => a + b, 0) / vals.length;
+          })()
+        : null;
+
+  const zoomLabel =
+    mapMode === "satellite"
+      ? `Lv.${satView.level}`
+      : `${view.scale.toFixed(1)}×`;
+
+  const sidebarSync = (
+    <HistorySyncControl
+      onUpdated={({ mapData: nextMap, layers: nextLayers }) => {
+        setMapData(nextMap);
+        setLayers(nextLayers);
+      }}
+    />
+  );
+
+  const sidebarProps = {
+    mapMode,
+    riskMode,
+    zoomLabel,
+    predictLoading,
+    mountainIndex: mapData.mountains,
+    syncSlot: sidebarSync,
+    onSelectMountain: onMountainSelect,
+    onGoHome: () => {
+      setSelected(null);
+      setSelectedAdmin(null);
+      setHovered(null);
+      clearMountainPin();
+      setView(INITIAL_VIEW);
+      setMapMode("choropleth");
+      setSatView(svgViewToKakao(INITIAL_VIEW));
+      setSatSyncKey((k) => k + 1);
+      setMobileNavOpen(false);
+    },
+    onMapMode: (mode: MapDisplayMode) => {
+      switchMapMode(mode);
+      setMobileNavOpen(false);
+    },
+    onRiskMode: (mode: RiskMode) => {
+      if (mode === "daily") {
+        setRiskMode("daily");
+        void fetchKmaPredict(false);
+      } else if (mode === "scenario") {
+        setRiskMode("scenario");
+        setPredictError(null);
+      } else {
+        setRiskMode("history");
+      }
+      setMobileNavOpen(false);
+    },
+    onZoomIn: () => stepZoom(1),
+    onZoomOut: () => stepZoom(-1),
+  };
+
   const [vbW, vbH] = layers.sido.viewBox;
   const viewBox = `0 0 ${vbW} ${vbH}`;
   const strokeBase = Math.max(0.25, 0.7 / view.scale);
@@ -906,20 +1011,57 @@ export function KoreaSvgMap({
   const emdLabelStroke = Math.max(0.08, 1.2 / view.scale);
 
   return (
-    <div className="relative flex h-dvh w-full overflow-hidden bg-[#c5d4e4]">
-      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        <SiteHeader
-          right={
-            <HistorySyncControl
-              onUpdated={({ mapData: nextMap, layers: nextLayers }) => {
-                setMapData(nextMap);
-                setLayers(nextLayers);
-              }}
-            />
-          }
-        />
+    <div className="relative flex h-dvh w-full overflow-hidden bg-[#f4f7f9]">
+      <div className="hidden h-full md:block">
+        <AppSidebar {...sidebarProps} />
+      </div>
 
-        <section className="relative min-h-0 flex-1 overflow-hidden bg-[#c5d4e4]">
+      {mobileNavOpen && (
+        <div className="absolute inset-0 z-50 flex md:hidden">
+          <AppSidebar
+            {...sidebarProps}
+            mobile
+            onCloseMobile={() => setMobileNavOpen(false)}
+          />
+          <button
+            type="button"
+            className="min-w-0 flex-1 bg-black/30"
+            aria-label="메뉴 닫기"
+            onClick={() => setMobileNavOpen(false)}
+          />
+        </div>
+      )}
+
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        <div className="flex shrink-0 items-center gap-3 border-b border-[#e5e7eb] bg-white px-4 py-2.5 md:hidden">
+          <button
+            type="button"
+            onClick={() => setMobileNavOpen(true)}
+            className="rounded-xl px-2.5 py-1.5 text-sm font-medium text-[#111827] ring-1 ring-[#e5e7eb]"
+          >
+            메뉴
+          </button>
+          <div className="min-w-0 flex-1">
+            <button
+              type="button"
+              onClick={sidebarProps.onGoHome}
+              className="block w-full text-left"
+              aria-label="홈으로 돌아가기"
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="/logo-forestfire-atlas.png"
+                alt="Forestfire Atlas Korea"
+                className="h-7 w-auto max-w-[200px] object-contain object-left"
+              />
+            </button>
+            <p className="mt-0.5 truncate text-[11px] text-[#6b7280]">
+              {LEVEL_LABEL[level]} · {zoomLabel}
+            </p>
+          </div>
+        </div>
+
+        <section className="relative min-h-0 flex-1 overflow-hidden bg-[#e8eef3]">
           <div
             ref={stageRef}
             className={`map-stage absolute inset-0 ${
@@ -1242,169 +1384,91 @@ export function KoreaSvgMap({
             )}
           </div>
 
-          <div className="pointer-events-none absolute top-4 right-5 left-5 z-20 flex items-start justify-between gap-3">
+          <div className="pointer-events-none absolute top-4 right-4 left-4 z-20 flex items-start justify-between gap-3">
             <div className="pointer-events-none space-y-2">
-            <div className="pointer-events-auto rounded-lg border border-[#d6d3d1] bg-white/95 px-2 py-1.5 shadow-sm">
-              <div className="flex flex-wrap gap-1">
-                <button
-                  type="button"
-                  onClick={() => switchMapMode("choropleth")}
-                  className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition ${
-                    mapMode === "choropleth"
-                      ? "bg-[#1c1917] text-white"
-                      : "text-[#57534e] hover:bg-[#f5f5f4]"
-                  }`}
-                >
-                  행정구역
-                </button>
-                <button
-                  type="button"
-                  onClick={() => switchMapMode("satellite")}
-                  className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition ${
-                    mapMode === "satellite"
-                      ? "bg-[#1c1917] text-white"
-                      : "text-[#57534e] hover:bg-[#f5f5f4]"
-                  }`}
-                >
-                  위성
-                </button>
+              <div className="rounded-2xl bg-white/95 px-3.5 py-2.5 text-sm shadow-[var(--shadow-card)] ring-1 ring-[#e5e7eb]">
+                <p className="text-[11px] font-semibold tracking-[0.08em] text-[#9ca3af] uppercase">
+                  행정 단위
+                </p>
+                <p className="font-semibold text-[#111827]">
+                  {LEVEL_LABEL[level]}
+                  <span className="ml-2 text-xs font-normal text-[#6b7280]">
+                    {mapMode === "satellite"
+                      ? `위성 · 줌 Lv.${satView.level}${level === "emd" ? " · 커서 위치 시군구 읍면동" : ""}`
+                      : `줌 ${view.scale.toFixed(1)}× · 스크롤 확대 · 드래그 이동`}
+                  </span>
+                </p>
               </div>
-            </div>
 
-            <div className="pointer-events-auto rounded-lg border border-[#d6d3d1] bg-white/95 px-2 py-1.5 shadow-sm">
-              <div className="flex flex-wrap gap-1">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setRiskMode("daily");
-                    void fetchKmaPredict(false);
-                  }}
-                  className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition ${
-                    riskMode === "daily"
-                      ? "bg-[#1c1917] text-white"
-                      : "text-[#57534e] hover:bg-[#f5f5f4]"
-                  }`}
-                >
-                  {predictLoading && riskMode === "daily"
-                    ? "예측 중…"
-                    : "당일 예측"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setRiskMode("scenario");
-                    setPredictError(null);
-                  }}
-                  className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition ${
-                    riskMode === "scenario"
-                      ? "bg-[#1c1917] text-white"
-                      : "text-[#57534e] hover:bg-[#f5f5f4]"
-                  }`}
-                >
-                  사용자 지정
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setRiskMode("history")}
-                  className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition ${
-                    riskMode === "history"
-                      ? "bg-[#1c1917] text-white"
-                      : "text-[#57534e] hover:bg-[#f5f5f4]"
-                  }`}
-                >
-                  과거 이력
-                </button>
-              </div>
-            </div>
-
-            <div className="rounded-lg border border-[#d6d3d1] bg-white/95 px-3 py-2 text-sm shadow-sm">
-              <p className="text-[11px] tracking-[0.14em] text-[#78716c] uppercase">
-                행정 단위
-              </p>
-              <p className="font-medium text-[#1c1917]">
-                {LEVEL_LABEL[level]}
-                <span className="ml-2 text-xs font-normal text-[#78716c]">
-                  {mapMode === "satellite"
-                    ? `위성 · 줌 Lv.${satView.level}${level === "emd" ? " · 커서 위치 시군구 읍면동" : ""}`
-                    : `줌 ${view.scale.toFixed(1)}× · 스크롤 확대 · 드래그 이동${level === "emd" ? " · 굵은 선=시군구" : ""}`}
-                </span>
-              </p>
-            </div>
-
-            {(hovered || selectedAdmin) && !pinnedMountain && (
-              <div className="max-w-xs rounded-lg border border-[#d6d3d1] bg-white/95 px-3 py-2 text-sm text-[#1c1917] shadow-sm">
-                {(() => {
-                  const m = hovered || selectedAdmin!;
-                  const p = labelProb(m, level);
-                  const modeLabel =
-                    riskMode === "daily"
-                      ? "당일 예측 "
-                      : riskMode === "scenario"
-                        ? "시나리오 "
-                        : null;
-                  return (
-                    <>
-                      <p className="font-medium">{m.name}</p>
-                      <p className="text-[12px] text-[#78716c]">
-                        {parentSigungu
-                          ? `${parentSigungu.name} · ${m.province_name || m.province}`
-                          : m.province_name || m.province}
-                      </p>
-                      <p className="mt-1 text-sm">
-                        {isPredictMode && p != null ? (
-                          <>
-                            <span className="block text-[11px] leading-snug text-[#78716c]">
-                              {modeLabel}
-                            </span>
-                            <span className="text-2xl font-bold text-[#b91c1c]">
-                              {(p * 100).toFixed(1)}%
-                            </span>
-                            <span className="ml-2 text-xs text-[#78716c]">
-                              과거 {m.fire_count.toLocaleString()}건
-                            </span>
-                          </>
-                        ) : (
-                          <>
-                            <span className="block text-[11px] leading-snug text-[#78716c]">
-                              과거 산불 발생
-                            </span>
-                            <span className="text-2xl font-bold text-[#b91c1c]">
-                              {m.fire_count.toLocaleString()}
-                            </span>
-                            <span className="ml-1 text-xs text-[#78716c]">건</span>
-                          </>
+              {(hovered || selectedAdmin) && !pinnedMountain && (
+                <div className="max-w-xs rounded-2xl bg-white/95 px-3.5 py-2.5 text-sm text-[#111827] shadow-[var(--shadow-card)] ring-1 ring-[#e5e7eb]">
+                  {(() => {
+                    const m = hovered || selectedAdmin!;
+                    const p = labelProb(m, level);
+                    const modeLabel =
+                      riskMode === "daily"
+                        ? "당일 예측 "
+                        : riskMode === "scenario"
+                          ? "시나리오 "
+                          : null;
+                    return (
+                      <>
+                        <p className="font-semibold">{m.name}</p>
+                        <p className="text-[12px] text-[#6b7280]">
+                          {parentSigungu
+                            ? `${parentSigungu.name} · ${m.province_name || m.province}`
+                            : m.province_name || m.province}
+                        </p>
+                        <p className="mt-1 text-sm">
+                          {isPredictMode && p != null ? (
+                            <>
+                              <span className="block text-[11px] leading-snug text-[#6b7280]">
+                                {modeLabel}
+                              </span>
+                              <span className="text-2xl font-bold text-[#e03131]">
+                                {(p * 100).toFixed(1)}%
+                              </span>
+                              <span className="ml-2 text-xs text-[#6b7280]">
+                                과거 {m.fire_count.toLocaleString()}건
+                              </span>
+                            </>
+                          ) : (
+                            <>
+                              <span className="block text-[11px] leading-snug text-[#6b7280]">
+                                과거 산불 발생
+                              </span>
+                              <span className="text-2xl font-bold text-[#e03131]">
+                                {m.fire_count.toLocaleString()}
+                              </span>
+                              <span className="ml-1 text-xs text-[#6b7280]">
+                                건
+                              </span>
+                            </>
+                          )}
+                        </p>
+                        {isPredictMode && activePredict?.predict_date && (
+                          <p className="mt-0.5 text-[10px] text-[#9ca3af]">
+                            예측일 {activePredict.predict_date}
+                            {activePredict.weather_source
+                              ? ` · ${activePredict.weather_source}`
+                              : riskMode === "daily"
+                                ? " · 기상청 ASOS"
+                                : ""}
+                          </p>
                         )}
-                      </p>
-                      {isPredictMode && activePredict?.predict_date && (
-                        <p className="mt-0.5 text-[10px] text-[#a8a29e]">
-                          예측일 {activePredict.predict_date}
-                          {activePredict.weather_source
-                            ? ` · ${activePredict.weather_source}`
-                            : riskMode === "daily"
-                              ? " · 기상청 ASOS"
-                              : ""}
-                          {" · 지도 색은 절대 확률(낮은 구간 강조)"}
-                        </p>
-                      )}
-                      {predictError && isPredictMode && (
-                        <p className="mt-0.5 text-[10px] text-[#b91c1c]">
-                          {predictError}
-                        </p>
-                      )}
-                    </>
-                  );
-                })()}
-              </div>
-            )}
+                        {predictError && isPredictMode && (
+                          <p className="mt-0.5 text-[10px] text-[#e03131]">
+                            {predictError}
+                          </p>
+                        )}
+                      </>
+                    );
+                  })()}
+                </div>
+              )}
             </div>
 
             <div className="pointer-events-auto flex shrink-0 flex-col items-end gap-2">
-              <div className="w-72">
-                <MountainSearch
-                  mountainIndex={mapData.mountains}
-                  onSelect={onMountainSelect}
-                />
-              </div>
               {riskMode === "daily" && (
                 <DailyPredictForm
                   daily={daily}
@@ -1438,6 +1502,12 @@ export function KoreaSvgMap({
                     : undefined
                 }
                 predictDate={activePredict?.predict_date}
+                riskValue={overlayRisk}
+                riskTitle={
+                  hovered || selectedAdmin
+                    ? `${(hovered || selectedAdmin)!.name} 위험`
+                    : undefined
+                }
               />
             </div>
           </div>
@@ -1449,7 +1519,7 @@ export function KoreaSvgMap({
         <button
           type="button"
           onClick={() => setRightPanelOpen(true)}
-          className="absolute top-1/2 right-0 z-30 hidden h-12 w-7 -translate-y-1/2 items-center justify-center rounded-l-md border border-r-0 border-[#d6d3d1] bg-white text-base text-[#44403c] shadow-sm transition hover:bg-[#f5f5f4] md:flex"
+          className="absolute top-1/2 right-0 z-30 hidden h-12 w-7 -translate-y-1/2 items-center justify-center rounded-l-xl border border-r-0 border-[#e5e7eb] bg-white text-base text-[#4b5563] shadow-sm transition hover:bg-[#f9fafb] md:flex"
           aria-label="패널 열기"
           title="패널 열기"
         >
@@ -1460,11 +1530,10 @@ export function KoreaSvgMap({
       {/* 데스크톱 우측 패널 */}
       {rightPanelOpen && (
         <div className="relative hidden h-full w-[min(400px,38vw)] shrink-0 md:block">
-          {/* 패널 왼쪽 가장자리 중앙 — 접기 */}
           <button
             type="button"
             onClick={() => setRightPanelOpen(false)}
-            className="absolute top-1/2 left-0 z-30 flex h-12 w-7 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-md border border-[#d6d3d1] bg-white text-base text-[#44403c] shadow-sm transition hover:bg-[#f5f5f4]"
+            className="absolute top-1/2 left-0 z-30 flex h-12 w-7 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-xl border border-[#e5e7eb] bg-white text-base text-[#4b5563] shadow-sm transition hover:bg-[#f9fafb]"
             aria-label="패널 접기"
             title="패널 접기"
           >

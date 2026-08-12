@@ -10,8 +10,10 @@ export const RISK_STOPS: HslStop[] = [
   { t: 1, h: 24, s: 92, l: 48 },
 ];
 
-/** 당일/시나리오: 이 절대 확률 이상이면 색 스케일 최댓값. 낮은 구간을 더 촘촘히 펼침. */
-export const ABS_COLOR_FOCUS = 0.4;
+/** 당일/시나리오: 이 절대 확률 이상이면 색 스케일 최댓값.
+ * Isotonic 보정 후 확률이 수 %대라 0~5% 구간을 펼친다.
+ */
+export const ABS_COLOR_FOCUS = 0.05;
 
 function hslToRgb(h: number, s: number, l: number): [number, number, number] {
   const sn = s / 100;
@@ -65,7 +67,7 @@ function interpolateStops(t: number): string {
 /**
  * 절대 확률(0~1) → 색 위치(0~1).
  * 전국 min-max 상대 정규화가 아니라, 낮은 절대값 구간을 색으로 더 펼침.
- * 예: 25% ≈ 스케일 중간~주황 쪽, 40%+ ≈ 최고색.
+ * 예: ~2.5% ≈ 스케일 중간, 5%+ ≈ 최고색.
  */
 export function densifyAbsoluteProb(
   prob: number,
@@ -88,9 +90,10 @@ export function intensityToColor(intensity: number): string {
   return interpolateStops(Math.max(0, Math.min(1, Number(intensity) || 0)));
 }
 
-/** 당일/시나리오 범례 — 바는 0%~40%+ 절대 확률 구간 */
+/** 당일/시나리오 범례 — 바는 0%~focus%+ 절대 확률 구간 */
 export function riskLegendGradient(): string {
-  const absTicks = [0, 0.08, 0.15, 0.22, 0.3, 0.4];
+  const f = ABS_COLOR_FOCUS;
+  const absTicks = [0, f * 0.2, f * 0.4, f * 0.55, f * 0.75, f];
   const parts = absTicks.map((p, i) => {
     const barPct = Math.round((i / (absTicks.length - 1)) * 100);
     return `${probToColor(p)} ${barPct}%`;

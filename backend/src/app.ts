@@ -8,6 +8,7 @@ import healthRoutes from "./routes/health.js";
 import mapRoutes from "./routes/map.js";
 import predictRoutes from "./routes/predict.js";
 import wildfiresRoutes from "./routes/wildfires.js";
+import chatRoutes from "./routes/chat.js";
 
 export function createApp() {
   const app = express();
@@ -24,6 +25,7 @@ export function createApp() {
   app.use("/api", mapRoutes);
   app.use("/api", predictRoutes);
   app.use("/api", wildfiresRoutes);
+  app.use("/api", chatRoutes);
 
   return app;
 }

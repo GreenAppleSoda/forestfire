@@ -7,6 +7,7 @@
 3) 시군구별 ML 위험점수 저장
 
 출력:
+  db-archive/processed/ml_train_sigungu_daily_1y.csv  (학습 직전, 최근 365일 전체)
   db-archive/processed/ml_train_sigungu_daily_sample.csv
   db-archive/output/wildfire_xgb_metrics.json
   db-archive/output/sigungu_ml_risk_scores.csv
@@ -15,9 +16,9 @@
   db/processed/sigungu_hist_state.csv  (시군구 이력 feature, 예측용)
   frontend/public/data/sigungu_ml_scores.json  (지도 연동용)
 
-feature: 사용자 입력 기상 4개 + 시군구 산불이력 2개 + DWI + SPI
+feature: 사용자 입력 기상 4개 + 시군구 산불이력 2개 + DWI + 강수파생 3개
 
-예측 엔진(DWI/SPI 포함)은 ml-service/predict/ 에 두고, 학습은 여기서 import 한다.
+예측 엔진(DWI·강수파생 포함)은 ml-service/predict/ 에 두고, 학습은 여기서 import 한다.
 """
 
 from __future__ import annotations
@@ -31,6 +32,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "ml-service"))
 import json
 import re
 from collections import defaultdict
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -44,19 +46,22 @@ from xgboost import XGBClassifier
 from paths import (
     ADMIN_SIGUNGU_JSON,
     DATA_PROCESSED_ETL,
+    ML_TRAIN_SIGUNGU_DAILY_1Y,
     ROOT,
     SIGUNGU_HIST_STATE,
     SIGUNGU_ML_SCORES_WEB,
     WEATHER_DAILY_SIGUNGU,
     WILDFIRE_XGB_BUNDLE,
+    WILDFIRE_XGB_CALIBRATOR,
     WILDFIRE_XGB_IMPORTANCE,
     WILDFIRE_XGB_METRICS,
     WILDFIRE_XGB_MODEL,
     SIGUNGU_ML_RISK_SCORES,
     ensure_dirs,
 )
+from predict.calibration import apply_calibration, save_calibrator
 from predict.dwi import add_dwi_column
-from predict.spi import attach_spi, build_spi_daily_sigungu
+from predict.precip_features import add_precip_feature_columns
 
 ADMIN_SIGUNGU = ADMIN_SIGUNGU_JSON
 OUT_METRICS = WILDFIRE_XGB_METRICS
@@ -64,9 +69,13 @@ OUT_SCORES = SIGUNGU_ML_RISK_SCORES
 OUT_IMP = WILDFIRE_XGB_IMPORTANCE
 OUT_WEB = SIGUNGU_ML_SCORES_WEB
 OUT_TRAIN_SAMPLE = DATA_PROCESSED_ETL / "ml_train_sigungu_daily_sample.csv"
+OUT_TRAIN_1Y = ML_TRAIN_SIGUNGU_DAILY_1Y
+TRAIN_LOOKBACK_DAYS = 365
 
 TEST_START = "2025-01-01"
-# 기상 4 + 산불이력 2 + DWI + SPI
+# XGB fit: date < CALIB_START / isotonic: CALIB_START ≤ date < TEST_START / 평가: ≥ TEST_START
+CALIB_START = "2024-01-01"
+# 기상 4 + 산불이력 2 + DWI + 강수파생 3 (7d/14d 누적 · 연속무강수, 전일까지)
 FEATURE_COLS = [
     "temp_avg",
     "precip",
@@ -75,7 +84,9 @@ FEATURE_COLS = [
     "hist_fire_rate",
     "hist_fire_count_365",
     "dwi",
-    "spi",
+    "precip_sum_7d",
+    "precip_sum_14d",
+    "dry_days",
 ]
 
 
@@ -169,10 +180,13 @@ def match_fire_to_codes(fires: pd.DataFrame, sig: pd.DataFrame) -> pd.DataFrame:
 
 
 def prepare_weather(w: pd.DataFrame) -> pd.DataFrame:
-    """원본 기상만 정리 (파생 feature 없음)."""
+    """원본 기상만 정리 (파생 feature 없음). MariaDB Decimal → float."""
     w = w.sort_values(["sigungu_code", "date"]).copy()
     w["date"] = pd.to_datetime(w["date"])
     w["sigungu_code"] = w["sigungu_code"].astype(str)
+    for col in ("temp_avg", "precip", "wind_avg", "humidity_avg"):
+        if col in w.columns:
+            w[col] = pd.to_numeric(w[col], errors="coerce")
     if "precip" in w.columns:
         w["precip"] = w["precip"].fillna(0.0)
     return w
@@ -209,117 +223,122 @@ def add_labels_and_history(df: pd.DataFrame, fire_labels: pd.DataFrame) -> pd.Da
     return df
 
 
-def train_and_eval(df: pd.DataFrame) -> tuple[XGBClassifier, dict, pd.DataFrame]:
-    """시군구×일 테이블로 XGBoost 이진분류 모델을 학습하고, 테스트 성능을 측정한다.
+def train_and_eval(
+    df: pd.DataFrame,
+) -> tuple[XGBClassifier, Any, dict, pd.DataFrame]:
+    """XGB 학습 + 2024 hold-out Isotonic 보정 + 2025+ 테스트 평가.
 
-    흐름 요약
-    ---------
-    1) feature 결측 행 제거
-    2) 날짜 기준으로 train / test 분할 (미래 데이터가 학습에 안 들어가게)
-    3) 산불(1)이 훨씬 적은 불균형을 scale_pos_weight 로 보정
-    4) 모델 학습 → 테스트에 대해 발생 '확률' 예측
-    5) 확률을 임계값으로 잘라 0/1 로 만든 뒤 precision/recall 등 계산
-       ※ 지도 색은 보통 이 0/1이 아니라 확률(proba)을 씀
+    분할
+    ----
+    - fit   : date < CALIB_START (2024-01-01)
+    - calib : CALIB_START ≤ date < TEST_START  → IsotonicRegression
+    - test  : date ≥ TEST_START               → 지표·지도 점수
     """
-    # feature 컬럼에 NaN 이 있으면 XGBoost 학습이 깨지므로 해당 행 제거
+    from sklearn.isotonic import IsotonicRegression
+    from sklearn.metrics import brier_score_loss
+
     df = df.dropna(subset=FEATURE_COLS).copy()
-    # 날짜 비교를 문자열(YYYY-MM-DD)로 통일
     df["date_str"] = df["date"].dt.strftime("%Y-%m-%d")
 
-    # --- 시간 분할 (time-based split) ---
-    # 랜덤 섞기(X) : 과거로 학습하고, 그보다 늦은 날짜로만 평가
-    # → "아직 안 본 미래"에 대한 성능에 더 가깝게 측정
-    # TEST_START 예: "2025-01-01" 이면 train=그 전날까지, test=그날 이후
-    train = df[df["date_str"] < TEST_START]
+    fit_df = df[df["date_str"] < CALIB_START]
+    calib_df = df[(df["date_str"] >= CALIB_START) & (df["date_str"] < TEST_START)]
     test = df[df["date_str"] >= TEST_START]
-    if train.empty or test.empty:
-        raise RuntimeError("train/test 분할 결과가 비어 있습니다.")
+    if fit_df.empty or calib_df.empty or test.empty:
+        raise RuntimeError(
+            f"분할 결과 비어 있음: fit={len(fit_df)} calib={len(calib_df)} test={len(test)}"
+        )
 
-    # X = 입력(기상 4 + 이력 2), y = 정답(그날 그 시군구에 산불 있었으면 1, 없으면 0)
-    X_train, y_train = train[FEATURE_COLS], train["y"].astype(int)
+    X_fit, y_fit = fit_df[FEATURE_COLS], fit_df["y"].astype(int)
+    X_calib, y_calib = calib_df[FEATURE_COLS], calib_df["y"].astype(int)
     X_test, y_test = test[FEATURE_COLS], test["y"].astype(int)
 
-    # --- 클래스 불균형 보정 ---
-    # 산불 난 날(y=1)은 전체의 극소수. 그대로 두면 모델이 "전부 0"만 찍어도
-    # 정확도가 높게 나와서 학습이 망가진다.
-    # scale_pos_weight ≈ (음성 개수) / (양성 개수) 로 양성(산불) 샘플의 비중을 키움
-    pos = int(y_train.sum())  # 학습 데이터에서 산불 발생(1) 건수
-    neg = int(len(y_train) - pos)  # 미발생(0) 건수
+    pos = int(y_fit.sum())
+    neg = int(len(y_fit) - pos)
     spw = max(neg / max(pos, 1), 1.0)
-
-    # --- XGBoost 이진 분류기 ---
-    # objective="binary:logistic" → 내부적으로 로지스틱을 써서
-    #   최종적으로 P(y=1 | X) 형태의 확률을 낼 수 있음
-    model = XGBClassifier(
-        n_estimators=300,  # 트리(약한 학습기)를 300개 순차적으로 쌓음
-        max_depth=5,  # 각 트리의 최대 깊이 (너무 깊으면 과적합)
-        learning_rate=0.05,  # 각 트리가 결과에 기여하는 보폭 (작을수록 천천히·안정적)
-        subsample=0.8,  # 매 트리마다 학습 행의 80%만 랜덤 사용 (과적합 완화)
-        colsample_bytree=0.8,  # 매 트리마다 feature 의 80%만 사용
-        min_child_weight=5,  # 리프에 필요한 최소 샘플 무게 (작으면 잔가지·과적합)
-        reg_lambda=1.0,  # L2 규제 강도
-        objective="binary:logistic",  # 이진 분류 + 확률 출력
-        eval_metric="auc",  # 학습 중 참고할 지표(ROC-AUC)
-        scale_pos_weight=spw,  # 위에서 계산한 양성 가중치
-        random_state=42,  # 재현 가능한 난수 시드
-        n_jobs=4,  # 병렬 코어 수
+    print(
+        f"   분할 fit={len(fit_df):,}(~{CALIB_START})  "
+        f"calib={len(calib_df):,}({CALIB_START}~{TEST_START})  "
+        f"test={len(test):,}  fit양성={pos:,}  calib양성={int(y_calib.sum()):,}"
     )
-    # 학습: X_train 으로 y_train(0/1)을 맞추도록 트리들을 업데이트
-    model.fit(X_train, y_train)
 
-    # 모델은 "불 났다(1) / 안 났다(0)"로 학습했지만,
-    # 예측할 때는 0/1이 아니라 "불 날 확률"(0~1)을 낸다.
-    # predict_proba 결과 예: [안 날 확률, 날 확률]
-    # 그래서 [:, 1] = 산불 발생 확률. 지도 색(ml_risk)에 쓰는 값과 같다.
-    proba = model.predict_proba(X_test)[:, 1]
+    model = XGBClassifier(
+        n_estimators=300,
+        max_depth=5,
+        learning_rate=0.05,
+        subsample=0.8,
+        colsample_bytree=0.8,
+        min_child_weight=5,
+        reg_lambda=1.0,
+        objective="binary:logistic",
+        eval_metric="auc",
+        scale_pos_weight=spw,
+        random_state=42,
+        n_jobs=4,
+    )
+    model.fit(X_fit, y_fit)
 
-    # 아래 thr / pred 는 지도용이 아니다.
-    # precision·recall 같은 점수를 내려면 확률을 다시 0/1로 잘라야 한다.
-    # 산불은 드물어서 0.5 기준은 거의 전부 0이 됨 →
-    # "확률이 높은 상위 일부만 1로 본다"는 분위수(thr)를 쓴다.
+    raw_calib = model.predict_proba(X_calib)[:, 1]
+    calibrator = IsotonicRegression(out_of_bounds="clip", y_min=0.0, y_max=1.0)
+    calibrator.fit(raw_calib, y_calib.to_numpy())
+    print(
+        f"   Isotonic 보정 fit 완료  "
+        f"raw_calib mean={raw_calib.mean():.4f}  "
+        f"실제율={y_calib.mean():.4f}"
+    )
+
+    raw_test = model.predict_proba(X_test)[:, 1]
+    proba = apply_calibration(raw_test, calibrator)
+
     thr = float(np.quantile(proba, 1 - min(0.05, max(y_test.mean() * 10, 0.01))))
-    # 확률이 thr 이상이면 1(발생으로 판정), 아니면 0
     pred = (proba >= thr).astype(int)
-
-    # precision: 1이라고 찍은 것 중 실제 1 비율
-    # recall: 실제 1 중 모델이 잡아낸 비율
-    # f1: 둘의 조화평균
     precision, recall, f1, _ = precision_recall_fscore_support(
         y_test, pred, average="binary", zero_division=0
     )
     metrics = {
         "test_start": TEST_START,
-        "n_train": int(len(train)),
+        "calib_start": CALIB_START,
+        "calibration": "isotonic",
+        "n_fit": int(len(fit_df)),
+        "n_calib": int(len(calib_df)),
         "n_test": int(len(test)),
-        "n_train_pos": pos,  # 학습 양성(산불) 수
-        "n_test_pos": int(y_test.sum()),  # 테스트 양성 수
+        "n_fit_pos": pos,
+        "n_calib_pos": int(y_calib.sum()),
+        "n_test_pos": int(y_test.sum()),
         "scale_pos_weight": round(spw, 2),
-        "threshold": round(thr, 4),  # 위에서 구한 0/1 절단 기준
-        # roc_auc: 확률 순위가 실제 양성/음성을 잘 가르는지 (임계값과 무관)
+        "threshold": round(thr, 4),
         "roc_auc": round(float(roc_auc_score(y_test, proba)), 4),
-        # pr_auc: 불균형에서 더 엄격한 지표 (Precision-Recall 곡선 아래 면적)
+        "roc_auc_raw": round(float(roc_auc_score(y_test, raw_test)), 4),
         "pr_auc": round(float(average_precision_score(y_test, proba)), 4),
+        "brier": round(float(brier_score_loss(y_test, proba)), 6),
+        "brier_raw": round(float(brier_score_loss(y_test, raw_test)), 6),
+        "mean_pred": round(float(proba.mean()), 6),
+        "mean_pred_raw": round(float(raw_test.mean()), 6),
+        "base_rate_test": round(float(y_test.mean()), 6),
         "precision": round(float(precision), 4),
         "recall": round(float(recall), 4),
         "f1": round(float(f1), 4),
         "features": FEATURE_COLS,
     }
 
-    # 테스트 구간 각 행에 예측 확률을 붙여 반환 (시군구별 점수 집계 등에 사용)
     test_out = test[
         ["date_str", "sigungu_code", "sigungu_name", "province", "y"]
     ].copy()
     test_out["y_prob"] = proba
-    # model: 저장·당일예측에 사용 / metrics: 리포트 / test_out: 후속 분석
-    return model, metrics, test_out
+    test_out["y_prob_raw"] = raw_test
+    return model, calibrator, metrics, test_out
 
 
-def region_scores(test_out: pd.DataFrame, full_df: pd.DataFrame, model: XGBClassifier) -> pd.DataFrame:
-    """시군구별 위험점수: test 기간 평균 예측확률 + 봄철(2~5월) 평균."""
-    # 전체 기간 예측(학습 누수 줄이려 test만 기본 사용) + 참고로 전체 재예측
+def region_scores(
+    test_out: pd.DataFrame,
+    full_df: pd.DataFrame,
+    model: XGBClassifier,
+    calibrator: Any | None = None,
+) -> pd.DataFrame:
+    """시군구별 위험점수: test 기간 평균 (보정)예측확률 + 봄철(2~5월) 평균."""
     X_all = full_df[FEATURE_COLS]
     full_df = full_df.copy()
-    full_df["y_prob"] = model.predict_proba(X_all)[:, 1]
+    raw = model.predict_proba(X_all)[:, 1]
+    full_df["y_prob"] = apply_calibration(raw, calibrator)
     full_df["month"] = full_df["date"].dt.month
 
     test_start = pd.Timestamp(TEST_START)
@@ -401,32 +420,57 @@ def main() -> None:
     print("3) 기상 원본 정리…")
     w = prepare_weather(weather)
 
-    print("4) SPI 시군구 매핑·조인…")
-    build_spi_daily_sigungu()
-    w = attach_spi(w)
-
-    print("5) DWI 산출…")
+    print("4) DWI 산출…")
     w = add_dwi_column(w)
+
+    print("5) 강수 파생 feature (7d/14d·연속무강수)…")
+    w = add_precip_feature_columns(w)
 
     print("6) 라벨 y + 이력 feature…")
     df = add_labels_and_history(w, fire_labels)
     print(f"   학습 후보 행 {len(df):,} / 양성 {int(df['y'].sum()):,} ({df['y'].mean()*100:.3f}%)")
 
-    # 샘플 저장 (전체 parquet는 용량 큼 → 양성+랜덤음성 샘플 CSV)
+    # 학습 직전: 최근 1년치 전체 테이블 저장 (피처·라벨 점검용)
+    export_cols = [
+        "date_str",
+        "sigungu_code",
+        "sigungu_name",
+        "province",
+        "y",
+        *FEATURE_COLS,
+    ]
+    max_date = pd.to_datetime(df["date"]).max()
+    start_1y = max_date - pd.Timedelta(days=TRAIN_LOOKBACK_DAYS - 1)
+    df_1y = df[pd.to_datetime(df["date"]) >= start_1y].sort_values(
+        ["date", "sigungu_code"]
+    )
+    out_1y = df_1y[export_cols].copy()
+    out_1y.to_csv(OUT_TRAIN_1Y, index=False, encoding="utf-8-sig")
+    print(
+        f"   1년치 저장: {OUT_TRAIN_1Y.name}  "
+        f"{start_1y.date()} ~ {max_date.date()}  "
+        f"({len(out_1y):,}행 / 양성 {int(df_1y['y'].sum()):,})"
+    )
+
+    # 샘플 저장 (양성 전체 + 랜덤 음성)
     pos = df[df["y"] == 1]
     neg = df[df["y"] == 0].sample(n=min(5000, (df["y"] == 0).sum()), random_state=42)
     sample = pd.concat([pos, neg]).sort_values(["date", "sigungu_code"])
-    sample_out = sample[
-        ["date_str", "sigungu_code", "sigungu_name", "province", "y", *FEATURE_COLS]
-    ].copy()
+    sample_out = sample[export_cols].copy()
     sample_out.to_csv(OUT_TRAIN_SAMPLE, index=False, encoding="utf-8-sig")
     print(f"   샘플 저장: {OUT_TRAIN_SAMPLE.name} ({len(sample_out):,}행)")
 
-    print("7) XGBoost 학습…")
-    model, metrics, test_out = train_and_eval(df)
+    print("7) XGBoost 학습 + Isotonic 보정…")
+    model, calibrator, metrics, test_out = train_and_eval(df)
     print(
-        f"   ROC-AUC={metrics['roc_auc']}  PR-AUC={metrics['pr_auc']}  "
-        f"P={metrics['precision']} R={metrics['recall']} F1={metrics['f1']}"
+        f"   ROC-AUC={metrics['roc_auc']} (raw {metrics['roc_auc_raw']})  "
+        f"PR-AUC={metrics['pr_auc']}  "
+        f"mean_pred={metrics['mean_pred']} (raw {metrics['mean_pred_raw']})  "
+        f"base_rate={metrics['base_rate_test']}"
+    )
+    print(
+        f"   P={metrics['precision']} R={metrics['recall']} F1={metrics['f1']}  "
+        f"Brier={metrics['brier']} (raw {metrics['brier_raw']})"
     )
 
     imp = (
@@ -434,23 +478,26 @@ def main() -> None:
         .sort_values("importance", ascending=False)
     )
     imp.to_csv(OUT_IMP, index=False, encoding="utf-8-sig")
-    metrics["top_features"] = imp.head(8).to_dict(orient="records")
+    metrics["top_features"] = imp.head(10).to_dict(orient="records")
 
     print("8) 시군구 위험점수…")
-    scores = region_scores(test_out, df, model)
+    scores = region_scores(test_out, df, model, calibrator)
     scores.to_csv(OUT_SCORES, index=False, encoding="utf-8-sig")
 
     web_payload = {
         "model": "xgboost_sigungu_daily",
         "test_start": TEST_START,
+        "calibration": "isotonic",
         "metrics": {
             "roc_auc": metrics["roc_auc"],
             "pr_auc": metrics["pr_auc"],
             "precision": metrics["precision"],
             "recall": metrics["recall"],
             "f1": metrics["f1"],
+            "mean_pred": metrics["mean_pred"],
+            "base_rate_test": metrics["base_rate_test"],
         },
-        "note": "ml_risk = 2025년 test 기간 일별 예측확률 평균 (시군구)",
+        "note": "ml_risk = 2025년 test 기간 일별 보정 예측확률 평균 (시군구)",
         "regions": [
             {
                 "code": r["sigungu_code"],
@@ -466,9 +513,9 @@ def main() -> None:
     OUT_WEB.write_text(json.dumps(web_payload, ensure_ascii=False), encoding="utf-8")
     OUT_METRICS.write_text(json.dumps(metrics, ensure_ascii=False, indent=2), encoding="utf-8")
 
-    print("9) 모델·추론용 상태 저장…")
-    # XGBoost 네이티브 JSON (joblib 불필요)
+    print("9) 모델·보정기·추론용 상태 저장…")
     model.save_model(str(WILDFIRE_XGB_MODEL))
+    save_calibrator(calibrator, WILDFIRE_XGB_CALIBRATOR)
 
     # 시군구별 최신 이력 feature (당일 예측 시 사용)
     last = (
@@ -489,6 +536,11 @@ def main() -> None:
 
     bundle = {
         "model_path": str(WILDFIRE_XGB_MODEL.relative_to(ROOT)).replace("\\", "/"),
+        "calibrator_path": str(WILDFIRE_XGB_CALIBRATOR.relative_to(ROOT)).replace(
+            "\\", "/"
+        ),
+        "calibration": "isotonic",
+        "calib_start": CALIB_START,
         "features": FEATURE_COLS,
         "test_start": TEST_START,
         "trained_at": pd.Timestamp.now().isoformat(timespec="seconds"),
@@ -496,14 +548,18 @@ def main() -> None:
             "roc_auc": metrics["roc_auc"],
             "pr_auc": metrics["pr_auc"],
             "threshold": metrics["threshold"],
+            "mean_pred": metrics["mean_pred"],
+            "base_rate_test": metrics["base_rate_test"],
+            "brier": metrics["brier"],
         },
         "hist_state": str(SIGUNGU_HIST_STATE.relative_to(ROOT)).replace("\\", "/"),
-        "note": "ml-service/predict/daily.py 로 날짜·날씨 입력 예측 (기상4 + 이력2 + DWI + SPI)",
+        "note": "daily.py: XGB raw → Isotonic 보정 확률 (기상4+이력2+DWI+강수파생3)",
     }
     WILDFIRE_XGB_BUNDLE.write_text(
         json.dumps(bundle, ensure_ascii=False, indent=2), encoding="utf-8"
     )
     print(f"   {WILDFIRE_XGB_MODEL.name}")
+    print(f"   {WILDFIRE_XGB_CALIBRATOR.name}")
     print(f"   {SIGUNGU_HIST_STATE.name}")
     print(f"   {WILDFIRE_XGB_BUNDLE.name}")
 

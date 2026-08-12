@@ -10,9 +10,11 @@
     "build": "tsc"
   },
   "dependencies": {
+    "@google/genai": "^1.16.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
-    "express": "^4.21.2"
+    "express": "^4.21.2",
+    "mysql2": "^3.14.0"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",

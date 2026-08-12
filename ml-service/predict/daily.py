@@ -7,7 +7,7 @@
   python -m predict.daily --date 2026-07-23 \\
     --temp-avg 28 --humidity-avg 45 --wind-avg 3.5 --precip 0
 
-feature: 사용자 입력 기상 4개 + 시군구 산불이력 2개 + DWI + SPI
+feature: 사용자 입력 기상 4개 + 시군구 산불이력 2개 + DWI + 강수파생 3개
 
 출력: frontend/public/data/daily_ml_risk.json
 """
@@ -34,13 +34,17 @@ from ml_paths import (
     DAILY_ML_RISK,
     SIGUNGU_ASOS_STATION,
     SIGUNGU_HIST_STATE,
-    SPI_DAILY_SIGUNGU,
     WEATHER_DAILY_SIGUNGU,
     WILDFIRE_XGB_BUNDLE,
     WILDFIRE_XGB_MODEL,
     ensure_dirs,
 )
+from predict.calibration import apply_calibration, load_calibrator
 from predict.dwi import compute_dwi
+from predict.precip_features import (
+    PRECIP_LOOKBACK_DAYS,
+    compute_precip_features_for_date,
+)
 
 # ASOS 주요 지점 대략 좌표 (Open-Meteo용)
 ASOS_COORDS: dict[int, tuple[float, float]] = {
@@ -151,108 +155,13 @@ FEATURE_COLS = [
     "hist_fire_rate",
     "hist_fire_count_365",
     "dwi",
-    "spi",
+    "precip_sum_7d",
+    "precip_sum_14d",
+    "dry_days",
 ]
 
 # CSV 폴백용 전체 인덱스 (MariaDB 우선; DB 실패·미설정 시에만 사용)
 _weather_lag_index_csv: dict[str, dict[pd.Timestamp, tuple[float | None, float | None]]] | None = None
-_spi_index: dict[tuple[str, str], float] | None = None
-_spi_day_cache: dict[str, dict[str, float]] = {}
-
-
-def _ensure_spi_index() -> dict[tuple[str, str], float]:
-    """(sigungu_code, YYYY-MM-DD) → spi (학습용·과거 CSV 매핑본)."""
-    global _spi_index
-    if _spi_index is not None:
-        return _spi_index
-    idx: dict[tuple[str, str], float] = {}
-    if SPI_DAILY_SIGUNGU.exists():
-        s = pd.read_csv(
-            SPI_DAILY_SIGUNGU,
-            encoding="utf-8-sig",
-            usecols=["date", "sigungu_code", "spi"],
-        )
-        s["sigungu_code"] = s["sigungu_code"].astype(str)
-        for r in s.itertuples(index=False):
-            d = str(r.date)[:10]
-            idx[(str(r.sigungu_code), d)] = float(r.spi)
-    else:
-        try:
-            from predict.spi import build_spi_daily_sigungu
-
-            build_spi_daily_sigungu()
-            return _ensure_spi_index()
-        except Exception:
-            pass
-    _spi_index = idx
-    return idx
-
-
-def _historical_spi_by_code(date: str) -> dict[str, float]:
-    idx = _ensure_spi_index()
-    d = str(date)[:10]
-    return {code: v for (code, dd), v in idx.items() if dd == d}
-
-
-def _realtime_spi_by_code(date: str) -> dict[str, float]:
-    """기상청 API + 강수 CSV로 당일 SPI → 시군구 코드 맵."""
-    from datetime import datetime
-
-    from predict.daily_spi_realtime import compute_spi_by_station
-
-    d = str(date)[:10]
-    today = pd.Timestamp.now(tz="Asia/Seoul").strftime("%Y-%m-%d")
-    if d == today:
-        as_of = datetime.now().replace(minute=0, second=0, microsecond=0)
-    else:
-        as_of = datetime.strptime(d + "1500", "%Y%m%d%H%M")
-
-    assign = pd.read_csv(SIGUNGU_ASOS_STATION, encoding="utf-8-sig")
-    assign["sigungu_code"] = assign["sigungu_code"].astype(str)
-    assign["stn_id"] = assign["stn_id"].astype(int)
-    stn_ids = sorted(assign["stn_id"].unique().tolist())
-
-    stn_spi = compute_spi_by_station(
-        as_of=as_of,
-        station_ids=stn_ids,
-        quiet=True,
-    )
-    out: dict[str, float] = {}
-    for _, r in assign.iterrows():
-        sid = int(r["stn_id"])
-        if sid in stn_spi:
-            out[str(r["sigungu_code"])] = stn_spi[sid]
-    return out
-
-
-def _spi_map_for_predict(date: str, *, use_realtime: bool) -> dict[str, float]:
-    """시군구→SPI. 과거 매핑본 + (옵션) realtime 당일 계산 덮어쓰기."""
-    d = str(date)[:10]
-    cache_key = f"{d}|rt={int(use_realtime)}"
-    if cache_key in _spi_day_cache:
-        return _spi_day_cache[cache_key]
-
-    out = _historical_spi_by_code(d)
-    if use_realtime:
-        try:
-            out.update(_realtime_spi_by_code(d))
-        except Exception:
-            # API/패키지 실패 시 과거 SPI·0.0 폴백
-            pass
-    _spi_day_cache[cache_key] = out
-    return out
-
-
-def _lookup_spi(date: str, code: str, spi_by_code: dict[str, float] | None = None) -> float:
-    """해당일 SPI. 없으면 0.0(Near normal 근사)."""
-    if spi_by_code is not None and str(code) in spi_by_code:
-        return float(spi_by_code[str(code)])
-    idx = _ensure_spi_index()
-    d = str(date)[:10]
-    v = idx.get((str(code), d))
-    if v is None:
-        return 0.0
-    return float(v)
 
 
 def _ensure_lag_index_csv() -> dict[str, dict[pd.Timestamp, tuple[float | None, float | None]]]:
@@ -330,14 +239,48 @@ def _lag_weather_lookup(date: str, code: str) -> dict[str, float | None]:
     return _lag_from_csv(date, code)
 
 
+def _precip_history_for_pred(
+    date: str,
+) -> dict[str, dict]:
+    """시군구 → {date → precip}. MariaDB 우선, CSV 폴백."""
+    from datetime import date as date_cls
+
+    from predict.weather_db import fetch_precip_history_for_pred_date
+
+    db_idx = fetch_precip_history_for_pred_date(
+        date, lookback_days=PRECIP_LOOKBACK_DAYS
+    )
+    if db_idx:
+        return db_idx
+
+    # CSV 폴백: lag 인덱스에서 precip만 추출
+    idx = _ensure_lag_index_csv()
+    pred = pd.Timestamp(date).normalize()
+    start = pred - pd.Timedelta(days=PRECIP_LOOKBACK_DAYS)
+    end = pred - pd.Timedelta(days=1)
+    out: dict[str, dict] = {}
+    for code, by_date in idx.items():
+        bucket: dict = {}
+        for ts, (_h, p) in by_date.items():
+            if start <= ts <= end and p is not None:
+                bucket[ts.date() if hasattr(ts, "date") else date_cls.fromisoformat(str(ts)[:10])] = float(p)
+        if bucket:
+            out[str(code)] = bucket
+    return out
+
+
 def build_features_for_day(
     date: str,
     weather_by_code: dict[str, dict],
     regions: pd.DataFrame,
-    spi_by_code: dict[str, float] | None = None,
 ) -> pd.DataFrame:
-    """시군구별 feature 행렬 (기상 4 + 이력 2 + DWI + SPI)."""
+    """시군구별 feature 행렬 (기상 4 + 이력 2 + DWI + 강수파생 3)."""
+    from datetime import date as date_cls
+
     month = int(pd.Timestamp(date).month)
+    pred = date_cls.fromisoformat(str(date)[:10])
+    precip_hist = _precip_history_for_pred(date)
+
     rows = []
     for _, h in regions.iterrows():
         code = str(h["sigungu_code"])
@@ -360,6 +303,9 @@ def build_features_for_day(
             precip_lag1=lags["precip_lag1"],
             precip_lag2=lags["precip_lag2"],
         )
+        pf = compute_precip_features_for_date(
+            pred, precip_hist.get(code, {})
+        )
         rows.append(
             {
                 "sigungu_code": code,
@@ -372,7 +318,9 @@ def build_features_for_day(
                 "hist_fire_rate": float(h["hist_fire_rate"]),
                 "hist_fire_count_365": float(h["hist_fire_count_365"]),
                 "dwi": dwi,
-                "spi": _lookup_spi(date, code, spi_by_code),
+                "precip_sum_7d": pf["precip_sum_7d"],
+                "precip_sum_14d": pf["precip_sum_14d"],
+                "dry_days": pf["dry_days"],
             }
         )
     return pd.DataFrame(rows)
@@ -569,22 +517,18 @@ def run_daily_predict(
         req_date, cli_weather, use_kma, use_open_meteo
     )
 
-    today = pd.Timestamp.now(tz="Asia/Seoul").strftime("%Y-%m-%d")
-    # 기상청 당일(또는 오늘) 예측 → realtime SPI, 그 외·시나리오는 과거 매핑본
-    use_realtime_spi = bool(use_kma) or (pred_date == today and cli_weather is None)
-    spi_by_code = _spi_map_for_predict(pred_date, use_realtime=use_realtime_spi)
-
     hist = load_regions()
-    feats = build_features_for_day(
-        pred_date, weather_by_code, hist, spi_by_code=spi_by_code
-    )
+    feats = build_features_for_day(pred_date, weather_by_code, hist)
     feats = feats.dropna(subset=FEATURE_COLS)
 
     model = XGBClassifier()
     model.load_model(str(WILDFIRE_XGB_MODEL))
-    proba = model.predict_proba(feats[FEATURE_COLS])[:, 1]
+    raw = model.predict_proba(feats[FEATURE_COLS])[:, 1]
+    calibrator = load_calibrator()
+    proba = apply_calibration(raw, calibrator)
     feats = feats.copy()
     feats["y_prob"] = proba
+    feats["y_prob_raw"] = raw
 
     mn, mx = float(feats["y_prob"].min()), float(feats["y_prob"].max())
     feats["ml_risk_norm"] = (feats["y_prob"] - mn) / (mx - mn + 1e-12)
@@ -595,6 +539,7 @@ def run_daily_predict(
 
     sample_code = "11110" if "11110" in weather_by_code else next(iter(weather_by_code))
     sample_wx = weather_by_code[sample_code]
+    cal_note = "isotonic 보정" if calibrator is not None else "raw(보정기 없음)"
 
     payload = {
         "predict_date": pred_date,
@@ -603,8 +548,15 @@ def run_daily_predict(
             k: round(float(v), 2) if v == v else None for k, v in sample_wx.items()
         },
         "model_metrics": bundle.get("metrics", {}),
+        "calibration": bundle.get("calibration")
+        if calibrator is not None
+        else None,
         "n_regions": int(len(feats)),
-        "note": "y_prob=당일 산불 발생 예측확률 · ml_risk_norm=지도 색용 정규화 (기상4 + 이력2 + DWI + SPI)",
+        "note": (
+            f"y_prob=산불 발생 예측확률({cal_note}) · "
+            "ml_risk_norm=지도 색용 당일 min-max 정규화 "
+            "(기상4 + 이력2 + DWI + 강수파생3)"
+        ),
         "regions": [
             {
                 "code": str(r["sigungu_code"]),

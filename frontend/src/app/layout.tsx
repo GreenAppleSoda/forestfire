@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
-import { Noto_Sans_KR, Syne } from "next/font/google";
+import { Noto_Sans_KR, Outfit } from "next/font/google";
+import { ChatWidget } from "@/components/ChatWidget";
 import "./globals.css";
 
-const display = Syne({
+const display = Outfit({
   variable: "--font-display",
   subsets: ["latin"],
   weight: ["600", "700"],
@@ -11,7 +12,7 @@ const display = Syne({
 const sans = Noto_Sans_KR({
   variable: "--font-sans",
   subsets: ["latin"],
-  weight: ["400", "500", "700"],
+  weight: ["400", "500", "600", "700"],
 });
 
 export const metadata: Metadata = {
@@ -29,6 +30,7 @@ export default function RootLayout({
     <html lang="ko">
       <body className={`${display.variable} ${sans.variable} antialiased`}>
         {children}
+        <ChatWidget />
       </body>
     </html>
   );

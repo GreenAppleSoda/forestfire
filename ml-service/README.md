@@ -42,7 +42,9 @@ python -m predict.daily --date 2025-03-15
 python -m predict.daily --date 2026-07-23 --temp-avg 28 --humidity-avg 45 --wind-avg 3.5 --precip 0
 ```
 
-피처 (8): 기상 4 + 산불이력 2 + DWI + SPI  
+피처 (10): 기상 4 + 산불이력 2 + DWI + 강수파생 3  
+(`precip_sum_7d`, `precip_sum_14d`, `dry_days` — 예측일 전일까지, 결측=0mm)  
+확률: XGB raw → **Isotonic 보정**(2024 hold-out) 후 화면에 표시.  
 학습은 `etl/ml/train_wildfire_xgb.py`.
 
 ## HTTP (내부)
@@ -67,7 +69,7 @@ ml-service/
 │   ├── daily.py
 │   ├── weather_db.py      # MariaDB lag/학습 기상
 │   ├── fire_db.py         # MariaDB forestfire_stats
-│   ├── dwi.py · spi.py · daily_spi_realtime.py
+│   ├── dwi.py · precip_features.py · calibration.py
 │   ├── kma_client.py
 │   └── scenario_weather.py
 ├── routes/

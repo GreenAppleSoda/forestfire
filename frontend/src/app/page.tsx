@@ -81,8 +81,8 @@ export default function HomePage() {
 
   if (error) {
     return (
-      <main className="grid h-dvh place-items-center bg-[#c5d4e4] px-6 text-center">
-        <p className="max-w-md rounded-lg border border-[#d6d3d1] bg-white/95 px-4 py-3 text-sm text-[#44403c] shadow-sm">
+      <main className="grid h-dvh place-items-center bg-[#f4f7f9] px-6 text-center">
+        <p className="max-w-md rounded-2xl bg-white px-4 py-3 text-sm text-[#4b5563] shadow-[var(--shadow-card)] ring-1 ring-[#e5e7eb]">
           {error}
         </p>
       </main>
@@ -91,8 +91,8 @@ export default function HomePage() {
 
   if (!data) {
     return (
-      <main className="grid h-dvh place-items-center bg-[#c5d4e4] px-6 text-center">
-        <p className="rounded-lg border border-[#d6d3d1] bg-white/95 px-4 py-3 text-sm text-[#44403c] shadow-sm">
+      <main className="grid h-dvh place-items-center bg-[#f4f7f9] px-6 text-center">
+        <p className="rounded-2xl bg-white px-4 py-3 text-sm text-[#4b5563] shadow-[var(--shadow-card)] ring-1 ring-[#e5e7eb]">
           지도를 불러오는 중입니다...
         </p>
       </main>

@@ -9,7 +9,7 @@
 
 | 루트 | 용도 |
 |------|------|
-| `db/` | 서버 배포용 예측 런타임 (weather · hist · spi · model) |
+| `db/` | 서버 배포용 예측 런타임 (weather · hist · model) |
 | `db-archive/` | 원본·중간 산출물·학습 메트릭·분석 CSV |
 | `frontend/public/data/` | 지도·점수 JSON (웹 정적 파일) → `backend/data`에도 동기화 |
 
@@ -17,7 +17,6 @@
 
 - `processed/weather_daily_sigungu.csv` (폴백 — 학습·lag는 MariaDB 우선)
 - `processed/sigungu_hist_state.csv`
-- `processed/spi_daily_sigungu.csv`
 - `processed/sigungu_asos_station.csv`
 - `output/wildfire_xgb_model.json`
 - `output/wildfire_xgb_bundle.json`
@@ -42,12 +41,13 @@ etl/
     └── train_wildfire_xgb.py
 ```
 
-학습 스크립트는 `ml-service/` 를 path에 넣고 `predict.dwi` / `predict.spi` / `predict.weather_db` 등을 사용합니다.
+학습 스크립트는 `ml-service/` 를 path에 넣고 `predict.dwi` / `predict.weather_db` 등을 사용합니다.
 
 ## 모델 피처 (학습·추론 공통)
 
 `temp_avg`, `precip`, `wind_avg`, `humidity_avg`,  
-`hist_fire_rate`, `hist_fire_count_365`, `dwi`, `spi`
+`hist_fire_rate`, `hist_fire_count_365`, `dwi`,  
+`precip_sum_7d`, `precip_sum_14d`, `dry_days`
 
 검증 분할: train ~2024-12-31 / test 2025-01-01~
 

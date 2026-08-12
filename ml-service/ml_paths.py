@@ -21,9 +21,6 @@ DB = ROOT / "db"
 DATA_PROCESSED = DB / "processed"
 DATA_OUTPUT = DB / "output"
 
-DB_ARCHIVE = ROOT / "db-archive"
-DAILY_SPI_RAW = DB_ARCHIVE / "raw" / "spi" / "daily_spi_1971~2020.csv"
-
 # frontend와 공유하는 정적 데이터 폴더. 성능 최적화를 위해 의도적으로 공유합니다
 # (docs/초기로딩-성능최적화-보고서.md 참고). 다른 위치를 쓰려면 ml-service/.env에
 # WEB_DATA_DIR(절대경로)을 지정하세요.
@@ -31,10 +28,10 @@ WEB_DATA_DIR = Path(os.environ.get("WEB_DATA_DIR") or (ROOT / "frontend" / "publ
 
 SIGUNGU_ASOS_STATION = DATA_PROCESSED / "sigungu_asos_station.csv"
 WEATHER_DAILY_SIGUNGU = DATA_PROCESSED / "weather_daily_sigungu.csv"
-SPI_DAILY_SIGUNGU = DATA_PROCESSED / "spi_daily_sigungu.csv"
 SIGUNGU_HIST_STATE = DATA_PROCESSED / "sigungu_hist_state.csv"
 
 WILDFIRE_XGB_MODEL = DATA_OUTPUT / "wildfire_xgb_model.json"
+WILDFIRE_XGB_CALIBRATOR = DATA_OUTPUT / "wildfire_xgb_calibrator.joblib"
 WILDFIRE_XGB_BUNDLE = DATA_OUTPUT / "wildfire_xgb_bundle.json"
 
 DAILY_ML_RISK = WEB_DATA_DIR / "daily_ml_risk.json"

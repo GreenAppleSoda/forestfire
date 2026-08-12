@@ -11,6 +11,8 @@ logger = logging.getLogger(__name__)
 
 # pred_date(YYYY-MM-DD) → sigungu_code → {date → (humidity_avg, precip)}
 _lag_cache: dict[str, dict[str, dict[date, tuple[float | None, float | None]]]] = {}
+# pred_date|lookback → sigungu_code → {obs_date → precip}
+_precip_hist_cache: dict[str, dict[str, dict[date, float]]] = {}
 
 
 def _load_root_env() -> None:
@@ -164,6 +166,81 @@ def fetch_lag_index_for_pred_date(
 
 def clear_lag_cache() -> None:
     _lag_cache.clear()
+    _precip_hist_cache.clear()
+
+
+def fetch_precip_history_for_pred_date(
+    pred_date: str,
+    *,
+    lookback_days: int = 90,
+) -> dict[str, dict[date, float]]:
+    """예측일 전 lookback_days 일간의 precip (pred_date 당일 제외).
+
+    반환: sigungu_code → {obs_date → precip}
+    없는 날짜는 호출측에서 0으로 취급한다.
+    """
+    key = f"{str(pred_date)[:10]}|{int(lookback_days)}"
+    if key in _precip_hist_cache:
+        return _precip_hist_cache[key]
+
+    cfg = db_config()
+    if cfg is None:
+        logger.warning("DB_* 환경변수 없음 — precip history 미조회")
+        _precip_hist_cache[key] = {}
+        return _precip_hist_cache[key]
+
+    try:
+        pred = date.fromisoformat(str(pred_date)[:10])
+    except ValueError:
+        _precip_hist_cache[key] = {}
+        return _precip_hist_cache[key]
+
+    start = pred - timedelta(days=int(lookback_days))
+    end = pred - timedelta(days=1)  # 전일까지
+
+    try:
+        import pymysql
+    except ImportError:
+        logger.warning("PyMySQL 미설치 — precip history 미조회")
+        _precip_hist_cache[key] = {}
+        return _precip_hist_cache[key]
+
+    idx: dict[str, dict[date, float]] = {}
+    try:
+        conn = pymysql.connect(**cfg)
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT obs_date, sigungu_code, precip
+                    FROM weather_daily_sigungu
+                    WHERE obs_date >= %s AND obs_date <= %s
+                    """,
+                    (start.isoformat(), end.isoformat()),
+                )
+                for obs_date, sigungu_code, precip in cur.fetchall():
+                    od = _as_date(obs_date)
+                    if od is None:
+                        continue
+                    code = str(sigungu_code).strip()
+                    p = _as_float(precip)
+                    idx.setdefault(code, {})[od] = 0.0 if p is None else p
+        finally:
+            conn.close()
+    except Exception as e:
+        logger.warning("MariaDB precip history 조회 실패: %s", e)
+        _precip_hist_cache[key] = {}
+        return _precip_hist_cache[key]
+
+    logger.info(
+        "MariaDB precip history: pred=%s range=%s~%s sigungu=%d",
+        str(pred_date)[:10],
+        start.isoformat(),
+        end.isoformat(),
+        len(idx),
+    )
+    _precip_hist_cache[key] = idx
+    return idx
 
 
 def fetch_weather_daily_sigungu_df():

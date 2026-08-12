@@ -21,23 +21,6 @@ type Wx = {
   wind_avg?: number | null;
 };
 
-function fmtWx(wx: Wx): string {
-  const parts: string[] = [];
-  if (wx.temp_avg != null && !Number.isNaN(wx.temp_avg)) {
-    parts.push(`기온 ${wx.temp_avg}℃`);
-  }
-  if (wx.humidity_avg != null && !Number.isNaN(wx.humidity_avg)) {
-    parts.push(`습도 ${wx.humidity_avg}%`);
-  }
-  if (wx.precip != null && !Number.isNaN(wx.precip)) {
-    parts.push(`강수 ${wx.precip}mm`);
-  }
-  if (wx.wind_avg != null && !Number.isNaN(wx.wind_avg)) {
-    parts.push(`풍속 ${wx.wind_avg}m/s`);
-  }
-  return parts.join(" · ");
-}
-
 function avgField(
   rows: SigunguMlRegion[],
   key: "temp_avg" | "humidity_avg" | "precip" | "wind_avg",
@@ -95,6 +78,30 @@ function resolveRegionWeather(
   };
 }
 
+function WxStat({
+  label,
+  value,
+  unit,
+}: {
+  label: string;
+  value: string;
+  unit?: string;
+}) {
+  return (
+    <div className="rounded-xl bg-[#f9fafb] px-2.5 py-2">
+      <p className="text-[10px] font-medium text-[#9ca3af]">{label}</p>
+      <p className="mt-0.5 text-[15px] font-semibold tabular-nums text-[#111827]">
+        {value}
+        {unit ? (
+          <span className="ml-0.5 text-[11px] font-medium text-[#6b7280]">
+            {unit}
+          </span>
+        ) : null}
+      </p>
+    </div>
+  );
+}
+
 export function DailyPredictForm({
   onPredicted,
   daily,
@@ -145,27 +152,45 @@ export function DailyPredictForm({
   const statusLine = useMemo(() => {
     if (fetchNote) return fetchNote;
     if (!daily?.predict_date) return null;
-    return [daily.predict_date ? `관측일 ${daily.predict_date}` : null, daily.weather_source || null]
+    return [
+      daily.predict_date ? `관측일 ${daily.predict_date}` : null,
+      daily.weather_source || null,
+    ]
       .filter(Boolean)
       .join(" · ");
   }, [fetchNote, daily]);
 
-  const wxLine = weather ? fmtWx(weather) : null;
+  const fmt = (v: number | null | undefined, digits = 1) =>
+    v == null || Number.isNaN(v) ? "—" : v.toFixed(digits);
 
   return (
-    <div className="pointer-events-auto w-72 rounded-lg border border-[#d6d3d1] bg-white/95 px-3 py-2.5 text-sm shadow-sm backdrop-blur-sm">
-      <p className="text-[11px] font-medium tracking-[0.12em] text-[#78716c] uppercase">
-        기상청 ASOS 실시간
-      </p>
-      <p className="mt-1 text-[11px] leading-snug text-[#57534e]">
-        종관기상관측 시간자료로 오늘 날씨를 불러와 시군구별 산불 확률을
-        계산합니다.
-      </p>
+    <div className="pointer-events-auto w-[280px] rounded-2xl bg-white px-4 py-3.5 shadow-[var(--shadow-card)] ring-1 ring-[#e5e7eb]">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-[12px] font-semibold text-[#111827]">실시간 기상</p>
+        {statusLine ? (
+          <p className="truncate text-[10px] text-[#9ca3af]">{statusLine}</p>
+        ) : null}
+      </div>
+      {weather ? (
+        <p className="mt-1 text-[11px] text-[#6b7280]">{weather.label}</p>
+      ) : (
+        <p className="mt-1 text-[11px] text-[#9ca3af]">
+          예측을 실행하면 기상이 표시됩니다.
+        </p>
+      )}
+
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        <WxStat label="기온" value={fmt(weather?.temp_avg)} unit="°C" />
+        <WxStat label="습도" value={fmt(weather?.humidity_avg, 0)} unit="%" />
+        <WxStat label="강수" value={fmt(weather?.precip)} unit="mm" />
+        <WxStat label="풍속" value={fmt(weather?.wind_avg)} unit="m/s" />
+      </div>
+
       <button
         type="button"
         disabled={loading}
         onClick={() => run(false)}
-        className="mt-2 w-full rounded-md bg-[#1c1917] px-2 py-1.5 text-[11px] font-medium text-white disabled:opacity-50"
+        className="mt-3 w-full rounded-xl bg-[#111827] px-3 py-2.5 text-[12px] font-semibold text-white transition hover:bg-[#1f2937] disabled:opacity-50"
       >
         {loading ? "기상 조회·예측 중…" : "실시간 기상으로 예측"}
       </button>
@@ -173,27 +198,17 @@ export function DailyPredictForm({
         type="button"
         disabled={loading}
         onClick={() => run(true)}
-        className="mt-1 w-full rounded-md border border-[#d6d3d1] bg-[#fafaf9] px-2 py-1 text-[10px] font-medium text-[#57534e] disabled:opacity-50"
+        className="mt-1.5 w-full rounded-xl px-3 py-1.5 text-[11px] font-medium text-[#6b7280] ring-1 ring-[#e5e7eb] transition hover:bg-[#f9fafb] disabled:opacity-50"
       >
         강제 새로고침
       </button>
-      {(statusLine || weather) && (
-        <div className="mt-1.5 space-y-0.5 text-[10px] leading-snug text-[#78716c]">
-          {statusLine && <p>{statusLine}</p>}
-          {weather && wxLine && (
-            <p>
-              <span className="font-medium text-[#57534e]">{weather.label}</span>
-              {" · "}
-              {wxLine}
-            </p>
-          )}
-          {daily && !selectedCode && (
-            <p className="text-[#a8a29e]">지도를 클릭하면 해당 지역 기상이 표시됩니다.</p>
-          )}
-        </div>
+      {daily && !selectedCode && (
+        <p className="mt-2 text-[10px] leading-snug text-[#9ca3af]">
+          지도를 클릭하면 해당 지역 기상이 표시됩니다.
+        </p>
       )}
       {error && (
-        <p className="mt-1.5 text-[10px] leading-snug text-[#b91c1c]">{error}</p>
+        <p className="mt-2 text-[10px] leading-snug text-[#e03131]">{error}</p>
       )}
     </div>
   );

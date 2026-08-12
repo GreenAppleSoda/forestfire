@@ -147,20 +147,20 @@ export function ScenarioPredictForm({ onPredicted }: Props) {
   };
 
   return (
-    <div className="pointer-events-auto w-72 rounded-lg border border-[#d6d3d1] bg-white/95 px-3 py-2.5 text-sm shadow-sm backdrop-blur-sm">
-      <p className="text-[11px] font-medium tracking-[0.12em] text-[#78716c] uppercase">
+    <div className="pointer-events-auto w-[280px] rounded-2xl bg-white px-4 py-3.5 text-sm shadow-[var(--shadow-card)] ring-1 ring-[#e5e7eb]">
+      <p className="text-[12px] font-semibold text-[#111827]">
         사용자 지정 시나리오
       </p>
-      <p className="mt-1 text-[11px] leading-snug text-[#57534e]">
+      <p className="mt-1 text-[11px] leading-snug text-[#6b7280]">
         연·월과 날씨 가정을 정하면 시군구별 산불 발생 확률을 계산합니다. 실제
         예보가 아닙니다.
       </p>
 
       <div className="mt-2 flex gap-2">
-        <label className="flex flex-1 flex-col gap-0.5 text-[10px] text-[#78716c]">
+        <label className="flex flex-1 flex-col gap-0.5 text-[10px] text-[#6b7280]">
           연도
           <select
-            className="rounded-md border border-[#e7e5e4] bg-white px-1.5 py-1 text-[11px] text-[#1c1917]"
+            className="rounded-xl border border-[#e5e7eb] bg-white px-1.5 py-1.5 text-[11px] text-[#111827]"
             value={year}
             onChange={(e) => setYear(Number(e.target.value))}
           >
@@ -171,10 +171,10 @@ export function ScenarioPredictForm({ onPredicted }: Props) {
             ))}
           </select>
         </label>
-        <label className="flex flex-1 flex-col gap-0.5 text-[10px] text-[#78716c]">
+        <label className="flex flex-1 flex-col gap-0.5 text-[10px] text-[#6b7280]">
           월
           <select
-            className="rounded-md border border-[#e7e5e4] bg-white px-1.5 py-1 text-[11px] text-[#1c1917]"
+            className="rounded-xl border border-[#e5e7eb] bg-white px-1.5 py-1.5 text-[11px] text-[#111827]"
             value={month}
             onChange={(e) => setMonthAndReset(Number(e.target.value))}
           >
@@ -187,24 +187,24 @@ export function ScenarioPredictForm({ onPredicted }: Props) {
         </label>
       </div>
 
-      <p className="mt-2 text-[10px] font-medium text-[#78716c]">날씨 느낌</p>
+      <p className="mt-2 text-[10px] font-medium text-[#6b7280]">날씨 느낌</p>
       <div className="mt-1 flex flex-wrap gap-1">
         {PRESETS.map((p) => (
           <button
             key={p.id}
             type="button"
             onClick={() => pickPreset(p.id)}
-            className={`rounded-md px-2 py-0.5 text-[10px] font-medium transition ${
+            className={`rounded-lg px-2 py-0.5 text-[10px] font-medium transition ${
               presetId === p.id
-                ? "bg-[#1c1917] text-white"
-                : "border border-[#e7e5e4] bg-[#fafaf9] text-[#57534e] hover:bg-[#f5f5f4]"
+                ? "bg-[#111827] text-white"
+                : "bg-[#f9fafb] text-[#4b5563] ring-1 ring-[#e5e7eb] hover:bg-[#f3f4f6]"
             }`}
           >
             {p.label}
           </button>
         ))}
         {presetId === "custom" && (
-          <span className="rounded-md bg-[#f5f5f4] px-2 py-0.5 text-[10px] text-[#78716c]">
+          <span className="rounded-lg bg-[#f3f4f6] px-2 py-0.5 text-[10px] text-[#6b7280]">
             커스텀
           </span>
         )}
@@ -257,22 +257,22 @@ export function ScenarioPredictForm({ onPredicted }: Props) {
         />
       </div>
 
-      <p className="mt-2 text-[10px] leading-snug text-[#78716c]">{summary}</p>
+      <p className="mt-2 text-[10px] leading-snug text-[#6b7280]">{summary}</p>
 
       <button
         type="button"
         disabled={loading}
         onClick={() => void run()}
-        className="mt-2 w-full rounded-md bg-[#1c1917] px-2 py-1.5 text-[11px] font-medium text-white disabled:opacity-50"
+        className="mt-2 w-full rounded-xl bg-[#111827] px-2 py-2.5 text-[12px] font-semibold text-white disabled:opacity-50"
       >
         {loading ? "시나리오 예측 중…" : "이 가정으로 예측"}
       </button>
 
       {note && !error && (
-        <p className="mt-1.5 text-[10px] leading-snug text-[#57534e]">{note}</p>
+        <p className="mt-1.5 text-[10px] leading-snug text-[#4b5563]">{note}</p>
       )}
       {error && (
-        <p className="mt-1.5 text-[10px] leading-snug text-[#b91c1c]">{error}</p>
+        <p className="mt-1.5 text-[10px] leading-snug text-[#e03131]">{error}</p>
       )}
     </div>
   );
@@ -301,9 +301,9 @@ function SliderRow({
 }) {
   return (
     <div>
-      <div className="flex items-center justify-between text-[10px] text-[#78716c]">
-        <span className="font-medium text-[#57534e]">{label}</span>
-        <span className="tabular-nums text-[#1c1917]">{display}</span>
+      <div className="flex items-center justify-between text-[10px] text-[#6b7280]">
+        <span className="font-medium text-[#4b5563]">{label}</span>
+        <span className="tabular-nums text-[#111827]">{display}</span>
       </div>
       <input
         type="range"
@@ -312,9 +312,9 @@ function SliderRow({
         step={step}
         value={value}
         onChange={(e) => onChange(Number(e.target.value))}
-        className="mt-0.5 w-full accent-[#1c1917]"
+        className="mt-0.5 w-full accent-[#111827]"
       />
-      <div className="flex justify-between text-[9px] text-[#a8a29e]">
+      <div className="flex justify-between text-[9px] text-[#9ca3af]">
         <span>{left}</span>
         <span>{right}</span>
       </div>

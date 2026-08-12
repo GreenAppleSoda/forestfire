@@ -152,6 +152,9 @@ def add_dwi_column(df: pd.DataFrame) -> pd.DataFrame:
     out = df.sort_values(["sigungu_code", "date"]).copy()
     out["sigungu_code"] = out["sigungu_code"].astype(str)
     out["date"] = pd.to_datetime(out["date"])
+    for col in ("temp_avg", "precip", "wind_avg", "humidity_avg"):
+        if col in out.columns:
+            out[col] = pd.to_numeric(out[col], errors="coerce")
     out["precip"] = out["precip"].fillna(0.0)
     out["month"] = out["date"].dt.month
 
