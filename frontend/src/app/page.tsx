@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import { KoreaSvgMap } from "@/components/KoreaSvgMap";
-import type { AdminLayer, DailyMlRisk, MapData, SigunguMlScores } from "@/lib/types";
+import type { AdminLayer, MapData, SigunguMlScores } from "@/lib/types";
 import { useEffect, useState } from "react";
 
 type InitialData = {
@@ -10,7 +10,6 @@ type InitialData = {
   sigungu: AdminLayer;
   emd: AdminLayer;
   mlScores: SigunguMlScores | null;
-  dailyRisk: DailyMlRisk | null;
 };
 
 const EMPTY_EMD: AdminLayer = {
@@ -46,12 +45,11 @@ export default function HomePage() {
 
     const load = async () => {
       // 1차: 시도/시군구로 바로 지도 표시 (읍면동은 백그라운드)
-      const [mapData, sido, sigungu, mlScores, dailyRisk] = await Promise.all([
+      const [mapData, sido, sigungu, mlScores] = await Promise.all([
         fetchJson<MapData>("/data/map-data.json", signal),
         fetchJson<AdminLayer>("/data/admin-sido.json", signal),
         fetchJson<AdminLayer>("/data/admin-sigungu.json", signal),
         fetchJson<SigunguMlScores>("/data/sigungu_ml_scores.json", signal),
-        fetchJson<DailyMlRisk>("/data/daily_ml_risk.json", signal),
       ]);
 
       if (!mapData || !sido || !sigungu) {
@@ -65,7 +63,6 @@ export default function HomePage() {
         sigungu,
         emd: EMPTY_EMD,
         mlScores,
-        dailyRisk,
       });
 
       // 2차: 고배율에서만 쓰는 읍면동 (가장 큰 파일)
@@ -104,7 +101,6 @@ export default function HomePage() {
       mapData={data.mapData}
       layers={{ sido: data.sido, sigungu: data.sigungu, emd: data.emd }}
       mlScores={data.mlScores}
-      dailyRisk={data.dailyRisk}
     />
   );
 }

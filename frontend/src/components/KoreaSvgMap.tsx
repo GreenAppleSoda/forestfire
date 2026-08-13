@@ -16,6 +16,8 @@ import type {
 import { intensityToColor, probToColor } from "@/lib/choropleth";
 import { readApiJson } from "@/lib/apiJson";
 import {
+  KAKAO_MAX_LEVEL,
+  clampToKorea,
   kakaoToSvgView,
   svgToWgs84,
   svgViewToKakao,
@@ -27,6 +29,8 @@ import { ScenarioPredictForm } from "./ScenarioPredictForm";
 import { FireHistoryPanel } from "./FireHistoryPanel";
 import { HistorySyncControl } from "./HistorySyncControl";
 import { MapLegend } from "./MapLegend";
+import { MapChrome } from "./MapChrome";
+import { AuthModal } from "./AuthModal";
 import { AppSidebar } from "./AppSidebar";
 import { MountainSearchResult } from "./MountainSearchResult";
 import { SatelliteMap, type SatelliteViewState } from "./SatelliteMap";
@@ -49,7 +53,6 @@ type Props = {
     emd: AdminLayer;
   };
   mlScores?: SigunguMlScores | null;
-  dailyRisk?: DailyMlRisk | null;
 };
 
 type View = { scale: number; tx: number; ty: number };
@@ -83,6 +86,13 @@ const SELECT_DIM = {
 function levelForScale(scale: number): AdminLevel {
   if (scale < 4.5) return "sido";
   if (scale < 11) return "sigungu";
+  return "emd";
+}
+
+/** 위성: 카카오 레벨이 작을수록 확대. Lv.9 이하에서 읍면동, 바깥은 시군구 색을 유지. */
+function levelForKakaoZoom(kakaoLevel: number): AdminLevel {
+  if (kakaoLevel >= 12) return "sido";
+  if (kakaoLevel >= 10) return "sigungu";
   return "emd";
 }
 
@@ -187,6 +197,19 @@ function isProvinceSido(name: string): boolean {
   return /도/.test(name);
 }
 
+/**
+ * 시도 라벨: 도청 좌표는 이웃 시·도 경계에 붙으므로
+ * 캡처 기준 어색한 5곳은 폴리곤 안쪽 시각 중심으로 고정.
+ * 경기는 서울을 감싸서 자동 중심이 서울과 겹침 → 동쪽(양평 쪽).
+ */
+const SIDO_LABEL_CENTER: Record<string, [number, number]> = {
+  "51": [406, 172], // 강원
+  "41": [324, 200], // 경기
+  "43": [350, 308], // 충북
+  "48": [385, 525], // 경남
+  "12": [262, 582], // 전남·광주
+};
+
 type RegionLabelLayout = { x: number; y: number; fs: number };
 
 /** 가장 큰 육지 링 기준 라벨 위치·글자 크기 (섬·돌출부 bbox에 끌리지 않음). */
@@ -207,10 +230,12 @@ function regionLabelLayout(
     const text = shortLabel(r.name, level);
     const provinceLabel = level === "sido" && isProvinceSido(r.name);
     const ring = r.d ? largestRing(r.d, r.code) : null;
+    const override = level === "sido" ? SIDO_LABEL_CENTER[r.code] : undefined;
     const center =
-      level === "sido"
+      override ??
+      (level === "sido"
         ? r.label
-        : (visualCenterFromPath(r.d, r.code) ?? r.label);
+        : (visualCenterFromPath(r.d, r.code) ?? r.label));
     let fs = provinceLabel ? zoomFs * 1.8 : zoomFs;
     if (!provinceLabel) {
       fs = fontSizeForRing(ring, text, zoomFs);
@@ -224,7 +249,6 @@ export function KoreaSvgMap({
   mapData: mapDataProp,
   layers: layersProp,
   mlScores,
-  dailyRisk,
 }: Props) {
   const stageRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
@@ -242,10 +266,11 @@ export function KoreaSvgMap({
   );
   const [satSyncKey, setSatSyncKey] = useState(0);
   const [riskMode, setRiskMode] = useState<RiskMode>("daily");
-  const [daily, setDaily] = useState<DailyMlRisk | null>(dailyRisk ?? null);
+  const [daily, setDaily] = useState<DailyMlRisk | null>(null);
   const [scenario, setScenario] = useState<DailyMlRisk | null>(null);
   const [predictLoading, setPredictLoading] = useState(false);
   const [predictError, setPredictError] = useState<string | null>(null);
+  const [authModal, setAuthModal] = useState<"login" | "register" | null>(null);
   /** 지도 마커용 (검색·산도감 공통) */
   const [pinnedMountain, setPinnedMountain] = useState<MountainInfo | null>(
     null,
@@ -298,10 +323,12 @@ export function KoreaSvgMap({
         }
         const data = json.data as DailyMlRisk;
         setDaily(data);
+        setPredictError(null);
         return data;
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
-        setPredictError(msg);
+      } catch {
+        setPredictError(
+          "당일 예측에 실패했습니다. 기상청 관측을 불러오지 못했습니다.",
+        );
         return null;
       } finally {
         setPredictLoading(false);
@@ -313,12 +340,15 @@ export function KoreaSvgMap({
   }, []);
 
   useEffect(() => {
-    if (riskMode === "daily" && !daily && !predictLoading) {
+    if (riskMode === "daily" && !daily && !predictLoading && !predictError) {
       void fetchKmaPredict(false);
     }
-  }, [riskMode, daily, predictLoading, fetchKmaPredict]);
+  }, [riskMode, daily, predictLoading, predictError, fetchKmaPredict]);
 
-  const level = levelForScale(view.scale);
+  const level =
+    mapMode === "satellite"
+      ? levelForKakaoZoom(satView.level)
+      : levelForScale(view.scale);
   const activeLayer =
     level === "sido"
       ? layers.sido
@@ -362,6 +392,9 @@ export function KoreaSvgMap({
   const activePredict = riskMode === "scenario" ? scenario : daily;
   const activeByCode = riskMode === "scenario" ? scenarioByCode : dailyByCode;
   const isPredictMode = riskMode === "daily" || riskMode === "scenario";
+  const blankDailyMap = riskMode === "daily" && !daily;
+  const blankPredictMap =
+    (riskMode === "daily" && !daily) || (riskMode === "scenario" && !scenario);
 
   /** 시도: 하위 시군구 평균 / 읍면동: 상위 시군구 */
   const scoreForRegion = useCallback(
@@ -415,10 +448,16 @@ export function KoreaSvgMap({
 
   const fillOf = useCallback(
     (r: AdminRegion, lvl: AdminLevel = level) => {
+      if (
+        (riskMode === "daily" && !daily) ||
+        (riskMode === "scenario" && !scenario)
+      ) {
+        return "#ffffff";
+      }
       const v = colorProb(r, lvl);
       return isPredictMode ? probToColor(v) : intensityToColor(v);
     },
-    [colorProb, isPredictMode, level],
+    [colorProb, daily, isPredictMode, level, riskMode, scenario],
   );
 
   const parentSigungu = useMemo(() => {
@@ -512,7 +551,7 @@ export function KoreaSvgMap({
     if (mapModeRef.current === "satellite") {
       setSatView((v) => ({
         ...v,
-        level: Math.max(1, Math.min(14, v.level - direction)),
+        level: Math.max(1, Math.min(KAKAO_MAX_LEVEL, v.level - direction)),
       }));
       setSatSyncKey((k) => k + 1);
       return;
@@ -562,9 +601,8 @@ export function KoreaSvgMap({
 
   const onPointerDown = useCallback(
     (e: React.PointerEvent) => {
-      // 좌클릭/터치만 · 확대된 상태에서만 팬 준비
+      // 좌클릭/터치만 · 짧은 클릭은 path onClick 으로 전달
       if (e.button !== 0) return;
-      if (viewRef.current.scale <= MIN_SCALE + 0.001) return;
       // 캡처는 하지 않음 — 짧은 클릭이 path onClick 으로 전달돼야 함
       panRef.current = {
         pointerId: e.pointerId,
@@ -905,9 +943,13 @@ export function KoreaSvgMap({
 
   const onSatViewChange = useCallback(
     (v: SatelliteViewState) => {
-      setSatView(v);
+      const next = {
+        center: clampToKorea(v.center),
+        level: Math.min(KAKAO_MAX_LEVEL, Math.max(1, v.level)),
+      };
+      setSatView(next);
       const [w, h] = layers.sido.viewBox;
-      setView(kakaoToSvgView(v.center, v.level, w, h));
+      setView(kakaoToSvgView(next.center, next.level, w, h));
     },
     [layers.sido.viewBox],
   );
@@ -938,7 +980,7 @@ export function KoreaSvgMap({
     [fillOf, level],
   );
 
-  const satPaletteKey = `${riskMode}:${daily?.predict_date ?? ""}:${scenario?.predict_date ?? ""}:${level}`;
+  const satPaletteKey = `${riskMode}:${daily?.predict_date ?? ""}:${scenario?.predict_date ?? ""}:${level}:${blankPredictMap ? "blank" : "filled"}`;
 
   const probLabel =
     riskMode === "daily"
@@ -962,9 +1004,7 @@ export function KoreaSvgMap({
   );
 
   const sidebarProps = {
-    mapMode,
     riskMode,
-    zoomLabel,
     predictLoading,
     mountainIndex: mapData.mountains,
     sidoRegions: layers.sido.regions,
@@ -983,10 +1023,6 @@ export function KoreaSvgMap({
       setSatSyncKey((k) => k + 1);
       setMobileNavOpen(false);
     },
-    onMapMode: (mode: MapDisplayMode) => {
-      switchMapMode(mode);
-      setMobileNavOpen(false);
-    },
     onRiskMode: (mode: RiskMode) => {
       if (mode === "daily") {
         setRiskMode("daily");
@@ -999,8 +1035,6 @@ export function KoreaSvgMap({
       }
       setMobileNavOpen(false);
     },
-    onZoomIn: () => stepZoom(1),
-    onZoomOut: () => stepZoom(-1),
   };
 
   const [vbW, vbH] = layers.sido.viewBox;
@@ -1067,7 +1101,7 @@ export function KoreaSvgMap({
           <div
             ref={stageRef}
             className={`map-stage absolute inset-0 ${
-              mapMode === "choropleth" && view.scale > MIN_SCALE + 0.001
+              mapMode === "choropleth"
                 ? isPanning
                   ? "cursor-grabbing"
                   : "cursor-grab"
@@ -1081,7 +1115,9 @@ export function KoreaSvgMap({
             {mapMode === "satellite" ? (
               <SatelliteMap
                 regions={activeLayer.regions}
-                outlineRegions={undefined}
+                outlineRegions={
+                  level === "emd" ? layers.sigungu.regions : undefined
+                }
                 level={level}
                 colorOf={satColorOf}
                 paletteKey={satPaletteKey}
@@ -1133,21 +1169,23 @@ export function KoreaSvgMap({
                       d={r.d}
                       fill={fill}
                       fillOpacity={
-                        isSelected
+                        blankPredictMap
                           ? 1
-                          : dimOthers
-                            ? isHovered
-                              ? SELECT_DIM.fillHover
-                              : isEmd
-                                ? SELECT_DIM.fillEmd
-                                : SELECT_DIM.fill
-                            : active
-                              ? 0.98
-                              : isEmd
-                                ? 0.9
-                                : 0.88
+                          : isSelected
+                            ? 1
+                            : dimOthers
+                              ? isHovered
+                                ? SELECT_DIM.fillHover
+                                : isEmd
+                                  ? SELECT_DIM.fillEmd
+                                  : SELECT_DIM.fill
+                              : active
+                                ? 0.98
+                                : isEmd
+                                  ? 0.9
+                                  : 0.88
                       }
-                      stroke="#fffefb"
+                      stroke={blankPredictMap ? "#c5cdd6" : "#fffefb"}
                       strokeWidth={
                         isEmd
                           ? Math.max(0.08, 1.15 / view.scale)
@@ -1169,11 +1207,7 @@ export function KoreaSvgMap({
                       strokeLinejoin="round"
                       strokeLinecap="round"
                       className={
-                        isPanning
-                          ? "cursor-grabbing"
-                          : view.scale > MIN_SCALE + 0.001
-                            ? "cursor-grab"
-                            : "cursor-pointer"
+                        isPanning ? "cursor-grabbing" : "cursor-grab"
                       }
                       onMouseEnter={() => setHovered(r)}
                       onMouseLeave={() =>
@@ -1315,6 +1349,28 @@ export function KoreaSvgMap({
             )}
           </div>
 
+          {blankDailyMap && (predictLoading || predictError) && (
+            <div className="pointer-events-none absolute inset-0 z-30 grid place-items-center px-6">
+              <div className="max-w-sm rounded-2xl bg-white px-5 py-4 text-center shadow-[var(--shadow-card)] ring-1 ring-[#e5e7eb]">
+                {predictLoading ? (
+                  <p className="text-sm font-medium text-[#374151]">
+                    당일 예측을 불러오는 중입니다…
+                  </p>
+                ) : (
+                  <>
+                    <p className="text-sm font-semibold text-[#111827]">
+                      당일 예측에 실패했습니다
+                    </p>
+                    <p className="mt-1.5 text-[13px] leading-snug text-[#6b7280]">
+                      기상청 관측을 불러오지 못했습니다. 강제 새로고침으로 다시
+                      시도해 주세요.
+                    </p>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
+
           <div className="pointer-events-none absolute top-4 right-4 left-4 z-20 flex items-start justify-between gap-3">
             <div className="pointer-events-none space-y-2">
               <div className="rounded-2xl bg-white/95 px-3.5 py-2.5 text-sm shadow-[var(--shadow-card)] ring-1 ring-[#e5e7eb]">
@@ -1350,44 +1406,52 @@ export function KoreaSvgMap({
                             ? `${parentSigungu.name} · ${m.province_name || m.province}`
                             : m.province_name || m.province}
                         </p>
-                        <p className="mt-1 text-sm">
-                          {isPredictMode && p != null ? (
-                            <>
+                        {riskMode === "scenario" ? (
+                          p != null ? (
+                            <p className="mt-1 text-sm">
                               <span className="block text-[11px] leading-snug text-[#6b7280]">
                                 {modeLabel}
                               </span>
                               <span className="text-2xl font-bold text-[#e03131]">
                                 {(p * 100).toFixed(1)}
                               </span>
-                              <span className="ml-2 text-xs text-[#6b7280]">
-                                과거 {m.fire_count.toLocaleString()}건
-                              </span>
-                            </>
-                          ) : (
-                            <>
-                              <span className="block text-[11px] leading-snug text-[#6b7280]">
-                                과거 산불 발생
-                              </span>
-                              <span className="text-2xl font-bold text-[#e03131]">
-                                {m.fire_count.toLocaleString()}
-                              </span>
-                              <span className="ml-1 text-xs text-[#6b7280]">
-                                건
-                              </span>
-                            </>
-                          )}
-                        </p>
+                            </p>
+                          ) : null
+                        ) : (
+                          <p className="mt-1 text-sm">
+                            {isPredictMode && p != null ? (
+                              <>
+                                <span className="block text-[11px] leading-snug text-[#6b7280]">
+                                  {modeLabel}
+                                </span>
+                                <span className="text-2xl font-bold text-[#e03131]">
+                                  {(p * 100).toFixed(1)}
+                                </span>
+                                <span className="ml-2 text-xs text-[#6b7280]">
+                                  과거 {m.fire_count.toLocaleString()}건
+                                </span>
+                              </>
+                            ) : (
+                              <>
+                                <span className="block text-[11px] leading-snug text-[#6b7280]">
+                                  과거 산불 발생
+                                </span>
+                                <span className="text-2xl font-bold text-[#e03131]">
+                                  {m.fire_count.toLocaleString()}
+                                </span>
+                                <span className="ml-1 text-xs text-[#6b7280]">
+                                  건
+                                </span>
+                              </>
+                            )}
+                          </p>
+                        )}
                         {isPredictMode && activePredict?.predict_date && (
                           <p className="mt-0.5 text-[10px] text-[#9ca3af]">
                             예측일 {activePredict.predict_date}
-                            {activePredict.weather_source
-                              ? ` · ${activePredict.weather_source}`
-                              : riskMode === "daily"
-                                ? " · 기상청 ASOS"
-                                : ""}
                           </p>
                         )}
-                        {predictError && isPredictMode && (
+                        {predictError && isPredictMode && !blankPredictMap && (
                           <p className="mt-0.5 text-[10px] text-[#e03131]">
                             {predictError}
                           </p>
@@ -1400,14 +1464,22 @@ export function KoreaSvgMap({
             </div>
 
             <div className="pointer-events-auto flex shrink-0 flex-col items-end gap-2">
+              <MapChrome
+                mapMode={mapMode}
+                onMapMode={switchMapMode}
+                onLogin={() => setAuthModal("login")}
+                onRegister={() => setAuthModal("register")}
+              />
               {riskMode === "daily" && (
                 <DailyPredictForm
                   daily={daily}
+                  loading={predictLoading}
+                  error={daily ? predictError : null}
                   selectedCode={selectedAdmin?.code ?? null}
                   selectedName={selectedAdmin?.name ?? null}
                   selectedLevel={level}
-                  onPredicted={(data) => {
-                    setDaily(data);
+                  onRefresh={() => {
+                    void fetchKmaPredict(true);
                   }}
                 />
               )}
@@ -1473,7 +1545,6 @@ export function KoreaSvgMap({
               mlRiskRaw={mountainRisk.raw}
               riskMode={riskMode}
               predictDate={activePredict?.predict_date}
-              weatherSource={activePredict?.weather_source}
               predictLoading={predictLoading}
               predictError={predictError}
               onBack={() => {
@@ -1522,7 +1593,6 @@ export function KoreaSvgMap({
             mlRiskRaw={mountainRisk.raw}
             riskMode={riskMode}
             predictDate={activePredict?.predict_date}
-            weatherSource={activePredict?.weather_source}
             predictLoading={predictLoading}
             predictError={predictError}
             onBack={() => {
@@ -1563,6 +1633,12 @@ export function KoreaSvgMap({
           />
         </div>
       )}
+
+      <AuthModal
+        open={authModal != null}
+        mode={authModal ?? "login"}
+        onClose={() => setAuthModal(null)}
+      />
     </div>
   );
 }

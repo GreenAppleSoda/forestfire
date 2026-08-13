@@ -23,6 +23,7 @@ export type DailyRiskRegion = {
 
 export type DailyRiskDto = {
   predict_date: unknown;
+  observed_at?: unknown;
   weather_source: WeatherSource;
   sample_weather: SampleWeather;
   n_regions: number;

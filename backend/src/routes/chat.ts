@@ -28,7 +28,8 @@ const SYSTEM_PROMPT = `당신은 "산불맵(Wildfire Atlas)" 서비스의 안내
 
 이용 안내:
 - 비로그인 사용자도 챗봇 이용과 산불 위험 지도·당일/시나리오 예측 열람이 가능합니다.
-- 회원·등급·파일 다운로드·정식 보고서 기능은 추후 연동 예정입니다. 관련 질문에는 지도/예측 이용 방법을 안내하세요.
+- 회원 구독 등급: BASIC(기본 열람), PLUS(엑셀·PDF 등 다운로드 예정), PREMIUM(정식 보고서 예정).
+- 파일 다운로드·정식 보고서 생성 UI는 준비 중입니다. 등급·이용 방법 질문에는 위 안내를 바탕으로 답하세요.
 
 사용자가 특정 지역(시군구)의 오늘 산불 위험도를 물으면 get_wildfire_risk 도구를 사용해
 실제 예측값을 조회한 뒤 답하세요. 도구 결과가 없으면 모른다고 답하고 추측하지 마세요.
@@ -207,14 +208,12 @@ router.post("/chat", async (req, res) => {
       await saveMessage(sessionId, "user", message);
     }
 
-    // 모델이 로그인 여부를 알고 안내할 수 있도록 질문 앞에 붙임 (인증 연동 전엔 항상 게스트)
+    // 모델이 로그인·구독 등급을 알고 안내할 수 있도록 질문 앞에 붙임
     const displayName = req.user
-      ? (req.user.nickname || req.user.name || "회원")
+      ? req.user.nickname || req.user.name || "회원"
       : null;
     const userContext = displayName
-      ? `현재 로그인 사용자: ${displayName}${
-          req.user?.grade != null ? ` (${req.user.grade}등급)` : ""
-        }`
+      ? `현재 로그인 사용자: ${displayName} (구독 ${req.user?.subscriptionTier || "BASIC"}, 권한등급 ${req.user?.grade ?? 3})`
       : "현재 비로그인(게스트) 사용자입니다.";
 
     // Gemini contents 형식: role 은 "user" | "model".

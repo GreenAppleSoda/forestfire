@@ -38,6 +38,14 @@ body {
   box-sizing: border-box;
 }
 
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
 /* 지도 영역에서 트랙패드/휠 기본 페이지 스크롤 방지 */
 .map-stage {
   touch-action: none;

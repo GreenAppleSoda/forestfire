@@ -4,6 +4,7 @@
  * - 장시간 예측/동기화 타임아웃을 넉넉히 두고
  * - 연결 실패 시에도 항상 JSON 에러를 돌려준다
  *   (rewrite 실패 시 plain "Internal Server Error" → 프론트 JSON 파싱 에러 방지)
+ * - 로그인 쿠키(Cookie / Set-Cookie)를 양방향으로 전달
  */
 export const runtime = "nodejs";
 export const maxDuration = 180;
@@ -30,6 +31,8 @@ async function proxy(
     const headers = new Headers();
     const contentType = req.headers.get("content-type");
     if (contentType) headers.set("content-type", contentType);
+    const cookie = req.headers.get("cookie");
+    if (cookie) headers.set("cookie", cookie);
 
     const method = req.method.toUpperCase();
     const init: RequestInit = {
@@ -48,6 +51,20 @@ async function proxy(
     const upstreamCt = upstream.headers.get("content-type");
     if (upstreamCt) outHeaders.set("content-type", upstreamCt);
 
+    // Node fetch: getSetCookie() 로 복수 Set-Cookie 보존
+    const setCookies =
+      typeof upstream.headers.getSetCookie === "function"
+        ? upstream.headers.getSetCookie()
+        : [];
+    if (setCookies.length > 0) {
+      for (const c of setCookies) {
+        outHeaders.append("set-cookie", c);
+      }
+    } else {
+      const single = upstream.headers.get("set-cookie");
+      if (single) outHeaders.set("set-cookie", single);
+    }
+
     return new Response(body, {
       status: upstream.status,
       headers: outHeaders,
@@ -60,7 +77,6 @@ async function proxy(
     const disconnected = /ECONNRESET|ECONNREFUSED|fetch failed|socket hang up/i.test(
       msg,
     );
-    // HMR/재컴파일 중 빈 응답 파싱 실패 등 — plain 500 대신 JSON으로 돌려 프론트 안내가 가능하게 함
     const transient =
       e instanceof SyntaxError ||
       /Unexpected end of JSON|JSON\.parse/i.test(msg);

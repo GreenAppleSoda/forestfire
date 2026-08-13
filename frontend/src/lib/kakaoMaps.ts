@@ -10,6 +10,8 @@ export type KakaoMap = {
   getCenter(): KakaoLatLng;
   setLevel(level: number, options?: { animate?: boolean }): void;
   getLevel(): number;
+  setMinLevel(level: number): void;
+  setMaxLevel(level: number): void;
   setMapTypeId(typeId: number | string): void;
   relayout(): void;
   setBounds(bounds: KakaoLatLngBounds, padding?: number): void;
@@ -37,6 +39,8 @@ export type KakaoMapsNamespace = {
     options: {
       center: KakaoLatLng;
       level: number;
+      minLevel?: number;
+      maxLevel?: number;
       mapTypeId?: number | string;
     },
   ) => KakaoMap;

@@ -11,7 +11,6 @@ type Props = {
   mlRiskRaw?: number | null;
   riskMode: RiskMode;
   predictDate?: string;
-  weatherSource?: string;
   predictLoading?: boolean;
   predictError?: string | null;
   onBack: () => void;
@@ -26,7 +25,6 @@ export function MountainSearchResult({
   mlRiskRaw,
   riskMode,
   predictDate,
-  weatherSource,
   predictLoading,
   predictError,
   onBack,
@@ -122,7 +120,6 @@ export function MountainSearchResult({
               {isPredict && predictDate && !predictLoading && (
                 <p className="mt-0.5 text-[11px] text-[#9ca3af]">
                   예측일 {predictDate}
-                  {weatherSource ? ` · ${weatherSource}` : ""}
                 </p>
               )}
               {predictError && (

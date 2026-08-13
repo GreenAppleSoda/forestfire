@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Noto_Sans_KR, Outfit } from "next/font/google";
 import { ChatWidget } from "@/components/ChatWidget";
+import { AuthProvider } from "@/lib/authContext";
 import "./globals.css";
 
 const display = Outfit({
@@ -29,8 +30,10 @@ export default function RootLayout({
   return (
     <html lang="ko">
       <body className={`${display.variable} ${sans.variable} antialiased`}>
-        {children}
-        <ChatWidget />
+        <AuthProvider>
+          {children}
+          <ChatWidget />
+        </AuthProvider>
       </body>
     </html>
   );

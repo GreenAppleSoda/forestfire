@@ -98,7 +98,8 @@ npm run dev
 | `ml-service/.env` | `FOREST_FIRE_SERVICE_KEY` | (선택) 레거시 OpenAPI 스크립트용 |
 | `backend/.env` | `PORT`, `FRONTEND_ORIGIN`, `ML_SERVICE_URL`, `PREDICT_CACHE_MS`, `DATA_DIR` | CORS · Flask URL · 예측 캐시 · 지도 데이터 폴더 |
 | `backend/.env` | `GEMINI_API_KEY`, `GEMINI_MODEL`(선택) | 안내 챗봇 (`/api/chat`) |
-| `backend/.env` | `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME` | (선택) 챗봇 대화 영속화 — ml-service 와 동일 MariaDB |
+| `backend/.env` | `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME` | 회원·챗봇 영속화 (ml-service 와 동일 MariaDB) |
+| `backend/.env` | `SESSION_SECRET`, `SESSION_DAYS`(선택) | 로그인 세션 쿠키 서명 |
 | `frontend/.env.local` | `NEXT_PUBLIC_KAKAO_MAP_KEY`, `EXPRESS_URL` | 카카오 JS 키 · Express 주소 (`http://127.0.0.1:4000` 권장) |
 
 카카오 개발자 콘솔에서 **JavaScript 키**를 쓰고, Web 플랫폼에 `http://localhost:3000` 을 등록해야 위성 지도가 표시됩니다.

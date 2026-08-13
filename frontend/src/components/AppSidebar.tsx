@@ -3,7 +3,6 @@
 import type {
   AdminLevel,
   AdminRegion,
-  MapDisplayMode,
   MountainInfo,
   RiskMode,
 } from "@/lib/types";
@@ -12,9 +11,7 @@ import { MountainSearch } from "./MountainSearch";
 import { RegionSearch } from "./RegionSearch";
 
 type Props = {
-  mapMode: MapDisplayMode;
   riskMode: RiskMode;
-  zoomLabel: string;
   predictLoading?: boolean;
   mountainIndex?: Record<string, MountainInfo>;
   sidoRegions?: AdminRegion[];
@@ -22,22 +19,11 @@ type Props = {
   syncSlot?: ReactNode;
   onSelectMountain: (mountain: MountainInfo) => void;
   onSelectRegion: (region: AdminRegion, level: AdminLevel) => void;
-  onMapMode: (mode: MapDisplayMode) => void;
   onRiskMode: (mode: RiskMode) => void;
-  onZoomIn: () => void;
-  onZoomOut: () => void;
   onGoHome?: () => void;
   onCloseMobile?: () => void;
   mobile?: boolean;
 };
-
-const MAP_ACTIONS: {
-  id: MapDisplayMode;
-  label: string;
-}[] = [
-  { id: "choropleth", label: "행정구역" },
-  { id: "satellite", label: "위성" },
-];
 
 const RISK_ACTIONS: {
   id: RiskMode;
@@ -62,7 +48,7 @@ function ModeButton({
     <button
       type="button"
       onClick={onClick}
-      className={`w-full rounded-xl px-3.5 py-2.5 text-left text-[13px] font-medium transition ${
+      className={`w-full rounded-xl px-3.5 py-2.5 text-center text-[13px] font-medium transition ${
         active
           ? "bg-[#111827] text-white shadow-sm"
           : "bg-white text-[#374151] ring-1 ring-[#e5e7eb] hover:bg-[#f9fafb]"
@@ -74,9 +60,7 @@ function ModeButton({
 }
 
 export function AppSidebar({
-  mapMode,
   riskMode,
-  zoomLabel,
   predictLoading,
   mountainIndex,
   sidoRegions,
@@ -84,10 +68,7 @@ export function AppSidebar({
   syncSlot,
   onSelectMountain,
   onSelectRegion,
-  onMapMode,
   onRiskMode,
-  onZoomIn,
-  onZoomOut,
   onGoHome,
   onCloseMobile,
   mobile,
@@ -142,18 +123,6 @@ export function AppSidebar({
 
       <div className="min-h-0 flex-1 space-y-2 overflow-y-auto px-4 py-4">
         <p className="px-1 text-[11px] font-semibold tracking-[0.12em] text-[#9ca3af] uppercase">
-          지도 모드
-        </p>
-        {MAP_ACTIONS.map((a) => (
-          <ModeButton
-            key={a.id}
-            active={mapMode === a.id}
-            label={a.label}
-            onClick={() => onMapMode(a.id)}
-          />
-        ))}
-
-        <p className="mt-4 px-1 text-[11px] font-semibold tracking-[0.12em] text-[#9ca3af] uppercase">
           위험 표시
         </p>
         {RISK_ACTIONS.map((a) => (
@@ -168,35 +137,6 @@ export function AppSidebar({
             onClick={() => onRiskMode(a.id)}
           />
         ))}
-
-        <div className="mt-4 rounded-xl bg-[#f9fafb] px-3.5 py-3 ring-1 ring-[#e5e7eb]">
-          <p className="text-[11px] font-semibold tracking-[0.12em] text-[#9ca3af] uppercase">
-            지도 설정
-          </p>
-          <div className="mt-2 flex items-center justify-between gap-2">
-            <span className="text-sm font-medium tabular-nums text-[#111827]">
-              {zoomLabel}
-            </span>
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
-                onClick={onZoomOut}
-                className="flex h-8 w-8 items-center justify-center rounded-lg bg-white text-lg leading-none text-[#374151] ring-1 ring-[#e5e7eb] transition hover:bg-[#f3f4f6]"
-                aria-label="축소"
-              >
-                −
-              </button>
-              <button
-                type="button"
-                onClick={onZoomIn}
-                className="flex h-8 w-8 items-center justify-center rounded-lg bg-white text-lg leading-none text-[#374151] ring-1 ring-[#e5e7eb] transition hover:bg-[#f3f4f6]"
-                aria-label="확대"
-              >
-                +
-              </button>
-            </div>
-          </div>
-        </div>
       </div>
 
       {syncSlot ? (

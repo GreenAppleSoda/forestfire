@@ -11,6 +11,7 @@ import { whitelistDailyRisk } from "./whitelist.js";
 type PredictCache = { at: number; data: DailyRiskDto | null };
 
 let predictCache: PredictCache | null = null;
+let predictInFlight: Promise<PredictResult> | null = null;
 
 function setPredictCache(data: DailyRiskDto | null): void {
   predictCache = { at: Date.now(), data };
@@ -78,35 +79,49 @@ export async function runPredictDaily(
     };
   }
 
-  const { status, json } = await callFlaskPredict({
-    source,
-    force,
-    date: body.date,
-    weather: body.weather,
-    temp_avg: body.temp_avg,
-    precip: body.precip,
-    wind_avg: body.wind_avg,
-    humidity_avg: body.humidity_avg,
+  if (!force && !hasManual && source === "kma" && predictInFlight) {
+    return predictInFlight;
+  }
+
+  const job = (async (): Promise<PredictResult> => {
+    const { status, json } = await callFlaskPredict({
+      source,
+      force,
+      date: body.date,
+      weather: body.weather,
+      temp_avg: body.temp_avg,
+      precip: body.precip,
+      wind_avg: body.wind_avg,
+      humidity_avg: body.humidity_avg,
+    });
+
+    if (!json.ok || status >= 400) {
+      console.error(
+        "[predict/daily] ml-service error",
+        status,
+        json.error,
+        json.detail,
+      );
+      return {
+        ok: false,
+        error: "예측에 실패했습니다. 잠시 후 다시 시도해 주세요.",
+        status: 502,
+      };
+    }
+
+    const data = whitelistDailyRisk(json.data);
+    if (!hasManual && source === "kma") {
+      setPredictCache(data);
+    }
+
+    return { ok: true, data, cached: false, status: 200 };
+  })().finally(() => {
+    predictInFlight = null;
   });
 
-  if (!json.ok || status >= 400) {
-    console.error(
-      "[predict/daily] ml-service error",
-      status,
-      json.error,
-      json.detail,
-    );
-    return {
-      ok: false,
-      error: "예측에 실패했습니다. 잠시 후 다시 시도해 주세요.",
-      status: 502,
-    };
-  }
-
-  const data = whitelistDailyRisk(json.data);
   if (!hasManual && source === "kma") {
-    setPredictCache(data);
+    predictInFlight = job;
   }
 
-  return { ok: true, data, cached: false, status: 200 };
+  return job;
 }

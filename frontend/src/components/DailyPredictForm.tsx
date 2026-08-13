@@ -1,16 +1,17 @@
 "use client";
 
 import type { AdminLevel, DailyMlRisk, SigunguMlRegion } from "@/lib/types";
-import { readApiJson } from "@/lib/apiJson";
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 
 type Props = {
-  onPredicted: (data: DailyMlRisk) => void;
   daily?: DailyMlRisk | null;
+  loading?: boolean;
+  error?: string | null;
   /** 지도에서 클릭한 행정구역 코드 */
   selectedCode?: string | null;
   selectedName?: string | null;
   selectedLevel?: AdminLevel;
+  onRefresh: () => void;
 };
 
 type Wx = {
@@ -78,7 +79,30 @@ function resolveRegionWeather(
   };
 }
 
-function WxStat({
+function RefreshIcon({ spinning }: { spinning?: boolean }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className={`h-3.5 w-3.5 ${spinning ? "animate-spin" : ""}`}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="M21 12a9 9 0 1 1-2.2-5.8" />
+      <path d="M21 3v6h-6" />
+    </svg>
+  );
+}
+
+function observedLabel(daily: DailyMlRisk | null | undefined): string {
+  const stamp = daily?.observed_at?.trim() || daily?.predict_date?.trim();
+  return stamp ? `관측일 : ${stamp}` : "관측일 : —";
+}
+
+function WxRow({
   label,
   value,
   unit,
@@ -88,128 +112,72 @@ function WxStat({
   unit?: string;
 }) {
   return (
-    <div className="rounded-xl bg-[#f9fafb] px-2.5 py-2">
-      <p className="text-[10px] font-medium text-[#9ca3af]">{label}</p>
-      <p className="mt-0.5 text-[15px] font-semibold tabular-nums text-[#111827]">
+    <div className="flex items-baseline justify-between gap-2">
+      <span className="text-[11px] text-[#6b7280]">{label}</span>
+      <span className="text-[12px] font-semibold tabular-nums text-[#111827]">
         {value}
         {unit ? (
-          <span className="ml-0.5 text-[11px] font-medium text-[#6b7280]">
+          <span className="ml-0.5 text-[10px] font-medium text-[#6b7280]">
             {unit}
           </span>
         ) : null}
-      </p>
+      </span>
     </div>
   );
 }
 
 export function DailyPredictForm({
-  onPredicted,
   daily,
+  loading,
+  error,
   selectedCode,
   selectedName,
   selectedLevel,
+  onRefresh,
 }: Props) {
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [fetchNote, setFetchNote] = useState<string | null>(null);
-
   const weather = useMemo(
     () => resolveRegionWeather(daily, selectedCode, selectedName, selectedLevel),
     [daily, selectedCode, selectedName, selectedLevel],
   );
 
-  const run = async (force = false) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await fetch("/api/predict/daily", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ source: "kma", force }),
-      });
-      const json = await readApiJson(res);
-      if (!res.ok || !json.ok) {
-        throw new Error(json.error || "예측 요청 실패");
-      }
-      const data = json.data as DailyMlRisk;
-      onPredicted(data);
-      setFetchNote(
-        [
-          data.predict_date ? `관측일 ${data.predict_date}` : null,
-          data.weather_source || null,
-          json.cached ? "캐시" : "신규 조회",
-        ]
-          .filter(Boolean)
-          .join(" · "),
-      );
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const statusLine = useMemo(() => {
-    if (fetchNote) return fetchNote;
-    if (!daily?.predict_date) return null;
-    return [
-      daily.predict_date ? `관측일 ${daily.predict_date}` : null,
-      daily.weather_source || null,
-    ]
-      .filter(Boolean)
-      .join(" · ");
-  }, [fetchNote, daily]);
-
   const fmt = (v: number | null | undefined, digits = 1) =>
     v == null || Number.isNaN(v) ? "—" : v.toFixed(digits);
 
   return (
-    <div className="pointer-events-auto w-[280px] rounded-2xl bg-white px-4 py-3.5 shadow-[var(--shadow-card)] ring-1 ring-[#e5e7eb]">
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-[12px] font-semibold text-[#111827]">실시간 기상</p>
-        {statusLine ? (
-          <p className="truncate text-[10px] text-[#9ca3af]">{statusLine}</p>
-        ) : null}
+    <div className="pointer-events-auto w-[168px] rounded-xl bg-white px-3 py-2.5 shadow-[var(--shadow-card)] ring-1 ring-[#e5e7eb]">
+      <p className="text-[10px] leading-snug text-[#9ca3af]">
+        지도를 클릭하면 해당 지역
+        <br />
+        기상이 표시됩니다.
+      </p>
+      <p className="mt-1.5 text-[10px] tabular-nums text-[#6b7280]">
+        {observedLabel(daily)}
+      </p>
+      <div className="mt-1.5 flex items-center justify-between gap-1">
+        <p className="text-[11px] font-semibold text-[#111827]">실시간 기상</p>
+        <button
+          type="button"
+          disabled={loading}
+          onClick={onRefresh}
+          title="강제 새로고침"
+          aria-label="강제 새로고침"
+          className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-[#6b7280] ring-1 ring-[#e5e7eb] transition hover:bg-[#f9fafb] hover:text-[#111827] disabled:opacity-50"
+        >
+          <RefreshIcon spinning={loading} />
+        </button>
       </div>
-      {weather ? (
-        <p className="mt-1 text-[11px] text-[#6b7280]">{weather.label}</p>
-      ) : (
-        <p className="mt-1 text-[11px] text-[#9ca3af]">
-          예측을 실행하면 기상이 표시됩니다.
-        </p>
-      )}
-
-      <div className="mt-3 grid grid-cols-2 gap-2">
-        <WxStat label="기온" value={fmt(weather?.temp_avg)} unit="°C" />
-        <WxStat label="습도" value={fmt(weather?.humidity_avg, 0)} unit="%" />
-        <WxStat label="강수" value={fmt(weather?.precip)} unit="mm" />
-        <WxStat label="풍속" value={fmt(weather?.wind_avg)} unit="m/s" />
+      <p className="text-[10px] text-[#6b7280]">
+        {weather?.label ?? "예측이 끝나면 기상이 표시됩니다."}
+      </p>
+      <div className="mt-1.5 space-y-0.5">
+        <WxRow label="기온" value={fmt(weather?.temp_avg)} unit="°C" />
+        <WxRow label="습도" value={fmt(weather?.humidity_avg, 0)} unit="%" />
+        <WxRow label="강수" value={fmt(weather?.precip)} unit="mm" />
+        <WxRow label="풍속" value={fmt(weather?.wind_avg)} unit="m/s" />
       </div>
-
-      <button
-        type="button"
-        disabled={loading}
-        onClick={() => run(false)}
-        className="mt-3 w-full rounded-xl bg-[#111827] px-3 py-2.5 text-[12px] font-semibold text-white transition hover:bg-[#1f2937] disabled:opacity-50"
-      >
-        {loading ? "기상 조회·예측 중…" : "실시간 기상으로 예측"}
-      </button>
-      <button
-        type="button"
-        disabled={loading}
-        onClick={() => run(true)}
-        className="mt-1.5 w-full rounded-xl px-3 py-1.5 text-[11px] font-medium text-[#6b7280] ring-1 ring-[#e5e7eb] transition hover:bg-[#f9fafb] disabled:opacity-50"
-      >
-        강제 새로고침
-      </button>
-      {daily && !selectedCode && (
-        <p className="mt-2 text-[10px] leading-snug text-[#9ca3af]">
-          지도를 클릭하면 해당 지역 기상이 표시됩니다.
-        </p>
-      )}
-      {error && (
-        <p className="mt-2 text-[10px] leading-snug text-[#e03131]">{error}</p>
-      )}
+      {error ? (
+        <p className="mt-1.5 text-[10px] leading-snug text-[#e03131]">{error}</p>
+      ) : null}
     </div>
   );
 }

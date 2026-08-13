@@ -26,6 +26,10 @@ export function whitelistDailyRisk(raw: unknown): DailyRiskDto | null {
 
   return {
     predict_date: obj.predict_date ?? null,
+    observed_at:
+      typeof obj.observed_at === "string" && obj.observed_at.trim()
+        ? obj.observed_at.trim()
+        : null,
     weather_source: publicWeatherSource(obj.weather_source),
     sample_weather: {
       temp_avg: (sample.temp_avg as number | null | undefined) ?? null,

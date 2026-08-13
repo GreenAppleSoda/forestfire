@@ -1,6 +1,7 @@
 "use client";
 
 import { readApiJson } from "@/lib/apiJson";
+import { useAuth } from "@/lib/authContext";
 import { useEffect, useRef, useState } from "react";
 
 type ChatMsg = { role: "user" | "assistant"; text: string };
@@ -17,8 +18,9 @@ function getSessionId(): string {
   return id;
 }
 
-/** 전 페이지 공통 플로팅 안내 챗봇. 게스트(비로그인) 이용 가능. */
+/** 전 페이지 공통 플로팅 안내 챗봇. 게스트·로그인 모두 이용 가능. */
 export function ChatWidget() {
+  const { user } = useAuth();
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<ChatMsg[]>([]);
@@ -58,6 +60,10 @@ export function ChatWidget() {
     }
   };
 
+  const subtitle = user
+    ? `${user.nickname || user.name} · ${user.subscriptionTier}`
+    : "비로그인 이용 가능";
+
   return (
     <div className="pointer-events-none fixed bottom-5 right-5 z-[60] flex flex-col items-end gap-2">
       {open && (
@@ -65,7 +71,7 @@ export function ChatWidget() {
           <div className="flex items-center justify-between border-b border-[#e5e7eb] bg-[#f9fafb] px-3 py-2.5">
             <div>
               <p className="text-[12px] font-semibold text-[#111827]">산불맵 챗봇</p>
-              <p className="text-[10px] text-[#6b7280]">비로그인 이용 가능</p>
+              <p className="text-[10px] text-[#6b7280]">{subtitle}</p>
             </div>
             <button
               type="button"
@@ -81,7 +87,7 @@ export function ChatWidget() {
             {messages.length === 0 && (
               <p className="text-[11px] leading-snug text-[#9ca3af]">
                 예: &ldquo;오늘 강릉 산불 위험도 어때?&rdquo;, &ldquo;당일 예측은 어떻게
-                봐?&rdquo;, &ldquo;시나리오 예측이 뭐야?&rdquo;
+                봐?&rdquo;, &ldquo;PLUS 등급은 뭐가 다른가요?&rdquo;
               </p>
             )}
             {messages.map((m, i) => (

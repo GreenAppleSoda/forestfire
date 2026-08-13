@@ -27,9 +27,20 @@ export const DB_PASSWORD = process.env.DB_PASSWORD || "";
 export const DB_NAME = (process.env.DB_NAME || "").trim();
 
 /** Google Gemini — 안내 챗봇 (미설정이면 /api/chat → 503) */
-export const GEMINI_API_KEY = (process.env.GEMINI_API_KEY || "").trim();
+export const GEMINI_API_KEY = (process.env.GEMINI_API_KEY || "")
+  .trim()
+  .replace(/^['"]|['"]$/g, "");
 export const GEMINI_MODEL =
-  (process.env.GEMINI_MODEL || "").trim() || "gemini-2.0-flash";
+  (process.env.GEMINI_MODEL || "").trim().replace(/^['"]|['"]$/g, "") ||
+  "gemini-2.5-flash";
+
+/** 로그인 세션 쿠키 서명 비밀값 (미설정 시 개발용 기본값 — 배포 전 반드시 변경) */
+export const SESSION_SECRET =
+  (process.env.SESSION_SECRET || "").trim() ||
+  "dev-only-forestfire-session-secret-change-me";
+export const SESSION_COOKIE = "ff_session";
+export const SESSION_DAYS = Number(process.env.SESSION_DAYS || 14);
+
 /**
  * backend 자체 지도 데이터 폴더 (frontend 폴더를 직접 읽지 않음).
  * etl(build_admin_layers · export_map_data · compress_web_data ·

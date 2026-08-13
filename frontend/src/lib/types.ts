@@ -144,6 +144,7 @@ export type SigunguMlScores = {
 
 export type DailyMlRisk = SigunguMlScores & {
   predict_date: string;
+  observed_at?: string;
   weather_source: string;
   sample_weather?: Record<string, number | null>;
   n_regions?: number;

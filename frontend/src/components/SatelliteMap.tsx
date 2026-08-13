@@ -10,6 +10,8 @@ import {
   type KakaoPolygon,
 } from "@/lib/kakaoMaps";
 import {
+  KAKAO_MAX_LEVEL,
+  clampToKorea,
   svgPathToLatLngRings,
   svgToWgs84,
   type LatLng,
@@ -146,24 +148,37 @@ export function SatelliteMap({
         if (cancelled || !containerRef.current) return;
         mapsRef.current = maps;
         const { center, level: lv } = syncViewRef.current;
+        const start = clampToKorea(center);
         const map = new maps.Map(containerRef.current, {
-          center: new maps.LatLng(center.lat, center.lng),
-          level: lv,
+          center: new maps.LatLng(start.lat, start.lng),
+          level: Math.min(KAKAO_MAX_LEVEL, Math.max(1, lv)),
+          maxLevel: KAKAO_MAX_LEVEL,
           mapTypeId: maps.MapTypeId.HYBRID,
         });
+        map.setMaxLevel(KAKAO_MAX_LEVEL);
         mapRef.current = map;
         lastAppliedSyncKey.current = syncKey;
         setReady(true);
 
+        const constrainCenter = () => {
+          const c = map.getCenter();
+          const next = clampToKorea({ lat: c.getLat(), lng: c.getLng() });
+          if (next.lat === c.getLat() && next.lng === c.getLng()) return;
+          map.setCenter(new maps.LatLng(next.lat, next.lng));
+        };
+
         const emitView = () => {
           if (suppressIdleRef.current) return;
+          constrainCenter();
           const c = map.getCenter();
           handlersRef.current.onViewChange({
             center: { lat: c.getLat(), lng: c.getLng() },
-            level: map.getLevel(),
+            level: Math.min(KAKAO_MAX_LEVEL, map.getLevel()),
           });
         };
 
+        maps.event.addListener(map, "drag", constrainCenter);
+        maps.event.addListener(map, "zoom_changed", constrainCenter);
         maps.event.addListener(map, "idle", emitView);
         maps.event.addListener(map, "click", () => {
           // 폴리곤 click 과 동일 제스처에서 맵 click 이 연달아 옴 → 한 틱 뒤 확인
@@ -205,8 +220,9 @@ export function SatelliteMap({
     if (lastAppliedSyncKey.current === syncKey) return;
     lastAppliedSyncKey.current = syncKey;
     suppressIdleRef.current = true;
-    map.setCenter(new maps.LatLng(syncView.center.lat, syncView.center.lng));
-    map.setLevel(syncView.level);
+    const center = clampToKorea(syncView.center);
+    map.setCenter(new maps.LatLng(center.lat, center.lng));
+    map.setLevel(Math.min(KAKAO_MAX_LEVEL, Math.max(1, syncView.level)));
     map.relayout();
     window.setTimeout(() => {
       suppressIdleRef.current = false;
@@ -296,7 +312,7 @@ export function SatelliteMap({
           strokeOpacity: selected ? 1 : peerStroke.opacity,
           fillColor: fill,
           fillOpacity: selected ? 0.88 : baseOpacity,
-          zIndex: selected ? 10 : 2,
+          zIndex: selected ? 12 : level === "emd" ? 6 : 2,
         });
         maps.event.addListener(polygon, "click", () => {
           suppressMapClickRef.current = true;
@@ -312,7 +328,7 @@ export function SatelliteMap({
             strokeWeight: 2.6,
             strokeColor: "#1c1917",
             strokeOpacity: 1,
-            zIndex: 11,
+            zIndex: 13,
           });
         });
         maps.event.addListener(polygon, "mouseout", () => {
@@ -329,7 +345,7 @@ export function SatelliteMap({
             strokeWeight: isSel ? 2.8 : peer.weight,
             strokeColor: isSel ? "#1c1917" : peer.color,
             strokeOpacity: isSel ? 1 : peer.opacity,
-            zIndex: isSel ? 10 : 2,
+            zIndex: isSel ? 12 : level === "emd" ? 6 : 2,
           });
         });
         polygons.push(polygon);
@@ -339,7 +355,7 @@ export function SatelliteMap({
     polyRef.current = entries;
   }, [ready, displayRegions, level, selectedCode, paletteKey]);
 
-  // 시군구 외곽 (읍면동) — 생성은 레이어 변경 시만
+  // 시군구 색 레이어 (읍면동 줌) — 포커스된 시군구는 읍면동이 위에 보이도록 채우기만 끔
   useEffect(() => {
     const map = mapRef.current;
     const maps = mapsRef.current;
@@ -353,6 +369,7 @@ export function SatelliteMap({
     for (const region of outlineRegions) {
       if (!region.d) continue;
       const rings = svgPathToLatLngRings(region.d);
+      const fill = handlersRef.current.colorOf(region);
       for (const ring of rings) {
         if (ring.length < 3) continue;
         const path = ring.map((p) => new maps.LatLng(p.lat, p.lng));
@@ -362,22 +379,33 @@ export function SatelliteMap({
           strokeWeight: 1.2,
           strokeColor: "#ffffff",
           strokeOpacity: 0.95,
-          fillColor: "#000000",
-          fillOpacity: 0.01,
-          zIndex: 3,
+          fillColor: fill,
+          fillOpacity: 0.78,
+          zIndex: 2,
         });
         (polygon as KakaoPolygon & { __sigunguCode?: string }).__sigunguCode =
           region.code;
         maps.event.addListener(polygon, "mouseover", () => {
           setFocusCode(region.code);
+          handlersRef.current.onRegionHover(region);
+        });
+        maps.event.addListener(polygon, "mouseout", () => {
+          handlersRef.current.onRegionHover(null);
+        });
+        maps.event.addListener(polygon, "click", () => {
+          suppressMapClickRef.current = true;
+          handlersRef.current.onRegionClick(region);
+          window.setTimeout(() => {
+            suppressMapClickRef.current = false;
+          }, 50);
         });
         polys.push(polygon);
       }
     }
     outlineRef.current = polys;
-  }, [ready, level, outlineRegions]);
+  }, [ready, level, outlineRegions, paletteKey]);
 
-  // 시군구 외곽 강조 스타일만 갱신
+  // 시군구 외곽: 포커스/선택 시 채우기를 끄고 읍면동이 보이게
   useEffect(() => {
     if (level !== "emd") return;
     for (const polygon of outlineRef.current) {
@@ -387,13 +415,19 @@ export function SatelliteMap({
       const isParent =
         focusCode === code ||
         (selectedCode != null && selectedCode.startsWith(code));
+      const region = outlineRegions.find((r) => r.code === code);
+      const fill = region
+        ? handlersRef.current.colorOf(region)
+        : "#000000";
       polygon.setOptions({
-        strokeWeight: isParent ? 2.2 : 1.2,
+        fillColor: fill,
+        fillOpacity: isParent ? 0 : 0.78,
+        strokeWeight: isParent ? 2.4 : 1.2,
         strokeColor: "#ffffff",
-        zIndex: isParent ? 1 : 3,
+        zIndex: isParent ? 1 : 2,
       });
     }
-  }, [level, focusCode, selectedCode]);
+  }, [level, focusCode, selectedCode, outlineRegions, paletteKey]);
 
   // 산 마커
   useEffect(() => {

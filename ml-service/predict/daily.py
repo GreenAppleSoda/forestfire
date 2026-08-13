@@ -488,6 +488,20 @@ def resolve_weather(
     )
 
 
+def format_observed_at(source: str, pred_date: str) -> str:
+    """kma_hourly:YYYYMMDDHHMM / kma_daily:YYYYMMDD → 화면용 관측 시각."""
+    stamp = source.split(":", 1)[1] if ":" in source else ""
+    digits = "".join(c for c in stamp if c.isdigit())
+    if len(digits) >= 12:
+        return (
+            f"{digits[0:4]}-{digits[4:6]}-{digits[6:8]} "
+            f"{digits[8:10]}:{digits[10:12]}"
+        )
+    if len(digits) >= 8:
+        return f"{digits[0:4]}-{digits[4:6]}-{digits[6:8]}"
+    return pred_date
+
+
 def run_daily_predict(
     *,
     date: str | None = None,
@@ -540,6 +554,7 @@ def run_daily_predict(
 
     payload = {
         "predict_date": pred_date,
+        "observed_at": format_observed_at(source, pred_date),
         "weather_source": source,
         "sample_weather": {
             k: round(float(v), 2) if v == v else None for k, v in sample_wx.items()
