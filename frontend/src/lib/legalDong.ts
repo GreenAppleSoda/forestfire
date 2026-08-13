@@ -1,5 +1,7 @@
 /** 법정동 lookup 으로 산불 region_path 약칭 → 공식명 */
 
+import { collapseRedundantParts } from "./adminMatch";
+
 export type LegalDongLookup = {
   sido: Record<string, string>;
   sigungu: Record<string, string>;
@@ -98,5 +100,5 @@ export function formatRegionPath(
   lookup?: LegalDongLookup | null,
 ): string {
   const parts = region.split(/\s*>\s*/).map((s) => s.trim());
-  return normalizeRegionParts(parts, lookup).join(" > ");
+  return collapseRedundantParts(normalizeRegionParts(parts, lookup)).join(" > ");
 }

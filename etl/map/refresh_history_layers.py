@@ -27,6 +27,7 @@ from map.build_admin_layers import (
     strip_admin,
 )
 from map.export_map_data import lerp_color
+from pipeline.admin_match import count_city_fires, count_town_fires
 from pipeline.normalize_region_names import normalize_region_path_string
 from paths import (
     ADMIN_EMD_JSON,
@@ -50,6 +51,13 @@ def _load_fire_source(fires_df: pd.DataFrame | None = None) -> pd.DataFrame:
 def _recount_admin_from_indexes(fires: pd.DataFrame) -> dict:
     """admin JSON 의 name/province 로 건수를 다시 매칭."""
     by_prov, by_city, by_town_name, _by_vil = build_fire_indexes(fires)
+    sig_names: dict[str, str] = {}
+    if ADMIN_SIGUNGU_JSON.exists():
+        sig_data = json.loads(ADMIN_SIGUNGU_JSON.read_text(encoding="utf-8"))
+        sig_names = {
+            str(item.get("code") or ""): str(item.get("name") or "")
+            for item in sig_data.get("regions") or []
+        }
 
     def patch_file(path: Path, level: str) -> int:
         if not path.exists():
@@ -59,6 +67,7 @@ def _recount_admin_from_indexes(fires: pd.DataFrame) -> dict:
         for item in data.get("regions") or []:
             name = str(item.get("name") or "")
             prov = str(item.get("province") or item.get("province_name") or "")
+            code = str(item.get("code") or "")
             # province 필드가 코드성 short 인 경우 대비
             short = prov
             for full, s in (
@@ -86,32 +95,22 @@ def _recount_admin_from_indexes(fires: pd.DataFrame) -> dict:
                 if prov == full or name == full or full in prov or full in name:
                     short = s
                     break
-            key = strip_admin(name)
             if level == "sido":
                 # 시도: DB 공식명·약칭·통합 폴리곤 모두 반영
                 c = 0
                 for sk, cnt in by_prov.items():
-                    if sk in name or name.startswith(sk) or key == strip_admin(sk):
+                    if sk in name or name.startswith(sk) or strip_admin(name) == strip_admin(sk):
                         c += cnt
                 # shapefile 통합 영역(전남+광주) — DB의 전남·광주 건수 합산
                 if ("전남" in name and "광주" in name) or name == "전남광주통합특별시":
                     c = by_prov.get("전남", 0) + by_prov.get("광주", 0)
                 elif not c:
-                    c = by_prov.get(short, 0) or by_prov.get(key, 0)
+                    c = by_prov.get(short, 0) or by_prov.get(strip_admin(name), 0)
             elif level == "sigungu":
-                c = by_city.get(f"{short}|{key}", 0)
-                if not c:
-                    for sk, cnt in by_city.items():
-                        if sk.endswith(f"|{key}"):
-                            c = cnt
-                            break
-            else:  # emd
-                c = by_town_name.get(f"{short}|{key}", 0)
-                if not c:
-                    for sk, cnt in by_town_name.items():
-                        if sk.endswith(f"|{key}"):
-                            c = cnt
-                            break
+                c = count_city_fires(by_city, short, name)
+            else:  # emd — 상위 시군구 + 읍면동 접미사로 한정 (장흥면 ≠ 장흥군)
+                parent = sig_names.get(code[:5], "") if len(code) >= 5 else ""
+                c = count_town_fires(by_town_name, short, parent, name)
             item["fire_count"] = int(c)
             n += 1
         mx = recolor_regions_by_fire_count(data.get("regions") or [])
@@ -137,6 +136,19 @@ def _clean_region_path(path: object) -> str:
     return normalize_region_path_string(str(path or ""))
 
 
+def _event_payload(r) -> dict:
+    return {
+        "datetime": str(r.get("datetime") or r.get("date") or ""),
+        "region": _clean_region_path(r.get("region_path") or ""),
+        "city": str(r.get("city") or ""),
+        "town": str(r.get("town") or ""),
+        "village": str(r.get("village") or ""),
+        "damage_area": float(r.get("damage_area") or 0),
+        "mountains": "",
+        "match_level": "db",
+    }
+
+
 def _refresh_map_data(
     fires: pd.DataFrame, *, total_fires: int | None = None
 ) -> dict:
@@ -152,17 +164,14 @@ def _refresh_map_data(
         by_city[f"{p}|{strip_admin(c)}"].append(r)
 
     regions = data.get("regions") or data.get("provinces") or []
+    used_keys: set[str] = set()
     counts = []
     for reg in regions:
         prov = str(reg.get("province") or "").strip()
         name = strip_admin(str(reg.get("name") or ""))
         key = f"{prov}|{name}"
+        used_keys.add(key)
         rows = by_city.get(key, [])
-        if not rows:
-            for k, v in by_city.items():
-                if k.endswith(f"|{name}"):
-                    rows = v
-                    break
         counts.append(len(rows))
     max_count = max(counts) if counts else 1
 
@@ -177,33 +186,32 @@ def _refresh_map_data(
         prov = str(reg.get("province") or "").strip()
         name = strip_admin(str(reg.get("name") or ""))
         rows = by_city.get(f"{prov}|{name}", [])
-        if not rows:
-            for k, v in by_city.items():
-                if k.endswith(f"|{name}"):
-                    rows = v
-                    break
-        hist = []
-        for r in sorted(rows, key=lambda x: str(x.get("datetime") or ""), reverse=True)[:40]:
-            hist.append(
-                {
-                    "datetime": str(r.get("datetime") or r.get("date") or ""),
-                    "region": _clean_region_path(r.get("region_path") or ""),
-                    "city": str(r.get("city") or ""),
-                    "town": str(r.get("town") or ""),
-                    "village": str(r.get("village") or ""),
-                    "damage_area": float(r.get("damage_area") or 0),
-                    "mountains": "",
-                    "match_level": "db",
-                }
-            )
+        hist = [
+            _event_payload(r)
+            for r in sorted(rows, key=lambda x: str(x.get("datetime") or ""), reverse=True)
+        ]
         if code:
             history[code] = hist
+
+    # 시군구 폴리곤에 못 붙인 건(용인시→구 미지정 등)도 시도 선택 시 목록에 포함
+    leftover = []
+    for key, rows in by_city.items():
+        if key in used_keys:
+            continue
+        leftover.extend(rows)
+    if leftover:
+        history["_unmatched"] = [
+            _event_payload(r)
+            for r in sorted(
+                leftover, key=lambda x: str(x.get("datetime") or ""), reverse=True
+            )
+        ]
 
     if data.get("regions"):
         data["regions"] = regions
     data["provinces"] = []
 
-    data["history"] = {**(data.get("history") or {}), **history}
+    data["history"] = history
     meta = data.get("meta") or {}
     meta["total_fires"] = int(total_fires if total_fires is not None else len(fires))
     meta["synced_at"] = datetime.now().isoformat(timespec="seconds")
@@ -219,6 +227,7 @@ def _refresh_map_data(
         "regions": len(regions),
         "total_fires": int(meta["total_fires"]),
         "history_keys": len(history),
+        "unmatched_city_events": len(leftover),
     }
 
 

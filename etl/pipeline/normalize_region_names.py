@@ -7,6 +7,7 @@ import re
 from functools import lru_cache
 from pathlib import Path
 
+from pipeline.admin_match import collapse_redundant_parts
 from paths import DATA_PROCESSED_ETL, FRONTEND_PUBLIC_DATA
 
 LOOKUP_CANDIDATES = [
@@ -78,7 +79,7 @@ def normalize_parts(
     if not cleaned:
         return []
     if not lookup:
-        return cleaned
+        return collapse_redundant_parts(cleaned)
 
     out: list[str] = []
     sido_map = lookup.get("sido") or {}
@@ -90,7 +91,7 @@ def normalize_parts(
     out.append(sido)
 
     if len(cleaned) < 2:
-        return out
+        return collapse_redundant_parts(out)
     sig = _resolve_child(sig_map, sido, cleaned[1])
     # parent가 약칭으로 들어온 경우 대비
     if sig == cleaned[1]:
@@ -102,7 +103,7 @@ def normalize_parts(
     out.append(sig)
 
     if len(cleaned) < 3:
-        return out
+        return collapse_redundant_parts(out)
     emd = _resolve_child(emd_map, f"{sido}|{sig}", cleaned[2])
     if emd == cleaned[2]:
         # 시군구도 strip 형태로 재시도
@@ -114,7 +115,7 @@ def normalize_parts(
     out.append(emd)
 
     if len(cleaned) < 4:
-        return out
+        return collapse_redundant_parts(out)
     li = _resolve_child(li_map, f"{sido}|{sig}|{emd}", cleaned[3])
     if li == cleaned[3]:
         for emd_alt in {emd, strip_key(emd), cleaned[2]}:
@@ -123,7 +124,7 @@ def normalize_parts(
                 li = hit
                 break
     out.append(li)
-    return out
+    return collapse_redundant_parts(out)
 
 
 def format_region_path(

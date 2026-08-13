@@ -1,8 +1,15 @@
 "use client";
 
-import type { MapDisplayMode, MountainInfo, RiskMode } from "@/lib/types";
+import type {
+  AdminLevel,
+  AdminRegion,
+  MapDisplayMode,
+  MountainInfo,
+  RiskMode,
+} from "@/lib/types";
 import type { ReactNode } from "react";
 import { MountainSearch } from "./MountainSearch";
+import { RegionSearch } from "./RegionSearch";
 
 type Props = {
   mapMode: MapDisplayMode;
@@ -10,8 +17,11 @@ type Props = {
   zoomLabel: string;
   predictLoading?: boolean;
   mountainIndex?: Record<string, MountainInfo>;
+  sidoRegions?: AdminRegion[];
+  sigunguRegions?: AdminRegion[];
   syncSlot?: ReactNode;
   onSelectMountain: (mountain: MountainInfo) => void;
+  onSelectRegion: (region: AdminRegion, level: AdminLevel) => void;
   onMapMode: (mode: MapDisplayMode) => void;
   onRiskMode: (mode: RiskMode) => void;
   onZoomIn: () => void;
@@ -69,8 +79,11 @@ export function AppSidebar({
   zoomLabel,
   predictLoading,
   mountainIndex,
+  sidoRegions,
+  sigunguRegions,
   syncSlot,
   onSelectMountain,
+  onSelectRegion,
   onMapMode,
   onRiskMode,
   onZoomIn,
@@ -90,7 +103,7 @@ export function AppSidebar({
           <button
             type="button"
             onClick={onGoHome}
-            className="min-w-0 flex-1 text-left transition opacity-100 hover:opacity-90"
+            className="min-w-0 flex-1 cursor-pointer text-left transition opacity-100 hover:opacity-90"
             aria-label="홈으로 돌아가기"
             title="홈으로"
           >
@@ -113,11 +126,16 @@ export function AppSidebar({
           ) : null}
         </div>
 
-        <div className="mt-4">
+        <div className="mt-4 space-y-2">
           <MountainSearch
             mountainIndex={mountainIndex}
             onSelect={onSelectMountain}
             variant="sidebar"
+          />
+          <RegionSearch
+            sido={sidoRegions}
+            sigungu={sigunguRegions}
+            onSelect={onSelectRegion}
           />
         </div>
       </div>

@@ -38,6 +38,7 @@ from paths import (
     ensure_dirs,
     sync_backend_data,
 )
+from pipeline.admin_match import count_city_fires, count_town_fires, strip_admin
 
 OUT_DIR = FRONTEND_PUBLIC_DATA
 
@@ -141,20 +142,12 @@ def wgs84_to_svg(lat: float, lng: float) -> tuple[float, float]:
 
 
 def label_point_tm(shape, level: str, prov: str) -> tuple[float, float]:
-    """지도 위 이름/마커 위치. 시도는 도청, 그 외는 폴리곤 bbox 중심."""
+    """지도 위 이름/마커 위치. 시도는 도청, 그 외는 가장 큰 육지 링 중심."""
     if level == "sido":
         ll = SIDO_OFFICE_WGS84.get(prov)
         if ll:
             return wgs84_to_svg(ll[0], ll[1])
     return to_svg(*centroid_tm(shape))
-
-
-def strip_admin(name: str) -> str:
-    """'강원특별자치도', '영월군' → '강원', '영월' 처럼 비교용 약칭."""
-    name = re.sub(r"\s+", "", str(name).strip())
-    name = re.sub(r"(특별자치시|광역시|특별시|특별자치도)$", "", name)
-    name = re.sub(r"(시|군|구|읍|면|동|리)$", "", name)
-    return name
 
 
 def normalize_province(name: str) -> str:
@@ -219,16 +212,19 @@ def simplify_ring(points: list[tuple[float, float]], tol: float) -> list[tuple[f
 
 
 def path_tolerance(shape, level: str, base_tol: float) -> float:
-    """작은 읍면동은 덜 단순화(구멍·깨짐 방지), 큰 구역은 base_tol 사용."""
+    """작은 읍면동은 덜 단순화(구멍·깨짐 방지), 큰 구역은 base_tol 사용.
+
+    base_tol 은 SVG viewBox(800×900) 단위. 값이 작을수록 경계가 조밀해진다.
+    """
     if level != "emd":
         return base_tol
     b = shape.bbox
     extent = max(b[2] - b[0], b[3] - b[1])
     if extent >= 20000:
-        return 0.55
+        return max(base_tol, 0.18)
     if extent >= 8000:
-        return 0.32
-    return 0.16
+        return max(base_tol * 0.7, 0.12)
+    return max(base_tol * 0.45, 0.06)
 
 
 def shape_to_svg_path(shape, tol: float) -> str | None:
@@ -243,17 +239,78 @@ def shape_to_svg_path(shape, tol: float) -> str | None:
         ring = simplify_ring(ring, tol)
         if len(ring) < 4:
             continue
-        cmds.append(f"M{ring[0][0]},{ring[0][1]}")
+        # 소수 2자리: 용량과 경계 정밀도 균형 (1자리는 들쭉날쭉 유발)
+        x0, y0 = ring[0]
+        cmds.append(f"M{x0:.2f},{y0:.2f}")
         for x, y in ring[1:]:
-            cmds.append(f"L{x},{y}")
+            cmds.append(f"L{x:.2f},{y:.2f}")
         cmds.append("Z")
     return "".join(cmds) if cmds else None
 
 
+def _ring_area(pts: list[tuple[float, float]]) -> float:
+    a = 0.0
+    for i in range(len(pts) - 1):
+        x1, y1 = pts[i]
+        x2, y2 = pts[i + 1]
+        a += x1 * y2 - x2 * y1
+    return a * 0.5
+
+
+def _ring_centroid(pts: list[tuple[float, float]]) -> tuple[float, float]:
+    a = 0.0
+    cx = 0.0
+    cy = 0.0
+    for i in range(len(pts) - 1):
+        x1, y1 = pts[i]
+        x2, y2 = pts[i + 1]
+        cross = x1 * y2 - x2 * y1
+        a += cross
+        cx += (x1 + x2) * cross
+        cy += (y1 + y2) * cross
+    if abs(a) < 1e-9:
+        n = max(len(pts) - 1, 1)
+        return (
+            sum(p[0] for p in pts[:-1]) / n,
+            sum(p[1] for p in pts[:-1]) / n,
+        )
+    return cx / (3.0 * a), cy / (3.0 * a)
+
+
+def _point_in_ring(x: float, y: float, ring: list[tuple[float, float]]) -> bool:
+    inside = False
+    j = len(ring) - 1
+    for i, (xi, yi) in enumerate(ring):
+        xj, yj = ring[j]
+        if (yi > y) != (yj > y) and x < (xj - xi) * (y - yi) / ((yj - yi) or 1e-12) + xi:
+            inside = not inside
+        j = i
+    return inside
+
+
 def centroid_tm(shape) -> tuple[float, float]:
-    """bbox 중심점 (정확한 무게중심은 아님, 라벨용으로 충분)."""
-    b = shape.bbox
-    return (b[0] + b[2]) / 2, (b[1] + b[3]) / 2
+    """가장 큰 링의 면적 중심. bbox 중심은 섬·좁은 돌출부에 라벨이 밀림."""
+    pts = shape.points
+    parts = list(shape.parts) + [len(pts)]
+    best_ring = None
+    best_area = -1.0
+    for i in range(len(parts) - 1):
+        ring = pts[parts[i] : parts[i + 1]]
+        if len(ring) < 4:
+            continue
+        a = abs(_ring_area(ring))
+        if a > best_area:
+            best_area = a
+            best_ring = ring
+    if not best_ring:
+        b = shape.bbox
+        return (b[0] + b[2]) / 2, (b[1] + b[3]) / 2
+    cx, cy = _ring_centroid(best_ring)
+    if _point_in_ring(cx, cy, best_ring):
+        return cx, cy
+    xs = [p[0] for p in best_ring]
+    ys = [p[1] for p in best_ring]
+    return (min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2
 
 
 def resolve_province_from_code(code: str) -> str:
@@ -392,6 +449,7 @@ def build_fire_indexes(fires: pd.DataFrame):
     """
     빠른 조인을 위해 건수를 미리 센 딕셔너리 4개 반환.
     키 예: by_city["강원|영월"] = 42
+           by_town_name["경기|양주|장흥면"] = 8  (시군구+읍면동 접미사 포함)
     """
     by_prov = fires.groupby("province").size().to_dict()
     by_city: dict[str, int] = defaultdict(int)
@@ -402,9 +460,9 @@ def build_fire_indexes(fires: pd.DataFrame):
         p, c, t, v = r["province"], r["city"], r["town"], r["village"]
         by_city[f"{p}|{strip_admin(c)}"] += 1
         if t and t != "Unknown":
-            by_town_name[f"{p}|{strip_admin(t)}"] += 1
+            by_town_name[f"{p}|{strip_admin(c)}|{t}"] += 1
         if v and v != "Unknown":
-            by_village_name[f"{p}|{strip_admin(v)}"] += 1
+            by_village_name[f"{p}|{strip_admin(c)}|{strip_admin(t)}|{v}"] += 1
 
     return by_prov, by_city, by_town_name, by_village_name
 
@@ -422,6 +480,7 @@ def process_level(
     tol: float,
     fires_idx,
     include_paths: bool,
+    parent_names: dict[str, str] | None = None,
 ) -> dict:
     """
     GEO_DIR/{folder}/{shp_name}.shp 를 읽어 regions[] 를 만든다.
@@ -461,13 +520,13 @@ def process_level(
         if level == "sido":
             count = int(by_prov.get(prov, 0))
         elif level == "sigungu":
-            count = int(by_city.get(f"{prov}|{n}", 0))
-            if count == 0 and " " in name:
-                # "청주시 상당구" → 마지막 토큰만으로 재시도
-                count = int(by_city.get(f"{prov}|{strip_admin(name.split()[-1])}", 0))
+            count = count_city_fires(by_city, prov, name)
         elif level == "emd":
             prov = resolve_province_from_code(code[:5] if len(code) >= 5 else code) or prov
-            count = int(by_town_name.get(f"{prov}|{n}", 0))
+            parent = ""
+            if parent_names:
+                parent = parent_names.get(code[:5], "") if len(code) >= 5 else ""
+            count = count_town_fires(by_town_name, prov, parent, name)
         else:
             count = int(by_village_name.get(f"{prov}|{n}", 0))
 
@@ -537,7 +596,7 @@ def main() -> None:
 
     print("시도…")
     sido = process_level(
-        "시도", "ctp_rvn", "sido", "CTPRVN_CD", "CTP_KOR_NM", 2.8, idx, True
+        "시도", "ctp_rvn", "sido", "CTPRVN_CD", "CTP_KOR_NM", 0.45, idx, True
     )
     # 광주·전남이 한 폴리곤인 경우 건수를 합산 후 상대 빈도 재계산
     for r in sido["regions"]:
@@ -548,12 +607,21 @@ def main() -> None:
 
     print("시군구…")
     sig = process_level(
-        "시군구", "sig", "sigungu", "SIG_CD", "SIG_KOR_NM", 1.8, idx, True
+        "시군구", "sig", "sigungu", "SIG_CD", "SIG_KOR_NM", 0.32, idx, True
     )
+    sig_names = {r["code"]: r["name"] for r in sig["regions"]}
 
     print("읍면동…")
     emd = process_level(
-        "읍면동", "emd", "emd", "EMD_CD", "EMD_KOR_NM", 0.55, idx, True
+        "읍면동",
+        "emd",
+        "emd",
+        "EMD_CD",
+        "EMD_KOR_NM",
+        0.12,
+        idx,
+        True,
+        parent_names=sig_names,
     )
 
     # separators 로 공백 제거 → 파일 크기 축소

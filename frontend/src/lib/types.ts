@@ -14,6 +14,8 @@ export type MountainInfo = {
   /** 지도 SVG 좌표 (EPSG:5179 → viewBox) */
   svg_x?: number | null;
   svg_y?: number | null;
+  /** 산림청 산정보 이미지 (로컬 정적 경로) */
+  image_url?: string | null;
 };
 
 export type FireEvent = {

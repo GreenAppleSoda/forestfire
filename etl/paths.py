@@ -54,6 +54,9 @@ MOUNTAIN_DATA = DATA_PROCESSED_ETL / "mountain_data.csv"
 MOUNTAIN_LOCATION = DATA_PROCESSED_ETL / "mountain_location.csv"
 MOUNTAIN_COORDS = DATA_PROCESSED_ETL / "mountain_coords.csv"
 MOUNTAIN_GEOCODE_CACHE = DATA_PROCESSED_ETL / "mountain_geocode_cache.json"
+MOUNTAIN_IMAGES_META = DATA_PROCESSED_ETL / "mountain_images.json"
+MOUNTAIN_IMAGES_DIR = FRONTEND_PUBLIC_DATA / "mountain-images"
+MOUNTAIN_IMAGES_PUBLIC_PREFIX = "/data/mountain-images"
 
 # 기상 (ASOS)
 RAW_ASOS_DAILY = DATA_RAW / "weather" / "asos_daily_2011_2026.csv"
@@ -103,6 +106,7 @@ def ensure_dirs() -> None:
         GEO_DIR,
         FRONTEND_PUBLIC_DATA,
         BACKEND_DATA,
+        MOUNTAIN_IMAGES_DIR,
     ):
         d.mkdir(parents=True, exist_ok=True)
 

@@ -1,28 +1,26 @@
 "use client";
 
-import type { MountainInfo } from "@/lib/types";
-import { searchMountains } from "@/lib/mountainSearch";
+import type { AdminLevel, AdminRegion } from "@/lib/types";
+import {
+  regionSearchSubtitle,
+  searchRegions,
+} from "@/lib/regionSearch";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { MountainThumb } from "./MountainThumb";
 
 type Props = {
-  mountainIndex?: Record<string, MountainInfo>;
-  onSelect: (mountain: MountainInfo) => void;
-  variant?: "default" | "sidebar";
+  sido?: AdminRegion[];
+  sigungu?: AdminRegion[];
+  onSelect: (region: AdminRegion, level: AdminLevel) => void;
 };
 
-export function MountainSearch({
-  mountainIndex,
-  onSelect,
-  variant = "default",
-}: Props) {
+export function RegionSearch({ sido, sigungu, onSelect }: Props) {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
 
   const results = useMemo(
-    () => searchMountains(mountainIndex, query, 15),
-    [mountainIndex, query],
+    () => searchRegions(sido, sigungu, query, 15),
+    [sido, sigungu, query],
   );
 
   useEffect(() => {
@@ -33,20 +31,12 @@ export function MountainSearch({
     return () => document.removeEventListener("mousedown", onDoc);
   }, []);
 
-  const sidebar = variant === "sidebar";
-
   return (
     <div ref={wrapRef} className="relative w-full">
-      <label className="sr-only" htmlFor="mountain-search">
-        산 검색
+      <label className="sr-only" htmlFor="region-search">
+        지역 검색
       </label>
-      <div
-        className={`flex items-center gap-2 bg-white ${
-          sidebar
-            ? "rounded-xl px-3 py-2.5 ring-1 ring-[#e5e7eb]"
-            : "rounded-lg border border-[#e5e7eb] px-3 py-2 shadow-sm"
-        }`}
-      >
+      <div className="flex items-center gap-2 rounded-xl bg-white px-3 py-2.5 ring-1 ring-[#e5e7eb]">
         <svg
           className="h-4 w-4 shrink-0 text-[#9ca3af]"
           viewBox="0 0 24 24"
@@ -59,10 +49,10 @@ export function MountainSearch({
           <path d="M20 20l-3.5-3.5" strokeLinecap="round" />
         </svg>
         <input
-          id="mountain-search"
+          id="region-search"
           type="search"
           value={query}
-          placeholder={sidebar ? "산 이름을 검색하세요" : "예: 북한산"}
+          placeholder="지역명을 검색하세요"
           autoComplete="off"
           onChange={(e) => {
             setQuery(e.target.value);
@@ -92,32 +82,22 @@ export function MountainSearch({
               검색 결과가 없습니다
             </li>
           ) : (
-            results.map((m) => (
-              <li key={m.id || m.name}>
+            results.map((hit) => (
+              <li key={`${hit.level}-${hit.region.code}`}>
                 <button
                   type="button"
-                  className="flex w-full items-center gap-2.5 border-b border-[#f3f4f6] px-3 py-2.5 text-left last:border-0 hover:bg-[#f9fafb]"
+                  className="flex w-full flex-col items-start gap-0.5 border-b border-[#f3f4f6] px-3 py-2.5 text-left last:border-0 hover:bg-[#f9fafb]"
                   onClick={() => {
-                    onSelect(m);
-                    setQuery(m.name);
+                    onSelect(hit.region, hit.level);
+                    setQuery(hit.region.name);
                     setOpen(false);
                   }}
                 >
-                  <MountainThumb
-                    mountain={m}
-                    className="h-9 w-9"
-                    rounded="rounded-md"
-                  />
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-sm font-medium text-[#111827]">
-                      {m.name}
-                    </span>
-                    <span className="line-clamp-1 text-[11px] text-[#6b7280]">
-                      {m.address || "주소 없음"}
-                      {m.fire_count > 0
-                        ? ` · 같은 지역 산불 ${m.fire_count}건`
-                        : ""}
-                    </span>
+                  <span className="text-sm font-medium text-[#111827]">
+                    {hit.region.name}
+                  </span>
+                  <span className="line-clamp-1 text-[11px] text-[#6b7280]">
+                    {regionSearchSubtitle(hit)}
                   </span>
                 </button>
               </li>

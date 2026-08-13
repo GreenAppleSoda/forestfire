@@ -34,6 +34,12 @@ import {
   linkMountainToRegions,
   type MountainRegionLink,
 } from "@/lib/mountainSearch";
+import { eventMatchesSelection, stripAdmin } from "@/lib/adminMatch";
+import {
+  fontSizeForRing,
+  largestRing,
+  visualCenterFromPath,
+} from "@/lib/svgLabelLayout";
 
 type Props = {
   mapData: MapData;
@@ -101,10 +107,7 @@ function clientToSvg(
 }
 
 function stripName(name: string) {
-  return name
-    .replace(/\s+/g, "")
-    .replace(/(특별자치시|광역시|특별시|특별자치도)$/g, "")
-    .replace(/(시|군|구|읍|면|동|리)$/g, "");
+  return stripAdmin(name);
 }
 
 /** 여러 시군구의 산도감·산 건수를 하나로 합침 */
@@ -170,7 +173,8 @@ function shortLabel(name: string, level: AdminLevel) {
     };
     return SIDO_SHORT[short] ?? short;
   }
-  if (name.length > 6) return name.replace(/(시|군|구|읍|면|동)$/, "");
+  // 세종특별자치시 → 세종. "청주시 흥덕구" 같은 구 접미는 유지.
+  if (/특별자치시$/.test(name)) return name.replace("특별자치시", "");
   return name;
 }
 
@@ -183,30 +187,37 @@ function isProvinceSido(name: string): boolean {
   return /도/.test(name);
 }
 
-/** SVG path d 에서 대략적 bbox (숫자 좌표만) */
-function pathBBox(d: string): {
-  minX: number;
-  minY: number;
-  maxX: number;
-  maxY: number;
-} | null {
-  const nums = d.match(/-?\d*\.?\d+/g);
-  if (!nums || nums.length < 4) return null;
-  let minX = Infinity;
-  let minY = Infinity;
-  let maxX = -Infinity;
-  let maxY = -Infinity;
-  for (let i = 0; i + 1 < nums.length; i += 2) {
-    const x = Number(nums[i]);
-    const y = Number(nums[i + 1]);
-    if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
-    if (x < minX) minX = x;
-    if (y < minY) minY = y;
-    if (x > maxX) maxX = x;
-    if (y > maxY) maxY = y;
+type RegionLabelLayout = { x: number; y: number; fs: number };
+
+/** 가장 큰 육지 링 기준 라벨 위치·글자 크기 (섬·돌출부 bbox에 끌리지 않음). */
+function regionLabelLayout(
+  regions: AdminRegion[],
+  level: AdminLevel,
+  scale: number,
+): Map<string, RegionLabelLayout> {
+  const layout = new Map<string, RegionLabelLayout>();
+  if (level === "emd") return layout;
+
+  const zoomFs =
+    level === "sido"
+      ? Math.max(7.5, 10.5 / Math.sqrt(scale))
+      : Math.max(5.6, 7.2 / Math.sqrt(scale));
+
+  for (const r of regions) {
+    const text = shortLabel(r.name, level);
+    const provinceLabel = level === "sido" && isProvinceSido(r.name);
+    const ring = r.d ? largestRing(r.d, r.code) : null;
+    const center =
+      level === "sido"
+        ? r.label
+        : (visualCenterFromPath(r.d, r.code) ?? r.label);
+    let fs = provinceLabel ? zoomFs * 1.8 : zoomFs;
+    if (!provinceLabel) {
+      fs = fontSizeForRing(ring, text, zoomFs);
+    }
+    layout.set(r.code, { x: center[0], y: center[1], fs });
   }
-  if (!Number.isFinite(minX)) return null;
-  return { minX, minY, maxX, maxY };
+  return layout;
 }
 
 export function KoreaSvgMap({
@@ -315,6 +326,11 @@ export function KoreaSvgMap({
         ? layers.sigungu
         : layers.emd;
 
+  const labelLayout = useMemo(
+    () => regionLabelLayout(activeLayer.regions, level, view.scale),
+    [activeLayer.regions, level, view.scale],
+  );
+
   const sigunguByCode = useMemo(() => {
     const m = new Map<string, AdminRegion>();
     for (const r of layers.sigungu.regions) m.set(r.code, r);
@@ -411,16 +427,6 @@ export function KoreaSvgMap({
     return sigunguByCode.get(code.slice(0, 5)) ?? null;
   }, [hovered, selectedAdmin, level, sigunguByCode]);
 
-  /** 읍면동 호버 중일 때만 테두리 바깥 시군구 뱃지 */
-  const hoverSigunguBadge = useMemo(() => {
-    if (level !== "emd" || !hovered || hovered.code.length < 5) return null;
-    const sg = sigunguByCode.get(hovered.code.slice(0, 5));
-    if (!sg?.d) return null;
-    const box = pathBBox(sg.d);
-    if (!box) return null;
-    return { region: sg, box };
-  }, [level, hovered, sigunguByCode]);
-
   const regionList = mapData.regions?.length
     ? mapData.regions
     : mapData.provinces;
@@ -428,53 +434,48 @@ export function KoreaSvgMap({
   const byName = useMemo(() => {
     const m = new Map<string, RegionStat>();
     for (const r of regionList) {
-      m.set(stripName(r.name), r);
-      if (r.province) m.set(`${r.province}|${stripName(r.name)}`, r);
+      if (!r.province) continue;
+      m.set(`${r.province}|${stripName(r.name)}`, r);
+      m.set(`${r.province}|${r.name}`, r);
     }
     return m;
   }, [regionList]);
 
-  const eventsForSelection = useMemo(() => {
-    if (!selected) return [] as FireEvent[];
-    const direct = mapData.history[selected.code];
-    if (direct?.length) return direct;
-
-    // 시도/읍면동: 이름·시도로 시군구 이력 합치기
-    const key = stripName(selected.name);
-    const prov = selected.province;
+  const allHistoryEvents = useMemo(() => {
     const merged: FireEvent[] = [];
     const seen = new Set<string>();
-    for (const r of regionList) {
-      const matchProv = !prov || r.province === prov;
-      const matchName =
-        stripName(r.name) === key ||
-        (prov && stripName(r.name).includes(key)) ||
-        (level === "sido" && r.province === prov);
-      if (!matchProv) continue;
-      if (level === "sido") {
-        if (r.province !== prov) continue;
-      } else if (level === "emd") {
-        // town name soft match via history region string
-      } else if (!matchName && stripName(r.name) !== key) {
-        continue;
-      }
-      for (const ev of mapData.history[r.code] ?? []) {
+    for (const list of Object.values(mapData.history || {})) {
+      for (const ev of list) {
         const id = `${ev.datetime}|${ev.region}|${ev.damage_area}`;
         if (seen.has(id)) continue;
         seen.add(id);
-        if (level === "emd") {
-          const town = stripName(ev.town || "");
-          if (town && town !== key && !ev.region.includes(selected.name.replace(/(읍|면|동)$/, ""))) {
-            continue;
-          }
-        }
         merged.push(ev);
       }
     }
-    return merged
-      .sort((a, b) => String(b.datetime).localeCompare(String(a.datetime)))
-      .slice(0, 30);
-  }, [selected, mapData.history, regionList, level]);
+    return merged;
+  }, [mapData.history]);
+
+  const eventsForSelection = useMemo(() => {
+    if (!selected) return [] as FireEvent[];
+    const admin = selectedAdmin;
+    const atLevel: AdminLevel = admin ? level : "sigungu";
+    const name = admin?.name ?? selected.name;
+    const province = admin?.province || selected.province || "";
+    let parentName: string | null = null;
+    if (atLevel === "emd" && admin?.code && admin.code.length >= 5) {
+      parentName = sigunguByCode.get(admin.code.slice(0, 5))?.name ?? null;
+    }
+    return allHistoryEvents
+      .filter((ev) =>
+        eventMatchesSelection(ev, {
+          level: atLevel,
+          province,
+          name,
+          parentName,
+        }),
+      )
+      .sort((a, b) => String(b.datetime).localeCompare(String(a.datetime)));
+  }, [selected, selectedAdmin, allHistoryEvents, level, sigunguByCode]);
 
   useEffect(() => {
     const stage = stageRef.current;
@@ -631,18 +632,18 @@ export function KoreaSvgMap({
   }, []);
 
   const toStat = useCallback(
-    (admin: AdminRegion): RegionStat => {
+    (admin: AdminRegion, atLevel: AdminLevel = level): RegionStat => {
       const key = stripName(admin.name);
-      const predictP = labelProb(admin, level);
+      const predictP = labelProb(admin, atLevel);
       const intensity = isPredictMode
         ? (predictP ?? 0)
         : admin.prob;
       const baseRisk = Math.round(intensity * 1000) / 10;
-      const fill = fillOf(admin, level);
+      const fill = fillOf(admin, atLevel);
 
       // 시도: map-data는 시군구 단위 → 같은 시도 산 목록을 합침
       // (제주특별자치도 → strip "제주" 가 제주시와 우연히 겹치는 문제도 여기서 방지)
-      if (level === "sido" && admin.province) {
+      if (atLevel === "sido" && admin.province) {
         const parts = regionList.filter((r) => r.province === admin.province);
         const mountains = mergeMountainCatalogs(parts);
         return {
@@ -662,33 +663,35 @@ export function KoreaSvgMap({
         };
       }
 
-      // 시군구 직접 매칭
-      let hit =
-        byName.get(`${admin.province}|${key}`) || byName.get(key) || null;
+      // 시군구: 시도+이름으로만 매칭 (어간만으로 타 시도 장흥군 등에 붙지 않음)
+      let hit: RegionStat | null = null;
+      if (atLevel === "sigungu") {
+        hit =
+          byName.get(`${admin.province}|${admin.name}`) ||
+          byName.get(`${admin.province}|${key}`) ||
+          null;
+      }
 
-      // 읍면동: admin 시군구(코드 앞 5자리) → map-data 시군구 산도감
-      if (!hit && level === "emd") {
+      // 읍면동: 코드 앞 5자리 → 상위 시군구 (이름 충돌 없음)
+      if (!hit && atLevel === "emd") {
         const parentAdmin = sigunguByCode.get(admin.code.slice(0, 5));
         if (parentAdmin) {
           const pk = stripName(parentAdmin.name);
           hit =
+            byName.get(`${parentAdmin.province}|${parentAdmin.name}`) ||
             byName.get(`${parentAdmin.province}|${pk}`) ||
-            byName.get(pk) ||
             null;
-        }
-        if (!hit) {
-          hit =
-            regionList.find((r) => r.code === admin.code.slice(0, 5)) || null;
         }
       }
 
       if (hit) {
         return {
           ...hit,
+          code: admin.code,
           name: admin.name,
           province: admin.province || hit.province,
           province_name: admin.province_name || hit.province_name,
-          fire_count: admin.fire_count || hit.fire_count,
+          fire_count: admin.fire_count,
           risk_score: baseRisk,
         };
       }
@@ -792,6 +795,33 @@ export function KoreaSvgMap({
       setSelected(toStat(admin));
     },
     [toStat, clearMountainPin],
+  );
+
+  const onRegionSearchSelect = useCallback(
+    (admin: AdminRegion, atLevel: AdminLevel) => {
+      clearMountainPin();
+      setMobileNavOpen(false);
+      setSelectedAdmin(admin);
+      setSelected(toStat(admin, atLevel));
+
+      const targetScale = atLevel === "sido" ? 3.8 : 7.2;
+      const [vbW0, vbH0] = layers.sido.viewBox;
+      const center =
+        atLevel === "sido"
+          ? admin.label
+          : (visualCenterFromPath(admin.d, admin.code) ?? admin.label);
+      const next = viewFromCenterSvg(
+        center[0],
+        center[1],
+        targetScale,
+        vbW0,
+        vbH0,
+      );
+      setView(next);
+      setSatView(svgViewToKakao(next, vbW0, vbH0));
+      setSatSyncKey((k) => k + 1);
+    },
+    [clearMountainPin, toStat, layers.sido.viewBox],
   );
 
   /** 검색바: 마커 + 검색 결과 패널 + 당일 예측 */
@@ -937,8 +967,11 @@ export function KoreaSvgMap({
     zoomLabel,
     predictLoading,
     mountainIndex: mapData.mountains,
+    sidoRegions: layers.sido.regions,
+    sigunguRegions: layers.sigungu.regions,
     syncSlot: sidebarSync,
     onSelectMountain: onMountainSelect,
+    onSelectRegion: onRegionSearchSelect,
     onGoHome: () => {
       setSelected(null);
       setSelectedAdmin(null);
@@ -973,27 +1006,9 @@ export function KoreaSvgMap({
   const [vbW, vbH] = layers.sido.viewBox;
   const viewBox = `0 0 ${vbW} ${vbH}`;
   const strokeBase = Math.max(0.25, 0.7 / view.scale);
-  const emdStroke = Math.max(0.15, 0.45 / view.scale);
-  /** 읍면동 확대 시 시군구 외곽 — 짙은 남색, 얇은 선 */
-  const sigunguOutline = Math.max(0.22, 1.05 / view.scale);
-  const sigunguOutlineActive = Math.max(0.3, 1.35 / view.scale);
-  const SIGUNGU_OUTLINE = "#ffffff";
-  const SIGUNGU_OUTLINE_ACTIVE = "#ffffff";
-  // 시도·시군구: 기존 방식 / 고배율에서는 화면상 글자 크기 유지(÷scale)
-  // 시도 중 도 단위는 시(광역시·특별시)보다 크게
-  const labelSizeCity =
-    level === "sido"
-      ? Math.max(7.5, 10.5 / Math.sqrt(view.scale))
-      : Math.max(5.2, 7.2 / Math.sqrt(view.scale));
-  const labelSizeProvince = labelSizeCity * 1.8;
   const labelStroke = Math.max(0.28, 1.2 / view.scale);
   const labelStrokeProvince = Math.max(1.2, 5.5 / view.scale);
   /** 호버 시군구 뱃지 — 화면 기준 눈에 띄는 크기 */
-  const sigunguBadgeFs = Math.max(0.45, 18 / view.scale);
-  const sigunguBadgePadX = Math.max(0.35, 7 / view.scale);
-  const sigunguBadgePadY = Math.max(0.22, 4.2 / view.scale);
-  const sigunguBadgeGap = Math.max(0.35, 6 / view.scale);
-  /** 호버 읍면동 이름 */
   const emdLabelFs = Math.max(0.4, 18 / view.scale);
   const emdLabelStroke = Math.max(0.08, 1.2 / view.scale);
 
@@ -1066,9 +1081,7 @@ export function KoreaSvgMap({
             {mapMode === "satellite" ? (
               <SatelliteMap
                 regions={activeLayer.regions}
-                outlineRegions={
-                  level === "emd" ? layers.sigungu.regions : undefined
-                }
+                outlineRegions={undefined}
                 level={level}
                 colorOf={satColorOf}
                 paletteKey={satPaletteKey}
@@ -1121,7 +1134,7 @@ export function KoreaSvgMap({
                       fill={fill}
                       fillOpacity={
                         isSelected
-                          ? 0.98
+                          ? 1
                           : dimOthers
                             ? isHovered
                               ? SELECT_DIM.fillHover
@@ -1129,13 +1142,19 @@ export function KoreaSvgMap({
                                 ? SELECT_DIM.fillEmd
                                 : SELECT_DIM.fill
                             : active
-                              ? 0.95
+                              ? 0.98
                               : isEmd
-                                ? 0.88
-                                : 0.82
+                                ? 0.9
+                                : 0.88
                       }
                       stroke="#fffefb"
-                      strokeWidth={isEmd ? emdStroke : strokeBase}
+                      strokeWidth={
+                        isEmd
+                          ? Math.max(0.08, 1.15 / view.scale)
+                          : level === "sigungu"
+                            ? Math.max(0.1, 1.35 / view.scale)
+                            : strokeBase
+                      }
                       strokeOpacity={
                         dimOthers
                           ? isHovered
@@ -1144,9 +1163,11 @@ export function KoreaSvgMap({
                               ? SELECT_DIM.strokeEmd
                               : SELECT_DIM.stroke
                           : isEmd
-                            ? 0.55
-                            : 1
+                            ? 0.85
+                            : 0.95
                       }
+                      strokeLinejoin="round"
+                      strokeLinecap="round"
                       className={
                         isPanning
                           ? "cursor-grabbing"
@@ -1166,52 +1187,9 @@ export function KoreaSvgMap({
                   );
                 })}
 
-                {/* 읍면동 단계: 시군구 외곽 경계 */}
-                {level === "emd" &&
-                  layers.sigungu.regions.map((r) => {
-                    const isParent = parentSigungu?.code === r.code;
-                    return (
-                      <path
-                        key={`sg-outline-${r.code}`}
-                        d={r.d}
-                        fill="none"
-                        stroke={isParent ? SIGUNGU_OUTLINE_ACTIVE : SIGUNGU_OUTLINE}
-                        strokeWidth={
-                          isParent ? sigunguOutlineActive : sigunguOutline
-                        }
-                        strokeOpacity={isParent ? 0.9 : 0.55}
-                        className="pointer-events-none"
-                      />
-                    );
-                  })}
+                {/* 읍면동 단계: 상위 시군구 흰 외곽선은 표시하지 않음 (줌 확대 시 경계만 유지) */}
 
-                {/* 선택·호버 읍면동 fill 을 시군구 흰 선 위에 다시 그려 최상단 유지 */}
-                {level === "emd" &&
-                  (() => {
-                    const seen = new Set<string>();
-                    const list: AdminRegion[] = [];
-                    for (const r of [selectedAdmin, hovered]) {
-                      if (r?.d && !seen.has(r.code)) {
-                        seen.add(r.code);
-                        list.push(r);
-                      }
-                    }
-                    return list.map((r) => {
-                      const isSelected = selectedAdmin?.code === r.code;
-                      return (
-                        <path
-                          key={`top-fill-${r.code}`}
-                          d={r.d}
-                          fill={fillOf(r, level)}
-                          fillOpacity={isSelected ? 0.98 : 0.95}
-                          stroke="none"
-                          className="pointer-events-none"
-                        />
-                      );
-                    });
-                  })()}
-
-                {/* 호버·선택 외곽: fill/시군구선 위에 따로 그려 굵기·색 균일 유지 */}
+                {/* 호버·선택 외곽: fill 위에 따로 그려 굵기·색 균일 유지 */}
                 {(() => {
                   const isEmd = level === "emd";
                   const hlStroke = Math.max(
@@ -1241,69 +1219,35 @@ export function KoreaSvgMap({
                   ));
                 })()}
 
-                {/* 읍면동 호버 중: 해당 시군구 이름 — 테두리 우상단 바깥 뱃지 */}
-                {hoverSigunguBadge && (() => {
-                  const { region: sg, box } = hoverSigunguBadge;
-                  const label = shortLabel(sg.name, "sigungu");
-                  // 대략 글자 폭 (한글 기준)
-                  const tw = label.length * sigunguBadgeFs * 0.95;
-                  const th = sigunguBadgeFs * 1.15;
-                  const bx =
-                    box.maxX - tw - sigunguBadgePadX * 2;
-                  const by = box.minY - th - sigunguBadgePadY * 2 - sigunguBadgeGap;
-                  const tx = bx + sigunguBadgePadX;
-                  const ty = by + sigunguBadgePadY + sigunguBadgeFs * 0.85;
-                  return (
-                    <g key={`sg-badge-${sg.code}`} className="pointer-events-none">
-                      <rect
-                        x={bx}
-                        y={by}
-                        width={tw + sigunguBadgePadX * 2}
-                        height={th + sigunguBadgePadY * 2}
-                        rx={Math.max(0.15, 2.5 / view.scale)}
-                        fill="#1c1917"
-                        fillOpacity={0.92}
-                        stroke="#fffefb"
-                        strokeWidth={Math.max(0.08, 1.4 / view.scale)}
-                      />
-                      <text
-                        x={tx}
-                        y={ty}
-                        textAnchor="start"
-                        fill="#fffefb"
-                        fontSize={sigunguBadgeFs}
-                        fontWeight={700}
-                        style={{ fontFamily: "var(--font-sans)" }}
-                      >
-                        {label}
-                      </text>
-                    </g>
-                  );
-                })()}
-
                 {activeLayer.regions.map((r) => {
                   const isSelected = selectedAdmin?.code === r.code;
-                  const active =
-                    isSelected || hovered?.code === r.code;
-                  // 시도·시군구: 전체 라벨 / 읍면동: 호버·선택만
+                  const isHovered = hovered?.code === r.code;
+                  const active = isSelected || isHovered;
+                  // 읍면동: 호버·선택만 / 시도·시군구: 전체 표시(면적 비례 폰트)
                   if (level === "emd" && !active) return null;
                   const dimLabel = !!selectedAdmin && !isSelected;
                   const provinceLabel =
                     level === "sido" && isProvinceSido(r.name);
-                  const baseFs = provinceLabel
-                    ? labelSizeProvince
-                    : labelSizeCity;
+                  const laid = labelLayout.get(r.code);
+                  const emdCenter =
+                    level === "emd"
+                      ? (visualCenterFromPath(r.d, r.code) ?? r.label)
+                      : null;
+                  const lx = laid?.x ?? emdCenter?.[0] ?? r.label[0];
+                  const ly = laid?.y ?? emdCenter?.[1] ?? r.label[1];
+                  const layoutFs = laid?.fs;
                   const fs =
                     level === "emd"
                       ? emdLabelFs
                       : active
-                        ? baseFs + (provinceLabel ? 2 : 0.8)
-                        : baseFs;
+                        ? (layoutFs ?? 5.6) *
+                          (provinceLabel ? 1.12 : 1.06)
+                        : (layoutFs ?? 5.6);
                   return (
                     <text
                       key={`lb-${r.code}`}
-                      x={r.label[0]}
-                      y={r.label[1]}
+                      x={lx}
+                      y={ly}
                       textAnchor="middle"
                       dominantBaseline="middle"
                       fill={active ? "#0c0a09" : "#292524"}

@@ -1,6 +1,7 @@
 "use client";
 
 import type { MountainInfo } from "@/lib/types";
+import { MountainThumb } from "./MountainThumb";
 
 type Props = {
   mountain: MountainInfo;
@@ -53,6 +54,13 @@ export function MountainDetail({
       </div>
 
       <div className="flex-1 space-y-5 overflow-y-auto px-5 py-5 text-sm leading-relaxed text-[#4b5563]">
+        {mountain.image_url && (
+          <MountainThumb
+            mountain={mountain}
+            className="h-40 w-full"
+            rounded="rounded-xl"
+          />
+        )}
         {mountain.address && (
           <section>
             <p className="text-[11px] font-medium tracking-[0.14em] text-[#9ca3af] uppercase">

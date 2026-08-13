@@ -7,6 +7,7 @@ import {
 } from "@/lib/legalDong";
 import { useEffect, useMemo, useState } from "react";
 import { MountainDetail } from "./MountainDetail";
+import { MountainThumb } from "./MountainThumb";
 
 type Props = {
   province: ProvinceStat | null;
@@ -57,14 +58,11 @@ function FlameTiny() {
   );
 }
 
-function MountainGlyph() {
-  return (
-    <span className="mx-auto flex h-10 w-10 items-center justify-center rounded-xl bg-[#f3f4f6] text-[#6b7280]">
-      <svg viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor" aria-hidden>
-        <path d="M3 18h18l-5.5-8-3.2 4.6L9.5 10 3 18zm11.2-9.2 1.3-1.9L18 12h-2.4l-1.4-3.2z" />
-      </svg>
-    </span>
-  );
+function hydrateMountain(
+  m: MountainInfo,
+  index?: Record<string, MountainInfo>,
+): MountainInfo {
+  return m.id && index?.[m.id] ? { ...index[m.id], ...m } : m;
 }
 
 export function FireHistoryPanel({
@@ -112,7 +110,9 @@ export function FireHistoryPanel({
 
   const topMountains = useMemo(() => {
     if (!province) return [];
-    if (province.top_mountains?.length) return province.top_mountains;
+    if (province.top_mountains?.length) {
+      return province.top_mountains.map((m) => hydrateMountain(m, mountainIndex));
+    }
     const freq = new Map<string, MountainInfo>();
     for (const ev of events) {
       for (const m of resolveMountains(ev, mountainIndex)) {
@@ -133,7 +133,13 @@ export function FireHistoryPanel({
       .slice(0, 12);
   }, [province, events, mountainIndex]);
 
-  const catalog = province?.catalog_mountains ?? [];
+  const catalog = useMemo(
+    () =>
+      (province?.catalog_mountains ?? []).map((m) =>
+        hydrateMountain(m, mountainIndex),
+      ),
+    [province, mountainIndex],
+  );
 
   return (
     <aside className="flex h-full w-full flex-col border-l border-[#e5e7eb] bg-white">
@@ -296,7 +302,11 @@ export function FireHistoryPanel({
                       onClick={() => openMountain(m)}
                       className="rounded-2xl bg-[#f9fafb] px-3 py-3 text-center ring-1 ring-[#eef2f6] transition hover:bg-white hover:ring-[#d1d5db]"
                     >
-                      <MountainGlyph />
+                      <MountainThumb
+                        mountain={m}
+                        className="mx-auto h-16 w-full"
+                        rounded="rounded-xl"
+                      />
                       <p className="mt-2 truncate text-sm font-semibold text-[#111827]">
                         {m.name}
                       </p>
@@ -330,16 +340,7 @@ export function FireHistoryPanel({
                         onClick={() => openMountain(m)}
                         className="flex w-full items-center gap-3 rounded-xl bg-[#f9fafb] px-3 py-3 text-left ring-1 ring-[#eef2f6] transition hover:bg-white hover:ring-[#d1d5db]"
                       >
-                        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-[#e5e7eb] text-[#6b7280]">
-                          <svg
-                            viewBox="0 0 24 24"
-                            className="h-5 w-5"
-                            fill="currentColor"
-                            aria-hidden
-                          >
-                            <path d="M3 18h18l-5.5-8-3.2 4.6L9.5 10 3 18z" />
-                          </svg>
-                        </span>
+                        <MountainThumb mountain={m} />
                         <span className="min-w-0 flex-1">
                           <span className="flex items-baseline justify-between gap-2">
                             <span className="truncate font-semibold text-[#111827]">
@@ -372,6 +373,7 @@ export function FireHistoryPanel({
           <div className="shrink-0 border-t border-[#e5e7eb] px-5 py-2.5 text-[11px] leading-relaxed text-[#9ca3af]">
             산 정보는 전국 산 목록 기준입니다. 발생 읍면(없으면 시군구)과
             산소재지가 같은 산을 연결하며, 발화 봉우리 확정이 아닙니다.
+            산 사진은 산림청 산정보 서비스이며, 없는 산은 아이콘으로 표시합니다.
           </div>
         </>
       )}

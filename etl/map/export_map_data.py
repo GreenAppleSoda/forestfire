@@ -43,6 +43,7 @@ from paths import (
     ensure_dirs,
     sync_backend_data,
 )
+from pipeline.fetch_mountain_images import load_image_urls_by_id
 from pipeline.load_wildfire_history import count_wildfire_history
 from pipeline.normalize_region_names import normalize_region_path_string
 
@@ -115,6 +116,7 @@ def mountain_payload(
     row: pd.Series,
     fire_count: int = 0,
     coords_by_id: dict[str, dict] | None = None,
+    image_urls: dict[str, str] | None = None,
 ) -> dict:
     """산 1개 → 프론트가 쓰는 객체 (이름·고도·좌표·산불 연계 건수 등)."""
     height = row.get("mntn_hght")
@@ -144,6 +146,9 @@ def mountain_payload(
     if sx is not None and sy is not None and pd.notna(sx) and pd.notna(sy):
         payload["svg_x"] = round(float(sx), 2)
         payload["svg_y"] = round(float(sy), 2)
+    image_url = (image_urls or {}).get(mid)
+    if image_url:
+        payload["image_url"] = image_url
     return payload
 
 
@@ -155,7 +160,7 @@ def catalog_payload(full: dict) -> dict:
         "height": full.get("height"),
         "fire_count": int(full.get("fire_count") or 0),
     }
-    for k in ("lon", "lat", "svg_x", "svg_y"):
+    for k in ("lon", "lat", "svg_x", "svg_y", "image_url"):
         if k in full:
             out[k] = full[k]
     return out
@@ -369,10 +374,12 @@ def main() -> None:
         mountains[c] = mountains[c].fillna("").astype(str)
     mtn_meta = mountains.drop_duplicates("mntn_id").set_index("mntn_id", drop=False)
     coords_by_id = load_coords_by_id()
+    image_urls = load_image_urls_by_id()
     print(f"산 좌표 로드: {len(coords_by_id)}개 (geocode 성공분)")
+    print(f"산 이미지 로드: {len(image_urls)}개")
 
     def mp(row: pd.Series, fire_count: int = 0) -> dict:
-        return mountain_payload(row, fire_count, coords_by_id)
+        return mountain_payload(row, fire_count, coords_by_id, image_urls)
 
     # 산 id → 연계 산불 건수
     fire_counts_mtn: dict[str, int] = {}

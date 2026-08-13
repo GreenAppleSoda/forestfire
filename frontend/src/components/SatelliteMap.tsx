@@ -277,7 +277,13 @@ export function SatelliteMap({
       const polygons: KakaoPolygon[] = [];
       const fill = handlersRef.current.colorOf(region);
       const selected = region.code === selectedCode;
-      const baseOpacity = level === "emd" ? 0.55 : 0.58;
+      const baseOpacity = level === "emd" ? 0.72 : 0.78;
+      const peerStroke =
+        level === "sido"
+          ? { weight: 1.5, color: "#fffefb", opacity: 0.95 }
+          : level === "sigungu"
+            ? { weight: 1.2, color: "#fffefb", opacity: 0.92 }
+            : { weight: 0.9, color: "#fffefb", opacity: 0.88 };
 
       for (const ring of rings) {
         if (ring.length < 3) continue;
@@ -285,11 +291,11 @@ export function SatelliteMap({
         const polygon = new maps.Polygon({
           map,
           path,
-          strokeWeight: selected ? 2.5 : level === "emd" ? 0.8 : 1.2,
-          strokeColor: selected ? "#1c1917" : "#fffefb",
-          strokeOpacity: selected ? 1 : 0.85,
+          strokeWeight: selected ? 2.8 : peerStroke.weight,
+          strokeColor: selected ? "#1c1917" : peerStroke.color,
+          strokeOpacity: selected ? 1 : peerStroke.opacity,
           fillColor: fill,
-          fillOpacity: selected ? 0.72 : baseOpacity,
+          fillOpacity: selected ? 0.88 : baseOpacity,
           zIndex: selected ? 10 : 2,
         });
         maps.event.addListener(polygon, "click", () => {
@@ -302,19 +308,27 @@ export function SatelliteMap({
         maps.event.addListener(polygon, "mouseover", () => {
           handlersRef.current.onRegionHover(region);
           polygon.setOptions({
-            fillOpacity: 0.82,
-            strokeWeight: 2.2,
+            fillOpacity: 0.9,
+            strokeWeight: 2.6,
             strokeColor: "#1c1917",
+            strokeOpacity: 1,
             zIndex: 11,
           });
         });
         maps.event.addListener(polygon, "mouseout", () => {
           handlersRef.current.onRegionHover(null);
           const isSel = region.code === selectedCode;
+          const peer =
+            level === "sido"
+              ? { weight: 1.5, color: "#fffefb", opacity: 0.95 }
+              : level === "sigungu"
+                ? { weight: 1.2, color: "#fffefb", opacity: 0.92 }
+                : { weight: 0.9, color: "#fffefb", opacity: 0.88 };
           polygon.setOptions({
-            fillOpacity: isSel ? 0.72 : baseOpacity,
-            strokeWeight: isSel ? 2.5 : level === "emd" ? 0.8 : 1.2,
-            strokeColor: isSel ? "#1c1917" : "#fffefb",
+            fillOpacity: isSel ? 0.88 : baseOpacity,
+            strokeWeight: isSel ? 2.8 : peer.weight,
+            strokeColor: isSel ? "#1c1917" : peer.color,
+            strokeOpacity: isSel ? 1 : peer.opacity,
             zIndex: isSel ? 10 : 2,
           });
         });

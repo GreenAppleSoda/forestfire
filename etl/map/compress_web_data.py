@@ -122,19 +122,19 @@ def _ring_extent(d: str) -> float:
 
 
 def path_tol_for(level: str, d: str) -> float:
-    """viewBox 단위 허용 오차. 읍면동은 크기에 따라 조절."""
+    """viewBox 단위 허용 오차. build_admin_layers 조밀 path를 크게 깎지 않도록 완화."""
     if level == "sido":
-        return 1.2
+        return 0.35
     if level == "sigungu":
-        return 0.7
+        return 0.25
     extent = _ring_extent(d)
     if extent >= 40:
-        return 0.55
+        return 0.18
     if extent >= 18:
-        return 0.35
+        return 0.12
     if extent >= 8:
-        return 0.22
-    return 0.12
+        return 0.08
+    return 0.05
 
 
 def compress_admin(path: Path) -> dict:
@@ -180,6 +180,7 @@ CATALOG_KEYS = (
     "lat",
     "svg_x",
     "svg_y",
+    "image_url",
 )
 
 
@@ -195,6 +196,9 @@ def _slim_mountain(m: dict, details_limit: int = 140) -> dict:
         "admin_tel": m.get("admin_tel") or "",
         "fire_count": int(m.get("fire_count") or 0),
     }
+    image_url = m.get("image_url")
+    if isinstance(image_url, str) and image_url:
+        out["image_url"] = image_url
     for k in ("lon", "lat", "svg_x", "svg_y"):
         v = m.get(k)
         if isinstance(v, (int, float)):

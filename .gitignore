@@ -12,6 +12,8 @@ db-archive/
 법정동코드 전체자료.txt
 법정동코드*.txt
 # Frontend
+frontend/public/data/mountain-images/*
+!frontend/public/data/mountain-images/.gitkeep
 frontend/node_modules/
 frontend/.next/
 frontend/tsconfig.tsbuildinfo
