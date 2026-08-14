@@ -61,7 +61,7 @@ export function ChatWidget() {
   };
 
   const subtitle = user
-    ? `${user.nickname || user.name} · ${user.subscriptionTier}`
+    ? `${user.nickname || user.name} · 회원`
     : "비로그인 이용 가능";
 
   return (
@@ -87,7 +87,7 @@ export function ChatWidget() {
             {messages.length === 0 && (
               <p className="text-[11px] leading-snug text-[#9ca3af]">
                 예: &ldquo;오늘 강릉 산불 위험도 어때?&rdquo;, &ldquo;당일 예측은 어떻게
-                봐?&rdquo;, &ldquo;PLUS 등급은 뭐가 다른가요?&rdquo;
+                봐?&rdquo;, &ldquo;보고서는 회원만 쓸 수 있나요?&rdquo;
               </p>
             )}
             {messages.map((m, i) => (

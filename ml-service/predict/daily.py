@@ -589,15 +589,12 @@ def run_daily_predict(
     if write_file:
         text = json.dumps(payload, ensure_ascii=False)
         DAILY_ML_RISK.parent.mkdir(parents=True, exist_ok=True)
-        DAILY_ML_RISK.write_text(
-            json.dumps(payload, ensure_ascii=False), encoding="utf-8"
-        )
+        DAILY_ML_RISK.write_text(text, encoding="utf-8")
         # [DB 스냅샷] 파일과 같은 당일 예측만 적재한다.
         # 시나리오(write_file=False)는 DB에 넣지 않는다.
         # 접속: ml-service/.env 의 DB_HOST ~ DB_NAME (1번)
         # 테이블이 없거나 DB_* 미설정이면 로그만 남기고 예측 응답은 그대로 반환한다.
         save_daily_ml_risk_snapshot(payload)
-        DAILY_ML_RISK.write_text(text, encoding="utf-8")
         # Express 챗봇(DATA_DIR)용 동일 스냅샷. 로컬 모노레포 기준; 서버 분리 시 WEB_DATA_DIR/배포 경로 정리.
         from ml_paths import ROOT
 

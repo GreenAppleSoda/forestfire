@@ -17,8 +17,6 @@ export type AuthUser = {
   name: string;
   nickname: string;
   role: string;
-  subscriptionTier: string;
-  grade: number;
 };
 
 type AuthState = {

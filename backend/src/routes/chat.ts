@@ -8,7 +8,7 @@
  *   4) Gemini generateContent 호출 (도구/예측 API 호출 없음 — 스냅샷만으로 답변)
  *   5) 최종 텍스트 답변을 JSON으로 반환 (DB 있으면 assistant 메시지도 저장)
  *
- * 게스트(비로그인) 우선. 인증 연동 시 optionalAuth 가 req.user 를 채우면 이름·구독을 프롬프트에 넣는다.
+ * 게스트(비로그인) 우선. 인증 연동 시 optionalAuth 가 req.user 를 채우면 이름을 프롬프트에 넣는다.
  * GEMINI_API_KEY 미설정이면 503. DB_* 미설정이면 대화 영속화만 생략.
  */
 import { randomUUID } from "node:crypto";
@@ -41,8 +41,7 @@ const SYSTEM_PROMPT_BASE = `당신은 "산불맵(Wildfire Atlas)" 서비스의 �
 
 [이용 안내]
 - 비로그인 사용자도 챗봇·지도·당일/시나리오 예측 열람이 가능합니다.
-- 회원 구독 등급: BASIC(기본 열람), PLUS(엑셀·PDF 등 다운로드 예정), PREMIUM(정식 보고서 예정).
-- 파일 다운로드·정식 보고서 UI는 준비 중입니다.
+- 보고서는 로그인 회원만 이용할 수 있습니다 (준비 중).
 
 [답변 형식 — 필수]
 - 사용자에게 보이는 위험도는 "산불위험지수"만 쓰세요. 값은 ml_risk×100을 소수 1자리로 (예: 19.3).
@@ -171,7 +170,7 @@ router.post("/chat", async (req, res) => {
       ? req.user.nickname || req.user.name || "회원"
       : null;
     const userContext = displayName
-      ? `현재 로그인 사용자: ${displayName} (구독 ${req.user?.subscriptionTier || "BASIC"}, 권한등급 ${req.user?.grade ?? 3})`
+      ? `현재 로그인 사용자: ${displayName}`
       : "현재 비로그인(게스트) 사용자입니다.";
 
     const riskJson = await loadDailyMlRiskText();

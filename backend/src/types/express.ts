@@ -1,6 +1,6 @@
 /**
  * 인증 연동 시 optionalAuth 가 채울 사용자 정보.
- * users.subscription_tier: BASIC | PLUS | PREMIUM
+ * 비회원/회원은 세션 유무로만 구분한다.
  */
 export type AuthUser = {
   id: number;
@@ -8,9 +8,6 @@ export type AuthUser = {
   name: string;
   nickname: string;
   role: string;
-  subscriptionTier: string;
-  /** PREMIUM=1, PLUS=2, BASIC=3 */
-  grade: number;
 };
 
 declare global {
