@@ -10,6 +10,7 @@
 feature: 사용자 입력 기상 4개 + 시군구 산불이력 2개 + DWI + 강수파생 3개
 
 출력: frontend/public/data/daily_ml_risk.json
+      (+ backend/data/daily_ml_risk.json 동일 스냅샷 — 챗봇용)
 """
 
 from __future__ import annotations
@@ -586,6 +587,7 @@ def run_daily_predict(
         ],
     }
     if write_file:
+        text = json.dumps(payload, ensure_ascii=False)
         DAILY_ML_RISK.parent.mkdir(parents=True, exist_ok=True)
         DAILY_ML_RISK.write_text(
             json.dumps(payload, ensure_ascii=False), encoding="utf-8"
@@ -595,6 +597,13 @@ def run_daily_predict(
         # 접속: ml-service/.env 의 DB_HOST ~ DB_NAME (1번)
         # 테이블이 없거나 DB_* 미설정이면 로그만 남기고 예측 응답은 그대로 반환한다.
         save_daily_ml_risk_snapshot(payload)
+        DAILY_ML_RISK.write_text(text, encoding="utf-8")
+        # Express 챗봇(DATA_DIR)용 동일 스냅샷. 로컬 모노레포 기준; 서버 분리 시 WEB_DATA_DIR/배포 경로 정리.
+        from ml_paths import ROOT
+
+        backend_path = ROOT / "backend" / "data" / "daily_ml_risk.json"
+        backend_path.parent.mkdir(parents=True, exist_ok=True)
+        backend_path.write_text(text, encoding="utf-8")
     return payload
 
 
