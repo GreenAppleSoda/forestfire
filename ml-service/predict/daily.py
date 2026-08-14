@@ -44,6 +44,8 @@ from predict.precip_features import (
     PRECIP_LOOKBACK_DAYS,
     compute_precip_features_for_date,
 )
+# [DB 스냅샷] 당일 예측 결과를 DB_* (daily_ml_risk_runs / regions) 에 적재
+from predict.risk_snapshot_db import save_daily_ml_risk_snapshot
 
 # ASOS 주요 지점 대략 좌표 (Open-Meteo용)
 ASOS_COORDS: dict[int, tuple[float, float]] = {
@@ -588,6 +590,11 @@ def run_daily_predict(
         DAILY_ML_RISK.write_text(
             json.dumps(payload, ensure_ascii=False), encoding="utf-8"
         )
+        # [DB 스냅샷] 파일과 같은 당일 예측만 적재한다.
+        # 시나리오(write_file=False)는 DB에 넣지 않는다.
+        # 접속: ml-service/.env 의 DB_HOST ~ DB_NAME (1번)
+        # 테이블이 없거나 DB_* 미설정이면 로그만 남기고 예측 응답은 그대로 반환한다.
+        save_daily_ml_risk_snapshot(payload)
     return payload
 
 
