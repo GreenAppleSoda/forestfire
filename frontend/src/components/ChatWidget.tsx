@@ -93,7 +93,7 @@ export function ChatWidget() {
             {messages.map((m, i) => (
               <div
                 key={i}
-                className={`max-w-[85%] rounded-xl px-2.5 py-1.5 text-[12px] leading-snug ${
+                className={`max-w-[85%] whitespace-pre-wrap rounded-xl px-2.5 py-1.5 text-[12px] leading-snug ${
                   m.role === "user"
                     ? "ml-auto bg-[#111827] text-white"
                     : "bg-[#f3f4f6] text-[#111827]"
