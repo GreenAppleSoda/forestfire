@@ -45,7 +45,8 @@ Flask URL: `ML_SERVICE_URL` (기본 `http://127.0.0.1:5000`)
 
 - `GET /api/health`
 - `GET /api/map/data` · `/api/map/admin/:level`
-- `POST /api/predict/daily` · `POST /api/predict/scenario`
+- `POST /api/predict/daily` · `POST /api/predict/scenario`  
+  (`scenario` body: `{ year, month, weather }`. 프론트 UI는 접속월부터 12개월만 노출)
 - `POST /api/wildfires/sync` · `GET /api/wildfires/sync/status`
 
 **회원** (로컬 이메일/비밀번호; 소셜 로그인은 미지원)

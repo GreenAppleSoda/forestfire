@@ -49,7 +49,7 @@ python -m predict.daily --date 2026-07-23 --temp-avg 28 --humidity-avg 45 --wind
 
 피처 (10): 기상 4 + 산불이력 2 + DWI + 강수파생 3  
 (`precip_sum_7d`, `precip_sum_14d`, `dry_days` — 예측일 전일까지, 결측=0mm)  
-확률: XGB raw `predict_proba` (보정 없음).  
+확률: XGB raw `predict_proba` (보정 없음). 웹 화면의 산불위험지수 = `ml_risk × 100`.  
 학습은 `etl/ml/train_wildfire_xgb.py`.
 
 ## PDF 리포트 (`report/`)

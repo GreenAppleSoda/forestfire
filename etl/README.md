@@ -75,7 +75,7 @@ pip install -r requirements.txt
 python -m predict.daily --kma
 ```
 
-산불 이력 → 맵 갱신 (MariaDB, 웹 「산불이력 갱신」과 동일):
+산불 이력 → 맵 갱신 (MariaDB, 웹 **과거 이력**의 「산불이력 갱신」과 동일):
 
 ```powershell
 python etl/pipeline/sync_wildfire_history.py

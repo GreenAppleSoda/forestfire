@@ -1,7 +1,17 @@
-# South Korea Wildfire Atlas (산불맵)
+# FORESTFIRE ATLAS KOREA
 
-산불·산 정보 분석 파이프라인과 Next.js 산불맵.  
-지도·예측에 더해 **회원 로그인**, **Gemini 안내 챗봇**, **지역별 PDF 보고서**(회원 전용)를 제공합니다.
+South Korea Wildfire Atlas — 시군구 산불 위험 지도·예측 웹서비스.
+
+지도·당일/시나리오 예측에 더해 **회원 로그인**, **Gemini 안내 챗봇**, **지역별 PDF 보고서**(회원 전용)를 제공합니다.  
+화면에 보이는 당일·시나리오 값은 XGBoost `predict_proba` raw 확률(`ml_risk`)을 ×100 한 **산불위험지수 (0~100)** 입니다.
+
+## 주요 화면
+
+- 좌측: FORESTFIRE ATLAS KOREA 브랜드, 지역·산 통합 검색, 위험 표시(당일 예측 / 사용자 지정 / 과거 이력)
+- 지도: SVG 행정구역 + 카카오 위성, 범례는 예측 모드에서 산불위험지수 0~100
+- 우측: 지역 미선택 시 전국 평균·최고 위험 시도 요약 → 선택 시 이력·산 상세
+- 사용자 지정: 접속월부터 12개월만 선택(기본값 다음 달). API는 `year`/`month` 그대로 전달
+- 기상 카드: 선택 지역이 있으면 해당 시군구(또는 시도 평균) 기상
 
 ## 런타임 구조 (역할 분리)
 
@@ -142,7 +152,8 @@ npm run dev
 
 ## 예측 모델 (요약)
 
-시군구×일 산불 발생 확률 — XGBoost.
+시군구×일 산불 발생 확률 — XGBoost.  
+웹에서는 raw 확률(`ml_risk`) × 100을 **산불위험지수 (0~100)** 로 표시합니다.
 
 **피처 (10):** `temp_avg`, `precip`, `wind_avg`, `humidity_avg`, `hist_fire_rate`, `hist_fire_count_365`, `dwi`, `precip_sum_7d`, `precip_sum_14d`, `dry_days`
 
@@ -167,7 +178,7 @@ MariaDB `forestfire_stats` → `admin-*.json` / `map-data.json` 이력 색·건�
 python etl/pipeline/sync_wildfire_history.py
 ```
 
-웹: **이력 기반** 탭 → 「산불이력 갱신」  
+웹: **과거 이력** 모드 → 「산불이력 갱신」  
 API: `POST /api/wildfires/sync` (Express → Flask → 위 파이프라인)
 
 (참고) 예전 공공데이터 OpenAPI 증분 스크립트는 `etl/pipeline/sync_wildfire_openapi.py` 에 남아 있으나, **웹 버튼·기본 동기화 경로는 DB**입니다.
@@ -180,7 +191,8 @@ API: `POST /api/wildfires/sync` (Express → Flask → 위 파이프라인)
 - `GET /api/map/data`
 - `GET /api/map/admin/:level` (`sido` \| `sigungu` \| `emd`)
 - `POST /api/predict/daily` — body: `{ source, force, date?, weather? }`
-- `POST /api/predict/scenario` — body: `{ year, month, weather: { temp_avg, humidity_avg, wind_avg, precip } }`
+- `POST /api/predict/scenario` — body: `{ year, month, weather: { temp_avg, humidity_avg, wind_avg, precip } }`  
+  (UI는 접속 시점 월부터 12개월만 고름. 기본 선택은 다음 달)
 - `POST /api/wildfires/sync` — MariaDB 산불 이력 → 맵 갱신
 - `GET /api/wildfires/sync/status`
 
