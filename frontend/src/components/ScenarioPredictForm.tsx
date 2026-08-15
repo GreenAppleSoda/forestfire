@@ -64,20 +64,25 @@ function applyPreset(month: number, presetId: string): WeatherSliders {
   };
 }
 
-function defaultYearMonth() {
-  const d = new Date();
-  let y = d.getFullYear();
-  let m = d.getMonth() + 2; // next month (getMonth 0-based)
-  if (m > 12) {
-    m = 1;
-    y += 1;
-  }
-  return { year: y, month: m };
+function addMonths(year: number, month: number, offset: number) {
+  const total = year * 12 + (month - 1) + offset;
+  return { year: Math.floor(total / 12), month: (total % 12) + 1 };
 }
 
-const YEARS = (() => {
-  const y = new Date().getFullYear();
-  return [y, y + 1, y + 2];
+function yearMonthKey(year: number, month: number) {
+  return `${year}-${String(month).padStart(2, "0")}`;
+}
+
+function defaultYearMonth() {
+  const d = new Date();
+  return addMonths(d.getFullYear(), d.getMonth() + 1, 1);
+}
+
+const YEAR_MONTH_OPTIONS = (() => {
+  const d = new Date();
+  const startYear = d.getFullYear();
+  const startMonth = d.getMonth() + 1;
+  return Array.from({ length: 12 }, (_, i) => addMonths(startYear, startMonth, i));
 })();
 
 export function ScenarioPredictForm({ onPredicted }: Props) {
@@ -98,7 +103,8 @@ export function ScenarioPredictForm({ onPredicted }: Props) {
     [year, month, weather],
   );
 
-  const setMonthAndReset = (m: number) => {
+  const setYearMonth = (y: number, m: number) => {
+    setYear(y);
     setMonth(m);
     setPresetId("normal");
     setWeather(applyPreset(m, "normal"));
@@ -156,36 +162,23 @@ export function ScenarioPredictForm({ onPredicted }: Props) {
         예보가 아닙니다.
       </p>
 
-      <div className="mt-2 flex gap-2">
-        <label className="flex flex-1 flex-col gap-0.5 text-[10px] text-[#6b7280]">
-          연도
-          <select
-            className="rounded-xl border border-[#e5e7eb] bg-white px-1.5 py-1.5 text-[11px] text-[#111827]"
-            value={year}
-            onChange={(e) => setYear(Number(e.target.value))}
-          >
-            {YEARS.map((y) => (
-              <option key={y} value={y}>
-                {y}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="flex flex-1 flex-col gap-0.5 text-[10px] text-[#6b7280]">
-          월
-          <select
-            className="rounded-xl border border-[#e5e7eb] bg-white px-1.5 py-1.5 text-[11px] text-[#111827]"
-            value={month}
-            onChange={(e) => setMonthAndReset(Number(e.target.value))}
-          >
-            {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
-              <option key={m} value={m}>
-                {m}월
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
+      <label className="mt-2 flex flex-col gap-0.5 text-[10px] text-[#6b7280]">
+        연도/월
+        <select
+          className="rounded-xl border border-[#e5e7eb] bg-white px-1.5 py-1.5 text-[11px] text-[#111827]"
+          value={yearMonthKey(year, month)}
+          onChange={(e) => {
+            const [y, m] = e.target.value.split("-").map(Number);
+            setYearMonth(y, m);
+          }}
+        >
+          {YEAR_MONTH_OPTIONS.map((opt) => (
+            <option key={yearMonthKey(opt.year, opt.month)} value={yearMonthKey(opt.year, opt.month)}>
+              {opt.year}/{String(opt.month).padStart(2, "0")}
+            </option>
+          ))}
+        </select>
+      </label>
 
       <p className="mt-2 text-[10px] font-medium text-[#6b7280]">날씨 느낌</p>
       <div className="mt-1 flex flex-wrap gap-1">

@@ -17,7 +17,7 @@ const sans = Noto_Sans_KR({
 });
 
 export const metadata: Metadata = {
-  title: "산불맵 · 대한민국 산불 밀도",
+  title: "대한민국 산불예보 웹서비스",
   description:
     "시도별 산불 발생 밀도와 최근 산불 이력·매칭 산 정보를 확인합니다.",
 };

@@ -1,12 +1,13 @@
 # ForestFire Express API (`backend/`) — TypeScript
 
-공개 웹 백엔드. Flask(`ml-service`)를 프록시하고 자체 `backend/data` 지도 JSON을 서빙합니다
-(`etl`이 `frontend/public/data`와 자동 동기화 — 루트 `README.md`의 "backend와 frontend가 지도 데이터를 나눠 갖는 이유" 참고).  
+공개 웹 백엔드. Flask(`ml-service`)를 프록시하고, 회원·챗봇·보고서 게이트를 담당합니다.  
+지도 JSON은 자체 `backend/data`에서 서빙합니다
+(`etl`이 `frontend/public/data`와 자동 동기화 — 루트 `README.md` 참고).  
 브라우저로 나가는 예측·맵 응답은 `lib/whitelist.ts` 로 필터합니다.
 
 ```powershell
 cd backend
-# .env 작성 (아래 환경변수)
+# .env 작성 (아래 환경변수 · 또는 .env.example 참고)
 npm install
 npm run dev
 ```
@@ -19,10 +20,15 @@ Flask URL: `ML_SERVICE_URL` (기본 `http://127.0.0.1:5000`)
 | 키 | 기본 | 용도 |
 |----|------|------|
 | `PORT` | `4000` | 리스닝 포트 |
-| `FRONTEND_ORIGIN` | `http://localhost:3000` | CORS |
+| `FRONTEND_ORIGIN` | `http://localhost:3000` | CORS (`credentials: true`) |
 | `ML_SERVICE_URL` | `http://127.0.0.1:5000` | Flask |
 | `PREDICT_CACHE_MS` | `1800000` (30분) | 당일 예측 캐시 TTL |
-| `DATA_DIR` | `backend/data` | 지도 JSON 폴더 (ROOT 기준 상대경로). `etl`이 `frontend/public/data`와 자동 동기화해 줌 (하드코딩 아님) |
+| `DATA_DIR` | `backend/data` | 지도·`daily_ml_risk.json` 폴더 (ROOT 기준 상대경로) |
+| `GEMINI_API_KEY` | — | 안내 챗봇 (없으면 `/api/chat` → 503) |
+| `GEMINI_MODEL` | `gemini-2.5-flash` | Gemini 모델명 |
+| `DB_HOST` 등 | — | MariaDB `users` · `chat_*` (미설정 시 챗봇은 동작, 대화 비영속) |
+| `SESSION_SECRET` | (개발용 기본값) | 로그인 쿠키 HMAC — **배포 시 반드시 변경** |
+| `SESSION_DAYS` | `14` | 세션 유효 기간 |
 
 ## 스크립트
 
@@ -35,30 +41,54 @@ Flask URL: `ML_SERVICE_URL` (기본 `http://127.0.0.1:5000`)
 
 ## 공개 API (`/api`)
 
+**맵 · 예측 · 동기화**
+
 - `GET /api/health`
 - `GET /api/map/data` · `/api/map/admin/:level`
-- `POST /api/predict/daily`
-- `POST /api/predict/scenario`
-- `POST /api/wildfires/sync` · `GET /api/wildfires/sync/status` — MariaDB 산불 이력 → 맵 갱신
+- `POST /api/predict/daily` · `POST /api/predict/scenario`
+- `POST /api/wildfires/sync` · `GET /api/wildfires/sync/status`
 
-상세 요청/응답은 루트 `README.md` 참고.
+**회원** (로컬 이메일/비밀번호; 소셜 로그인은 미지원)
+
+- `POST /api/auth/register` · `login` · `logout`
+- `GET /api/auth/me`
+
+**챗봇**
+
+- `POST /api/chat` — `{ message, sessionId? }`  
+  - 위험도 Q&A: 예측 API 우선 → `data/daily_ml_risk.json` 폴백 후 Gemini  
+  - 로그인 회원: `user_id` 기준 최근 대화(기기 무관)를 맥락에 포함  
+  - 게스트: `sessionId` 기준  
+  - 「보고서」요청: **로그인 필수** → PDF 생성 후 `pdf.downloadPath` 반환
+- `GET /api/chat/history` — 최근 대화 복원 (회원=`user_id`, 게스트=`?sessionId=`)
+
+**보고서** (로그인 필수, DB에 파일 저장 안 함)
+
+- `GET /api/report/daily` — JSON 요약
+- `POST /api/report/pdf` — `{ regionQuery? }` → `{ downloadPath, filename, … }`
+- `GET /api/report/download/:id` — PDF 바이너리 (임시 TTL)
+
+PDF 본체는 `lib/reportService.ts` → Flask `POST /report/pdf` (Jinja2 + Playwright)입니다.
+
+챗봇 세션 테이블 SQL: `migrations/001_membership_chatbot.sql`
 
 ## 폴더 구조
 
 ```
-backend/src/
-├── index.ts               # 진입점 (listen)
-├── app.ts                 # Express 앱 조립
-├── config.ts              # 환경변수 · 경로
-├── types.ts               # 공용 타입
-├── lib/
-│   ├── data.ts            # backend/data JSON 읽기
-│   ├── whitelist.ts       # 브라우저용 DTO 필터
-│   ├── mlClient.ts        # Flask HTTP 호출
-│   └── predictService.ts  # 예측 캐시 · 오케스트레이션
-└── routes/
-    ├── health.ts
-    ├── map.ts
-    ├── predict.ts
-    └── wildfires.ts
+backend/
+├── data/                  # map-data · admin-* · daily_ml_risk.json
+├── migrations/
+├── .env.example
+└── src/
+    ├── index.ts · app.ts · config.ts · types.ts
+    ├── middleware/optionalAuth.ts
+    ├── lib/
+    │   ├── data.ts · whitelist.ts · mlClient.ts · predictService.ts
+    │   ├── db.ts · gemini.ts · session.ts · users.ts
+    │   ├── riskSnapshot.ts · regionFocus.ts
+    │   ├── reportService.ts   # → Flask PDF
+    │   └── reportStore.ts     # 임시 PDF 버퍼
+    └── routes/
+        ├── health.ts · map.ts · predict.ts · wildfires.ts
+        ├── auth.ts · chat.ts · report.ts
 ```

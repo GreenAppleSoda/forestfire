@@ -1,6 +1,6 @@
 # 산불맵 Frontend (Next.js)
 
-UI만 담당합니다. API·예측은 Express(`backend/`) / Flask(`ml-service`)가 처리합니다.
+UI만 담당합니다. API·예측·회원·챗봇·PDF는 Express(`backend/`) / Flask(`ml-service`)가 처리합니다.
 
 ```powershell
 cd frontend
@@ -21,9 +21,10 @@ npm run dev
 | `EXPRESS_URL` | Express 주소 (기본·권장 `http://127.0.0.1:4000`) |
 
 `/api/*` 는 `app/api/[...path]/route.ts` 가 Express로 프록시합니다.  
-(연결 실패 시에도 JSON 에러를 돌려, plain `Internal Server Error` 파싱 문제를 피합니다.)
+쿠키(로그인 세션)와 `Set-Cookie`를 양방향으로 전달합니다.  
+`predict` / `wildfires` / `chat` / `report` 는 타임아웃을 넉넉히 둡니다.
 
-서버 전용 키(`KMA_*`, `DB_*`, `FOREST_FIRE_*` 등)는 여기에 두지 마세요.
+서버 전용 키(`KMA_*`, `DB_*`, `GEMINI_*`, `SESSION_*`, `FOREST_FIRE_*` 등)는 여기에 두지 마세요.
 
 ## 주요 UI
 
@@ -32,20 +33,29 @@ npm run dev
 - 당일 예측 (`DailyPredictForm`) · 시나리오 예측 (`ScenarioPredictForm`)
 - 산 검색 · 위성 지도(카카오)
 - 「산불이력 갱신」 — MariaDB → 맵 JSON (`HistorySyncControl`)
+- **로그인 / 회원가입** (`AuthModal` · `MapChrome`)
+- **안내 챗봇** (`ChatWidget`) — 비로그인 Q&A 가능; 「보고서 만들어줘」는 회원 + PDF 다운로드 버튼
+- **보고서** (`ReportModal`) — 회원 전용 JSON 요약 · 슬라이드형 PDF 다운로드
 
-초기 정적 데이터는 `public/data/` (`map-data.json`, `admin-*.json`, `sigungu_ml_scores.json` 등)에서 로드하고, 예측·동기화는 `/api/*` 로 Express를 호출합니다.
+초기 정적 데이터는 `public/data/` (`map-data.json`, `admin-*.json`, `sigungu_ml_scores.json` 등)에서 로드하고, 예측·동기화·인증·챗봇·보고서는 `/api/*` 로 Express를 호출합니다.
+
+`daily_ml_risk.json`은 브라우저가 필수로 읽지 않습니다(당일 예측은 API). 예측 파이프라인이 남겨 두는 스냅샷이며, 서버(`backend/data`) 쪽이 챗봇 폴백·리포트에 쓰입니다.
 
 ## 폴더 구조
 
 ```
 frontend/
-├── public/data/           # 지도·점수 JSON (ETL·이력 갱신이 갱신)
+├── public/
+│   ├── data/              # 지도·점수 JSON (ETL·이력 갱신이 갱신)
+│   └── chat-bubble.svg
 ├── src/
 │   ├── app/
-│   │   ├── page.tsx · layout.tsx
-│   │   └── api/[...path]/route.ts   # Express 프록시
-│   ├── components/        # 지도 · 폼 · 검색 · 범례 등
-│   └── lib/               # types · apiJson · geo · choropleth · kakao 등
+│   │   ├── page.tsx · layout.tsx   # AuthProvider · ChatWidget
+│   │   └── api/[...path]/route.ts  # Express 프록시 (+ 쿠키)
+│   ├── components/
+│   │   # 지도 · 폼 · AuthModal · MapChrome · ChatWidget · ReportModal …
+│   └── lib/
+│       # types · apiJson · authContext · choropleth · kakao …
 ├── next.config.ts
 └── package.json
 ```

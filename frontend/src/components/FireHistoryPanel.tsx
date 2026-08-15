@@ -1,10 +1,17 @@
 "use client";
 
-import type { FireEvent, MountainInfo, ProvinceStat } from "@/lib/types";
+import type {
+  FireEvent,
+  MountainInfo,
+  ProvinceStat,
+  RiskMode,
+  SigunguMlRegion,
+} from "@/lib/types";
 import {
   formatRegionPath,
   type LegalDongLookup,
 } from "@/lib/legalDong";
+import { summarizeNationalRisk } from "@/lib/nationalRisk";
 import { useEffect, useMemo, useState } from "react";
 import { MountainDetail } from "./MountainDetail";
 import { MountainThumb } from "./MountainThumb";
@@ -19,6 +26,8 @@ type Props = {
   /** 0~1 산불 추정 확률 */
   probability?: number;
   probabilityLabel?: string;
+  predictRegions?: SigunguMlRegion[] | null;
+  riskMode?: RiskMode;
   /** 산 클릭 시 지도에 마커 표시 */
   onLocateMountain?: (mountain: MountainInfo) => void;
   onClose: () => void;
@@ -74,9 +83,17 @@ export function FireHistoryPanel({
   matchedFires,
   probability,
   probabilityLabel,
+  predictRegions,
+  riskMode,
   onLocateMountain,
   onClose,
 }: Props) {
+  const nationalRisk = useMemo(
+    () => summarizeNationalRisk(predictRegions),
+    [predictRegions],
+  );
+  const riskHeading =
+    riskMode === "scenario" ? "시나리오 산불 위험" : "오늘의 산불 위험";
   const [tab, setTab] = useState<Tab>("fires");
   const [selectedMountain, setSelectedMountain] = useState<MountainInfo | null>(
     null,
@@ -160,12 +177,33 @@ export function FireHistoryPanel({
       </div>
 
       {!province ? (
-        <div className="flex flex-1 flex-col items-start justify-center px-5 py-8">
+        <div className="flex flex-1 flex-col px-5 py-6">
           <p className="text-xl font-semibold text-[#111827]">지역을 선택하세요</p>
           <p className="mt-2 text-sm leading-relaxed text-[#6b7280]">
-            스크롤로 행정구역을 세분화한 뒤, 색이 입혀진 지역을 클릭하면 산불
-            이력과 추정치가 표시됩니다.
+            지도에서 지역을 선택하면 해당 지역의 산불 위험도와 과거 발생 이력을
+            확인할 수 있습니다.
           </p>
+          {nationalRisk ? (
+            <div className="mt-6 border-t border-[#e5e7eb] pt-5">
+              <p className="text-[12px] font-semibold text-[#111827]">
+                {riskHeading}
+              </p>
+              <dl className="mt-3 space-y-2.5">
+                <div className="flex items-baseline justify-between gap-3">
+                  <dt className="text-[13px] text-[#6b7280]">전국 평균</dt>
+                  <dd className="text-xl font-bold tabular-nums text-[#111827]">
+                    {nationalRisk.avg.toFixed(1)}
+                  </dd>
+                </div>
+                <div className="flex items-baseline justify-between gap-3">
+                  <dt className="text-[13px] text-[#6b7280]">최고 위험</dt>
+                  <dd className="text-xl font-bold text-[#111827]">
+                    {nationalRisk.topProvince}
+                  </dd>
+                </div>
+              </dl>
+            </div>
+          ) : null}
         </div>
       ) : selectedMountain ? (
         <div className="min-h-0 flex-1">

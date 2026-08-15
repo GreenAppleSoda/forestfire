@@ -31,7 +31,6 @@ WEATHER_DAILY_SIGUNGU = DATA_PROCESSED / "weather_daily_sigungu.csv"
 SIGUNGU_HIST_STATE = DATA_PROCESSED / "sigungu_hist_state.csv"
 
 WILDFIRE_XGB_MODEL = DATA_OUTPUT / "wildfire_xgb_model.json"
-WILDFIRE_XGB_CALIBRATOR = DATA_OUTPUT / "wildfire_xgb_calibrator.joblib"
 WILDFIRE_XGB_BUNDLE = DATA_OUTPUT / "wildfire_xgb_bundle.json"
 
 DAILY_ML_RISK = WEB_DATA_DIR / "daily_ml_risk.json"

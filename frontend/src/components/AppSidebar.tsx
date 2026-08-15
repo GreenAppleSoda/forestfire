@@ -7,8 +7,7 @@ import type {
   RiskMode,
 } from "@/lib/types";
 import type { ReactNode } from "react";
-import { MountainSearch } from "./MountainSearch";
-import { RegionSearch } from "./RegionSearch";
+import { PlaceSearch } from "./PlaceSearch";
 
 type Props = {
   riskMode: RiskMode;
@@ -79,21 +78,31 @@ export function AppSidebar({
         mobile ? "shadow-xl" : ""
       }`}
     >
-      <div className="shrink-0 border-b border-[#e5e7eb] px-4 pt-4 pb-4">
-        <div className="flex items-start justify-between gap-2">
+      <div className="shrink-0 border-b border-[#e5e7eb] px-3.5 pt-4 pb-3.5">
+        <div className="flex items-center justify-between gap-2">
           <button
             type="button"
             onClick={onGoHome}
-            className="min-w-0 flex-1 cursor-pointer text-left transition opacity-100 hover:opacity-90"
+            className="flex min-w-0 flex-1 items-center gap-3 text-left transition hover:opacity-90"
             aria-label="홈으로 돌아가기"
             title="홈으로"
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src="/logo-forestfire-atlas.png"
-              alt="Forestfire Atlas Korea"
-              className="block h-auto w-full object-contain object-left"
+              src="/logo-chatbot-circle.png"
+              alt=""
+              className="h-16 w-16 shrink-0 object-contain"
             />
+            <span className="flex min-w-0 flex-col justify-center">
+              <span className="whitespace-nowrap font-[family-name:var(--font-display)] text-[15px] leading-none font-bold tracking-[0.14em] text-[#1a3d2c]">
+                FORESTFIRE ATLAS
+              </span>
+              <span className="mt-1.5 flex w-full items-center gap-1.5 text-[9px] leading-none font-medium tracking-[0.46em] text-[#1a3d2c]">
+                <span className="h-px flex-1 bg-[#1a3d2c]/30" aria-hidden />
+                KOREA
+                <span className="h-px flex-1 bg-[#1a3d2c]/30" aria-hidden />
+              </span>
+            </span>
           </button>
           {onCloseMobile ? (
             <button
@@ -107,16 +116,13 @@ export function AppSidebar({
           ) : null}
         </div>
 
-        <div className="mt-4 space-y-2">
-          <MountainSearch
+        <div className="mt-3.5">
+          <PlaceSearch
             mountainIndex={mountainIndex}
-            onSelect={onSelectMountain}
-            variant="sidebar"
-          />
-          <RegionSearch
             sido={sidoRegions}
             sigungu={sigunguRegions}
-            onSelect={onSelectRegion}
+            onSelectMountain={onSelectMountain}
+            onSelectRegion={onSelectRegion}
           />
         </div>
       </div>

@@ -45,24 +45,24 @@ router.post("/auth/login", async (req, res) => {
   const email = String(req.body?.email || "").trim().toLowerCase();
   const password = String(req.body?.password || "");
   if (!email || !password) {
-    return res.status(400).json({ ok: false, error: "이메일과 비밀번호를 입력해 주세요." });
+    return res.status(400).json({ ok: false, error: "아이디와 비밀번호를 입력해 주세요." });
   }
 
   try {
     const row = await findUserByEmail(email);
     if (!row || !isUserActive(row)) {
-      return res.status(401).json({ ok: false, error: "이메일 또는 비밀번호가 올바르지 않습니다." });
+      return res.status(401).json({ ok: false, error: "아이디 또는 비밀번호가 올바르지 않습니다." });
     }
     if (!row.password) {
       const provider = String(row.social_provider || "SOCIAL").toUpperCase();
       return res.status(401).json({
         ok: false,
-        error: `${provider} 소셜 계정입니다. 이메일 비밀번호 로그인은 로컬 계정만 지원합니다.`,
+        error: `${provider} 소셜 계정입니다. 아이디 비밀번호 로그인은 로컬 계정만 지원합니다.`,
       });
     }
     const ok = await bcrypt.compare(password, row.password);
     if (!ok) {
-      return res.status(401).json({ ok: false, error: "이메일 또는 비밀번호가 올바르지 않습니다." });
+      return res.status(401).json({ ok: false, error: "아이디 또는 비밀번호가 올바르지 않습니다." });
     }
 
     const user = rowToAuthUser(row);
@@ -85,14 +85,14 @@ router.post("/auth/register", async (req, res) => {
   if (!email || !password || !name || !nickname) {
     return res.status(400).json({
       ok: false,
-      error: "이메일, 비밀번호, 이름, 닉네임을 모두 입력해 주세요.",
+      error: "아이디, 비밀번호, 이름, 닉네임을 모두 입력해 주세요.",
     });
   }
   if (password.length < 8) {
     return res.status(400).json({ ok: false, error: "비밀번호는 8자 이상이어야 합니다." });
   }
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    return res.status(400).json({ ok: false, error: "이메일 형식이 올바르지 않습니다." });
+    return res.status(400).json({ ok: false, error: "아이디 형식이 올바르지 않습니다." });
   }
   if (nickname.length < 2 || nickname.length > 50) {
     return res.status(400).json({ ok: false, error: "닉네임은 2~50자로 입력해 주세요." });
@@ -101,7 +101,7 @@ router.post("/auth/register", async (req, res) => {
   try {
     const existing = await findUserByEmail(email);
     if (existing) {
-      return res.status(409).json({ ok: false, error: "이미 가입된 이메일입니다." });
+      return res.status(409).json({ ok: false, error: "이미 가입된 아이디입니다." });
     }
     const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
     const row = await createLocalUser({ email, passwordHash, name, nickname });
@@ -112,7 +112,7 @@ router.post("/auth/register", async (req, res) => {
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     if (/Duplicate|ER_DUP_ENTRY/i.test(msg)) {
-      return res.status(409).json({ ok: false, error: "이미 사용 중인 이메일 또는 닉네임입니다." });
+      return res.status(409).json({ ok: false, error: "이미 사용 중인 아이디 또는 닉네임입니다." });
     }
     console.error("[auth/register]", e);
     return res.status(502).json({ ok: false, error: "회원가입에 실패했습니다." });

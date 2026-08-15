@@ -102,6 +102,12 @@ const LEVEL_LABEL: Record<string, string> = {
   emd: "읍면동",
 };
 
+const LEVEL_UNIT: Record<string, string> = {
+  sido: "시·도 단위",
+  sigungu: "시·군·구 단위",
+  emd: "읍·면·동 단위",
+};
+
 function clientToSvg(
   svg: SVGSVGElement,
   clientX: number,
@@ -1137,7 +1143,7 @@ export function KoreaSvgMap({
             <svg
               ref={svgRef}
               viewBox={viewBox}
-              className="h-full w-full select-none"
+              className="h-full w-full origin-center scale-[1.12] select-none"
               role="img"
               aria-label="행정구역 산불 위험 지도"
               preserveAspectRatio="xMidYMid meet"
@@ -1373,17 +1379,19 @@ export function KoreaSvgMap({
 
           <div className="pointer-events-none absolute top-4 right-4 left-4 z-20 flex items-start justify-between gap-3">
             <div className="pointer-events-none space-y-2">
-              <div className="rounded-2xl bg-white/95 px-3.5 py-2.5 text-sm shadow-[var(--shadow-card)] ring-1 ring-[#e5e7eb]">
-                <p className="text-[11px] font-semibold tracking-[0.08em] text-[#9ca3af] uppercase">
-                  행정 단위
+              <div
+                className="rounded-2xl bg-white/95 px-3.5 py-2 text-sm shadow-[var(--shadow-card)] ring-1 ring-[#e5e7eb]"
+                title={
+                  mapMode === "satellite"
+                    ? `위성 · 줌 Lv.${satView.level}`
+                    : `줌 ${view.scale.toFixed(1)}× · 스크롤 확대 · 드래그 이동`
+                }
+              >
+                <p className="text-[11px] font-medium text-[#9ca3af]">
+                  행정구역
                 </p>
-                <p className="font-semibold text-[#111827]">
-                  {LEVEL_LABEL[level]}
-                  <span className="ml-2 text-xs font-normal text-[#6b7280]">
-                    {mapMode === "satellite"
-                      ? `위성 · 줌 Lv.${satView.level}${level === "emd" ? " · 커서 위치 시군구 읍면동" : ""}`
-                      : `줌 ${view.scale.toFixed(1)}× · 스크롤 확대 · 드래그 이동`}
-                  </span>
+                <p className="text-[13px] font-semibold text-[#111827]">
+                  {LEVEL_UNIT[level]}
                 </p>
               </div>
 
@@ -1572,6 +1580,8 @@ export function KoreaSvgMap({
                   : undefined
               }
               probabilityLabel={isPredictMode ? probLabel : undefined}
+              predictRegions={isPredictMode ? activePredict?.regions : null}
+              riskMode={riskMode}
               onLocateMountain={onLocateMountain}
               onClose={() => {
                 setSelected(null);
@@ -1624,6 +1634,8 @@ export function KoreaSvgMap({
                 : undefined
             }
             probabilityLabel={isPredictMode ? probLabel : undefined}
+            predictRegions={isPredictMode ? activePredict?.regions : null}
+            riskMode={riskMode}
             onLocateMountain={onLocateMountain}
             onClose={() => {
               setSelected(null);

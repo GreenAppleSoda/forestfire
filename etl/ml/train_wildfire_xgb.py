@@ -32,7 +32,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "ml-service"))
 import json
 import re
 from collections import defaultdict
-from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -52,14 +51,12 @@ from paths import (
     SIGUNGU_ML_SCORES_WEB,
     WEATHER_DAILY_SIGUNGU,
     WILDFIRE_XGB_BUNDLE,
-    WILDFIRE_XGB_CALIBRATOR,
     WILDFIRE_XGB_IMPORTANCE,
     WILDFIRE_XGB_METRICS,
     WILDFIRE_XGB_MODEL,
     SIGUNGU_ML_RISK_SCORES,
     ensure_dirs,
 )
-from predict.calibration import apply_calibration, save_calibrator
 from predict.dwi import add_dwi_column
 from predict.precip_features import add_precip_feature_columns
 
@@ -73,8 +70,6 @@ OUT_TRAIN_1Y = ML_TRAIN_SIGUNGU_DAILY_1Y
 TRAIN_LOOKBACK_DAYS = 365
 
 TEST_START = "2025-01-01"
-# XGB fit: date < CALIB_START / isotonic: CALIB_START ≤ date < TEST_START / 평가: ≥ TEST_START
-CALIB_START = "2024-01-01"
 # 기상 4 + 산불이력 2 + DWI + 강수파생 3 (7d/14d 누적 · 연속무강수, 전일까지)
 FEATURE_COLS = [
     "temp_avg",
@@ -225,40 +220,35 @@ def add_labels_and_history(df: pd.DataFrame, fire_labels: pd.DataFrame) -> pd.Da
 
 def train_and_eval(
     df: pd.DataFrame,
-) -> tuple[XGBClassifier, Any, dict, pd.DataFrame]:
-    """XGB 학습 + 2024 hold-out Isotonic 보정 + 2025+ 테스트 평가.
+) -> tuple[XGBClassifier, dict, pd.DataFrame]:
+    """XGB 학습 + 2025+ 테스트 평가.
 
     분할
     ----
-    - fit   : date < CALIB_START (2024-01-01)
-    - calib : CALIB_START ≤ date < TEST_START  → IsotonicRegression
-    - test  : date ≥ TEST_START               → 지표·지도 점수
+    - train : date < TEST_START
+    - test  : date ≥ TEST_START  → 지표·지도 점수
     """
-    from sklearn.isotonic import IsotonicRegression
     from sklearn.metrics import brier_score_loss
 
     df = df.dropna(subset=FEATURE_COLS).copy()
     df["date_str"] = df["date"].dt.strftime("%Y-%m-%d")
 
-    fit_df = df[df["date_str"] < CALIB_START]
-    calib_df = df[(df["date_str"] >= CALIB_START) & (df["date_str"] < TEST_START)]
+    train = df[df["date_str"] < TEST_START]
     test = df[df["date_str"] >= TEST_START]
-    if fit_df.empty or calib_df.empty or test.empty:
+    if train.empty or test.empty:
         raise RuntimeError(
-            f"분할 결과 비어 있음: fit={len(fit_df)} calib={len(calib_df)} test={len(test)}"
+            f"분할 결과 비어 있음: train={len(train)} test={len(test)}"
         )
 
-    X_fit, y_fit = fit_df[FEATURE_COLS], fit_df["y"].astype(int)
-    X_calib, y_calib = calib_df[FEATURE_COLS], calib_df["y"].astype(int)
+    X_train, y_train = train[FEATURE_COLS], train["y"].astype(int)
     X_test, y_test = test[FEATURE_COLS], test["y"].astype(int)
 
-    pos = int(y_fit.sum())
-    neg = int(len(y_fit) - pos)
+    pos = int(y_train.sum())
+    neg = int(len(y_train) - pos)
     spw = max(neg / max(pos, 1), 1.0)
     print(
-        f"   분할 fit={len(fit_df):,}(~{CALIB_START})  "
-        f"calib={len(calib_df):,}({CALIB_START}~{TEST_START})  "
-        f"test={len(test):,}  fit양성={pos:,}  calib양성={int(y_calib.sum()):,}"
+        f"   분할 train={len(train):,}(<{TEST_START})  "
+        f"test={len(test):,}  train양성={pos:,}"
     )
 
     model = XGBClassifier(
@@ -275,19 +265,9 @@ def train_and_eval(
         random_state=42,
         n_jobs=4,
     )
-    model.fit(X_fit, y_fit)
+    model.fit(X_train, y_train)
 
-    raw_calib = model.predict_proba(X_calib)[:, 1]
-    calibrator = IsotonicRegression(out_of_bounds="clip", y_min=0.0, y_max=1.0)
-    calibrator.fit(raw_calib, y_calib.to_numpy())
-    print(
-        f"   Isotonic 보정 fit 완료  "
-        f"raw_calib mean={raw_calib.mean():.4f}  "
-        f"실제율={y_calib.mean():.4f}"
-    )
-
-    raw_test = model.predict_proba(X_test)[:, 1]
-    proba = apply_calibration(raw_test, calibrator)
+    proba = model.predict_proba(X_test)[:, 1]
 
     thr = float(np.quantile(proba, 1 - min(0.05, max(y_test.mean() * 10, 0.01))))
     pred = (proba >= thr).astype(int)
@@ -296,23 +276,16 @@ def train_and_eval(
     )
     metrics = {
         "test_start": TEST_START,
-        "calib_start": CALIB_START,
-        "calibration": "isotonic",
-        "n_fit": int(len(fit_df)),
-        "n_calib": int(len(calib_df)),
+        "n_train": int(len(train)),
         "n_test": int(len(test)),
-        "n_fit_pos": pos,
-        "n_calib_pos": int(y_calib.sum()),
+        "n_train_pos": pos,
         "n_test_pos": int(y_test.sum()),
         "scale_pos_weight": round(spw, 2),
         "threshold": round(thr, 4),
         "roc_auc": round(float(roc_auc_score(y_test, proba)), 4),
-        "roc_auc_raw": round(float(roc_auc_score(y_test, raw_test)), 4),
         "pr_auc": round(float(average_precision_score(y_test, proba)), 4),
         "brier": round(float(brier_score_loss(y_test, proba)), 6),
-        "brier_raw": round(float(brier_score_loss(y_test, raw_test)), 6),
         "mean_pred": round(float(proba.mean()), 6),
-        "mean_pred_raw": round(float(raw_test.mean()), 6),
         "base_rate_test": round(float(y_test.mean()), 6),
         "precision": round(float(precision), 4),
         "recall": round(float(recall), 4),
@@ -324,21 +297,18 @@ def train_and_eval(
         ["date_str", "sigungu_code", "sigungu_name", "province", "y"]
     ].copy()
     test_out["y_prob"] = proba
-    test_out["y_prob_raw"] = raw_test
-    return model, calibrator, metrics, test_out
+    return model, metrics, test_out
 
 
 def region_scores(
     test_out: pd.DataFrame,
     full_df: pd.DataFrame,
     model: XGBClassifier,
-    calibrator: Any | None = None,
 ) -> pd.DataFrame:
-    """시군구별 위험점수: test 기간 평균 (보정)예측확률 + 봄철(2~5월) 평균."""
+    """시군구별 위험점수: test 기간 평균 예측확률 + 봄철(2~5월) 평균."""
     X_all = full_df[FEATURE_COLS]
     full_df = full_df.copy()
-    raw = model.predict_proba(X_all)[:, 1]
-    full_df["y_prob"] = apply_calibration(raw, calibrator)
+    full_df["y_prob"] = model.predict_proba(X_all)[:, 1]
     full_df["month"] = full_df["date"].dt.month
 
     test_start = pd.Timestamp(TEST_START)
@@ -460,17 +430,17 @@ def main() -> None:
     sample_out.to_csv(OUT_TRAIN_SAMPLE, index=False, encoding="utf-8-sig")
     print(f"   샘플 저장: {OUT_TRAIN_SAMPLE.name} ({len(sample_out):,}행)")
 
-    print("7) XGBoost 학습 + Isotonic 보정…")
-    model, calibrator, metrics, test_out = train_and_eval(df)
+    print("7) XGBoost 학습…")
+    model, metrics, test_out = train_and_eval(df)
     print(
-        f"   ROC-AUC={metrics['roc_auc']} (raw {metrics['roc_auc_raw']})  "
+        f"   ROC-AUC={metrics['roc_auc']}  "
         f"PR-AUC={metrics['pr_auc']}  "
-        f"mean_pred={metrics['mean_pred']} (raw {metrics['mean_pred_raw']})  "
+        f"mean_pred={metrics['mean_pred']}  "
         f"base_rate={metrics['base_rate_test']}"
     )
     print(
         f"   P={metrics['precision']} R={metrics['recall']} F1={metrics['f1']}  "
-        f"Brier={metrics['brier']} (raw {metrics['brier_raw']})"
+        f"Brier={metrics['brier']}"
     )
 
     imp = (
@@ -481,13 +451,12 @@ def main() -> None:
     metrics["top_features"] = imp.head(10).to_dict(orient="records")
 
     print("8) 시군구 위험점수…")
-    scores = region_scores(test_out, df, model, calibrator)
+    scores = region_scores(test_out, df, model)
     scores.to_csv(OUT_SCORES, index=False, encoding="utf-8-sig")
 
     web_payload = {
         "model": "xgboost_sigungu_daily",
         "test_start": TEST_START,
-        "calibration": "isotonic",
         "metrics": {
             "roc_auc": metrics["roc_auc"],
             "pr_auc": metrics["pr_auc"],
@@ -497,7 +466,7 @@ def main() -> None:
             "mean_pred": metrics["mean_pred"],
             "base_rate_test": metrics["base_rate_test"],
         },
-        "note": "ml_risk = 2025년 test 기간 일별 보정 예측확률 평균 (시군구)",
+        "note": "ml_risk = 2025년 test 기간 일별 XGB raw 예측확률 평균 (시군구)",
         "regions": [
             {
                 "code": r["sigungu_code"],
@@ -513,9 +482,8 @@ def main() -> None:
     OUT_WEB.write_text(json.dumps(web_payload, ensure_ascii=False), encoding="utf-8")
     OUT_METRICS.write_text(json.dumps(metrics, ensure_ascii=False, indent=2), encoding="utf-8")
 
-    print("9) 모델·보정기·추론용 상태 저장…")
+    print("9) 모델·추론용 상태 저장…")
     model.save_model(str(WILDFIRE_XGB_MODEL))
-    save_calibrator(calibrator, WILDFIRE_XGB_CALIBRATOR)
 
     # 시군구별 최신 이력 feature (당일 예측 시 사용)
     last = (
@@ -536,11 +504,6 @@ def main() -> None:
 
     bundle = {
         "model_path": str(WILDFIRE_XGB_MODEL.relative_to(ROOT)).replace("\\", "/"),
-        "calibrator_path": str(WILDFIRE_XGB_CALIBRATOR.relative_to(ROOT)).replace(
-            "\\", "/"
-        ),
-        "calibration": "isotonic",
-        "calib_start": CALIB_START,
         "features": FEATURE_COLS,
         "test_start": TEST_START,
         "trained_at": pd.Timestamp.now().isoformat(timespec="seconds"),
@@ -553,13 +516,12 @@ def main() -> None:
             "brier": metrics["brier"],
         },
         "hist_state": str(SIGUNGU_HIST_STATE.relative_to(ROOT)).replace("\\", "/"),
-        "note": "daily.py: XGB raw → Isotonic 보정 확률 (기상4+이력2+DWI+강수파생3)",
+        "note": "daily.py: XGB raw 산불 확률 (기상4+이력2+DWI+강수파생3)",
     }
     WILDFIRE_XGB_BUNDLE.write_text(
         json.dumps(bundle, ensure_ascii=False, indent=2), encoding="utf-8"
     )
     print(f"   {WILDFIRE_XGB_MODEL.name}")
-    print(f"   {WILDFIRE_XGB_CALIBRATOR.name}")
     print(f"   {SIGUNGU_HIST_STATE.name}")
     print(f"   {WILDFIRE_XGB_BUNDLE.name}")
 

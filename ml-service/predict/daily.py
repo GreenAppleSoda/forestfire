@@ -539,11 +539,8 @@ def run_daily_predict(
 
     model = XGBClassifier()
     model.load_model(str(WILDFIRE_XGB_MODEL))
-    # Isotonic 보정 없이 raw 확률 사용 (화면 0~100 위험지수와 동일 스케일)
-    raw = model.predict_proba(feats[FEATURE_COLS])[:, 1]
     feats = feats.copy()
-    feats["y_prob"] = raw
-    feats["y_prob_raw"] = raw
+    feats["y_prob"] = model.predict_proba(feats[FEATURE_COLS])[:, 1]
 
     mn, mx = float(feats["y_prob"].min()), float(feats["y_prob"].max())
     feats["ml_risk_norm"] = (feats["y_prob"] - mn) / (mx - mn + 1e-12)
@@ -563,10 +560,9 @@ def run_daily_predict(
             k: round(float(v), 2) if v == v else None for k, v in sample_wx.items()
         },
         "model_metrics": bundle.get("metrics", {}),
-        "calibration": None,
         "n_regions": int(len(feats)),
         "note": (
-            "y_prob=XGB raw 산불 확률(보정 없음) · "
+            "y_prob=XGB raw 산불 확률 · "
             "ml_risk×100 ≈ 산불위험지수 0~100 · "
             "ml_risk_norm=지도 상대 정규화 "
             "(기상4 + 이력2 + DWI + 강수파생3)"

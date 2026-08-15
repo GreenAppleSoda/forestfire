@@ -10,13 +10,13 @@ type Props = {
 export function MapLegend({ mode = "history", auc, predictDate }: Props) {
   const isPredict = mode === "daily" || mode === "scenario";
   const hint = isPredict
-    ? `0~100 · 10단계 · raw×100 · ${predictDate ?? "—"} · AUC ${auc != null ? auc.toFixed(2) : "—"}`
+    ? `0~100 · 10단계 · ${predictDate ?? "—"} · AUC ${auc != null ? auc.toFixed(2) : "—"}`
     : "같은 행정 레벨 안에서 과거 산불 건수를 비교 · 스크롤: 시도 → 시군구 → 읍면동";
 
   return (
     <div className="w-[300px] rounded-2xl bg-white px-4 py-3.5 shadow-[var(--shadow-card)] ring-1 ring-[#e5e7eb]">
       <p className="text-[12px] font-medium leading-snug text-[#6b7280]">
-        {isPredict ? "산불위험도" : "산불 발생 빈도 · 과거 이력"}
+        {isPredict ? "산불위험지수 (0~100)" : "산불 발생 빈도 · 과거 이력"}
       </p>
 
       {isPredict ? (

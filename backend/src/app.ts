@@ -11,6 +11,7 @@ import chatRoutes from "./routes/chat.js";
 import healthRoutes from "./routes/health.js";
 import mapRoutes from "./routes/map.js";
 import predictRoutes from "./routes/predict.js";
+import reportRoutes from "./routes/report.js";
 import wildfiresRoutes from "./routes/wildfires.js";
 
 export function createApp() {
@@ -33,6 +34,7 @@ export function createApp() {
   app.use("/api", wildfiresRoutes);
   app.use("/api", authRoutes);
   app.use("/api", chatRoutes);
+  app.use("/api", reportRoutes);
 
   return app;
 }

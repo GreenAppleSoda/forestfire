@@ -7,10 +7,15 @@ Express(`backend/`)만 호출하세요.
 cd ml-service
 # .env 작성 (아래 환경변수)
 pip install -r requirements.txt
+playwright install chromium   # PDF 리포트(report/)용 — 1회만
 python app.py
 ```
 
 기본: `127.0.0.1:5000`
+
+**Linux 배포 시 추가로 필요한 것** (Windows 개발 환경에는 해당 없음):
+- `playwright install --with-deps chromium` — Chromium 실행에 필요한 시스템 공유 라이브러리(libnss3 등)까지 함께 설치
+- 한글 폰트: `fonts-noto-cjk` 또는 `fonts-nanum` (apt) — 없으면 PDF의 한글이 네모(tofu)로 깨짐. `report/templates/wildfire_report.html.j2`의 폰트 스택이 `Noto Sans/Serif CJK KR` → `NanumGothic/Myeongjo`도 찾아보도록 되어 있으니 둘 중 하나만 설치해도 됨
 
 ## 환경변수 (`ml-service/.env`)
 
@@ -44,8 +49,21 @@ python -m predict.daily --date 2026-07-23 --temp-avg 28 --humidity-avg 45 --wind
 
 피처 (10): 기상 4 + 산불이력 2 + DWI + 강수파생 3  
 (`precip_sum_7d`, `precip_sum_14d`, `dry_days` — 예측일 전일까지, 결측=0mm)  
-확률: XGB raw → **Isotonic 보정**(2024 hold-out) 후 화면에 표시.  
+확률: XGB raw `predict_proba` (보정 없음).  
 학습은 `etl/ml/train_wildfire_xgb.py`.
+
+## PDF 리포트 (`report/`)
+
+지역(시·도/시군구/전국) 단위 산불위험 PDF를 만듭니다. daily_ml_risk 예측 데이터 + Jinja2 템플릿을
+Playwright(Chromium)로 인쇄해 A4 PDF로 뽑습니다 — 지역 데이터 양에 따라 페이지 수가 자동으로 늘어납니다.
+
+**웹에서는 Express가 회원 세션을 확인한 뒤** 이 서비스의 `POST /report/pdf` 를 호출합니다.
+브라우저가 Flask를 직접 호출하지 마세요.
+
+```powershell
+python -m report.generate --region 서울
+python -m report.generate --region "부산 중구"
+```
 
 ## HTTP (내부)
 
@@ -54,6 +72,7 @@ python -m predict.daily --date 2026-07-23 --temp-avg 28 --humidity-avg 45 --wind
 | `GET` | `/health` | 헬스 |
 | `POST` | `/predict/daily` | 당일 예측 |
 | `POST` | `/predict/scenario` | 가정 기상 시나리오 예측 |
+| `POST` | `/report/pdf` | 지역별 산불위험 PDF (body: `{region}`) |
 | `POST` | `/sync/wildfires` | MariaDB 산불 이력 → 맵 JSON 갱신 |
 | `GET` | `/sync/wildfires/status` | 동기화 상태 |
 
@@ -69,13 +88,17 @@ ml-service/
 │   ├── daily.py
 │   ├── weather_db.py      # MariaDB lag/학습 기상
 │   ├── fire_db.py         # MariaDB forestfire_stats
-│   ├── dwi.py · precip_features.py · calibration.py
+│   ├── dwi.py · precip_features.py
 │   ├── kma_client.py
 │   └── scenario_weather.py
 ├── routes/
 │   ├── health.py
 │   ├── predict.py
+│   ├── report.py          # → report/generate
 │   └── sync.py            # → etl sync_wildfire_history
+├── report/                # 지역별 PDF 리포트 (Jinja2 + Playwright)
+│   ├── data.py · geometry.py · render.py · generate.py
+│   └── templates/wildfire_report.html.j2
 └── services/
     └── weather.py
 ```

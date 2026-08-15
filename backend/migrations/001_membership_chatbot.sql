@@ -1,8 +1,9 @@
 -- 챗봇 세션·메시지 테이블 (기존 forest_fire_DB.users 기준)
 -- 실행: mysql -h <host> -u <user> -p forest_fire_DB < 001_membership_chatbot.sql
 --
--- 주의: 기존 users / user_subscriptions / payment_histories 는 건드리지 않습니다.
+-- 주의: 기존 users 테이블은 건드리지 않습니다. (구독/결제 테이블은 사용하지 않음)
 -- users.id 는 bigint — chat_sessions.user_id 도 bigint 로 맞춤.
+-- 보고서는 DB에 저장하지 않고 로그인 회원에게 조회 시 생성해 보여 줍니다.
 
 -- 1) 챗봇 세션 (비로그인 게스트 — user_id NULL 허용)
 CREATE TABLE IF NOT EXISTS chat_sessions (
@@ -23,5 +24,3 @@ CREATE TABLE IF NOT EXISTS chat_messages (
   CONSTRAINT fk_chat_messages_session FOREIGN KEY (session_id) REFERENCES chat_sessions(id) ON DELETE CASCADE,
   INDEX idx_chat_messages_session (session_id, id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
--- (보류) 리포트 이력은 보고서 기능 구현 시 추가합니다.

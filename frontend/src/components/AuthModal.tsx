@@ -123,7 +123,7 @@ export function AuthModal({ open, mode, onClose }: Props) {
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            placeholder="이메일"
+            placeholder="아이디"
             className="w-full rounded-xl border border-[#e5e7eb] px-3 py-2.5 text-[13px]"
             autoComplete="email"
             required
