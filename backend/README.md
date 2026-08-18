@@ -48,10 +48,11 @@ Flask URL: `ML_SERVICE_URL` (기본 `http://127.0.0.1:5000`)
   (`scenario` body: `{ year, month, weather }`. 프론트 UI는 접속월부터 12개월만 노출)
 - `POST /api/wildfires/sync` · `GET /api/wildfires/sync/status` — MariaDB → `backend/data` 이력 패치
 
-**회원** (로컬 이메일/비밀번호; 소셜 로그인은 미지원)
+**회원** (로컬 아이디/비밀번호, 구글/카카오 OAuth)
 
 - `POST /api/auth/register` · `login` · `logout`
 - `GET /api/auth/me`
+- `GET /api/auth/google` · `/kakao` · `/google/callback` · `/kakao/callback`
 
 **챗봇**
 

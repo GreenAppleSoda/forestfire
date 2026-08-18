@@ -4,6 +4,7 @@
  */
 export type AuthUser = {
   id: number;
+  loginId: string;
   email: string;
   name: string;
   nickname: string;

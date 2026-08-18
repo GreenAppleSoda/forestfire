@@ -41,6 +41,19 @@ export const SESSION_SECRET =
 export const SESSION_COOKIE = "ff_session";
 export const SESSION_DAYS = Number(process.env.SESSION_DAYS || 14);
 
+function envStr(key: string): string {
+  return (process.env[key] || "").trim().replace(/^['"]|['"]$/g, "");
+}
+
+/** OAuth 콜백은 프론트 오리진(/api 프록시)으로 받는다 */
+export const OAUTH_REDIRECT_BASE = (
+  envStr("OAUTH_REDIRECT_BASE") || FRONTEND_ORIGIN
+).replace(/\/$/, "");
+export const GOOGLE_CLIENT_ID = envStr("GOOGLE_CLIENT_ID");
+export const GOOGLE_CLIENT_SECRET = envStr("GOOGLE_CLIENT_SECRET");
+export const KAKAO_REST_API_KEY = envStr("KAKAO_REST_API_KEY");
+export const KAKAO_CLIENT_SECRET = envStr("KAKAO_CLIENT_SECRET");
+
 /**
  * backend 자체 지도 데이터 폴더 (frontend 폴더를 직접 읽지 않음).
  * 웹 산불이력 갱신은 이 폴더의 map-data.json / admin-*.json 만 패치합니다.
