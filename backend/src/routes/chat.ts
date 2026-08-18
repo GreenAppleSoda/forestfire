@@ -81,7 +81,11 @@ async function ensureSession(sessionId: string, userId: number | null): Promise<
     return sessionId;
   }
 
-  const existing = rows[0].user_id != null ? Number(rows[0].user_id) : null;
+  const row = rows[0];
+  if (!row) {
+    return sessionId;
+  }
+  const existing = row.user_id != null ? Number(row.user_id) : null;
   if (userId != null && existing != null && existing !== userId) {
     const fresh = randomUUID();
     await pool.query("INSERT INTO chat_sessions (id, user_id) VALUES (?, ?)", [
