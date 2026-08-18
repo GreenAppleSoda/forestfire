@@ -256,7 +256,10 @@ export function SatelliteMap({
       applyFocus(c.getLat(), c.getLng());
     };
 
-    const onMouseMove = (mouseEvent: { latLng: { getLat: () => number; getLng: () => number } }) => {
+    const onMouseMove = (...args: unknown[]) => {
+      const mouseEvent = args[0] as {
+        latLng: { getLat: () => number; getLng: () => number };
+      };
       const now = performance.now();
       if (now - lastMoveAt < 50) return;
       lastMoveAt = now;
