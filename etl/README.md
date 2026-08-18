@@ -32,7 +32,7 @@ etl/
 ├── requirements.txt
 ├── pipeline/
 │   ├── load_wildfire_history.py   # DB 우선 산불 로드
-│   ├── sync_wildfire_history.py   # DB → 맵 갱신 (웹 동기화와 동일)
+│   ├── sync_wildfire_history.py   # DB → frontend/public/data 맵 갱신 (오프라인 CLI)
 │   ├── sync_wildfire_openapi.py   # 레거시 OpenAPI 증분
 │   ├── preprocess.py · preprocess_weather.py · …
 ├── analyze/

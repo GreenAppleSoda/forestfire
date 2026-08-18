@@ -100,28 +100,3 @@ export async function callFlaskHealth(): Promise<FlaskJson> {
   });
   return (await r.json()) as FlaskJson;
 }
-
-export async function callFlaskWildfireSyncStatus(): Promise<{
-  ok: boolean;
-  status: number;
-  json: FlaskJson;
-}> {
-  const r = await fetch(`${ML_SERVICE_URL}/sync/wildfires/status`, {
-    signal: AbortSignal.timeout(10_000),
-  });
-  const json = (await r.json().catch(() => ({}))) as FlaskJson;
-  return { ok: r.ok, status: r.status, json };
-}
-
-export async function callFlaskWildfireSync(
-  body: JsonObject,
-): Promise<{ ok: boolean; status: number; json: FlaskJson }> {
-  const r = await fetch(`${ML_SERVICE_URL}/sync/wildfires`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-    signal: AbortSignal.timeout(180_000),
-  });
-  const json = (await r.json().catch(() => ({}))) as FlaskJson;
-  return { ok: r.ok, status: r.status, json };
-}

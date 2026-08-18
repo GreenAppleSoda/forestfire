@@ -1,6 +1,7 @@
 /**
- * MariaDB 연결 풀 (챗봇 세션·메시지 영속화).
+ * MariaDB 연결 풀 (회원·챗봇 영속화 · 산불이력 동기화).
  * DB_* 미설정이면 isDbConfigured() === false → 챗봇은 동작하되 대화를 DB에 남기지 않음.
+ * 산불이력 갱신(POST /api/wildfires/sync)은 DB가 필요합니다.
  */
 import mysql from "mysql2/promise";
 import {

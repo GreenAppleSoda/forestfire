@@ -19,7 +19,7 @@ export const PREDICT_CACHE_MS = Number(
   process.env.PREDICT_CACHE_MS || 30 * 60 * 1000,
 );
 
-/** MariaDB — 챗봇 세션 영속화 (미설정이면 챗봇은 동작, 대화는 저장 안 함) */
+/** MariaDB — 회원·챗봇 영속화 · 산불이력 동기화 (미설정이면 챗봇은 동작, 대화는 저장 안 함) */
 export const DB_HOST = (process.env.DB_HOST || "").trim();
 export const DB_PORT = Number(process.env.DB_PORT || 3306);
 export const DB_USER = (process.env.DB_USER || "").trim();
@@ -56,9 +56,8 @@ export const KAKAO_CLIENT_SECRET = envStr("KAKAO_CLIENT_SECRET");
 
 /**
  * backend 자체 지도 데이터 폴더 (frontend 폴더를 직접 읽지 않음).
- * etl(build_admin_layers · export_map_data · compress_web_data ·
- * refresh_history_layers)이 frontend/public/data를 갱신할 때마다
- * 같은 파일을 여기로도 복사합니다 (etl/paths.py의 sync_backend_data).
+ * 웹 산불이력 갱신은 이 폴더의 map-data.json / admin-*.json 만 패치합니다.
+ * 최초 지도 JSON은 etl이 만들고 배포 시 여기로 넣습니다.
  * 다른 위치를 쓰려면 .env의 DATA_DIR에 ROOT 기준 상대경로를 지정하세요.
  */
 export const DATA_DIR = process.env.DATA_DIR

@@ -3,9 +3,7 @@
 predict/ 예측 기능(daily · scenario)이 필요로 하는 경로만 모아 둡니다.
 이 파일 덕분에 예측 기능은 etl/ 폴더 없이도 동작합니다.
 
-예외: 이력 동기화 기능(routes/sync.py)만은 etl/pipeline을 그대로 재사용하므로
-etl/paths.py 를 별도로 import합니다 (README 참고).
-
+웹 산불이력 갱신은 Express(backend/)가 담당합니다.
 etl 배치 파이프라인 전체 경로는 etl/paths.py 를 참고하세요.
 """
 

@@ -18,8 +18,8 @@ South Korea Wildfire Atlas — 시군구 산불 위험 지도·예측 웹서비�
 | 프로세스 | 폴더 | 포트 | 역할 |
 |----------|------|------|------|
 | Next.js | `frontend/` | 3000 | UI · `/api` → Express 프록시 · 챗봇·로그인·보고서 모달 |
-| Express | `backend/` | 4000 | 공개 API · 회원/세션 · 챗봇 · 보고서 게이트 · Flask 프록시 · DTO 화이트리스트 |
-| Flask | `ml-service/` | 5000 | 예측 · 산불이력(DB) 동기화 · PDF 렌더(Playwright) · localhost 전용 |
+| Express | `backend/` | 4000 | 공개 API · 회원/세션 · 챗봇 · 산불이력 맵 갱신 · 보고서 게이트 · Flask 프록시 · DTO 화이트리스트 |
+| Flask | `ml-service/` | 5000 | 예측 · PDF 렌더(Playwright) · localhost 전용 |
 | 배치 ETL | `etl/` | — | 전처리·학습 스크립트 (웹 요청에서 실행하지 않음) |
 
 ```
@@ -40,8 +40,8 @@ South Korea Wildfire Atlas — 시군구 산불 위험 지도·예측 웹서비�
 | 예측용 당일 기상 | 기상청 ASOS API | `KMA_API_AUTH_KEY` |
 | 예측용 lag 기상 (어제·그저께) | MariaDB `weather_daily_sigungu` | 실패 시 CSV 폴백 |
 | 학습용 기상 | MariaDB 우선 | 동일 테이블 / CSV 폴백 |
-| 지도 JSON | `frontend/public/data` + `backend/data` | etl·이력 갱신 시 둘 다 동기화 |
-| 챗봇·리포트용 당일 예측 스냅샷 | `backend/data/daily_ml_risk.json` | 예측 시 `frontend/public/data`와 이중 저장. 챗봇은 예측 API 우선, 실패 시 파일 폴백 |
+| 지도 JSON | `frontend/public/data` + `backend/data` | 첫 로딩은 프론트 정적 파일. 웹 이력 갱신은 `backend/data`만 패치 |
+| 챗봇·리포트용 당일 예측 스냅샷 | `backend/data/daily_ml_risk.json` | Express가 예측 API 성공 시 저장. 챗봇은 예측 API 우선, 실패 시 파일 폴백 |
 
 `refined_wildfire_data.csv` 는 더 이상 주 데이터가 아닙니다. DB가 정상이면 없어도 일상 운영(예측·이력 갱신·학습)이 가능합니다.
 
@@ -114,7 +114,7 @@ npm run dev
 | `ml-service/.env` | `FOREST_FIRE_SERVICE_KEY` | (선택) 레거시 OpenAPI 스크립트용 |
 | `backend/.env` | `PORT`, `FRONTEND_ORIGIN`, `ML_SERVICE_URL`, `PREDICT_CACHE_MS`, `DATA_DIR` | CORS · Flask URL · 예측 캐시 · 지도 데이터 폴더 |
 | `backend/.env` | `GEMINI_API_KEY`, `GEMINI_MODEL`(선택) | 안내 챗봇 (`/api/chat`) |
-| `backend/.env` | `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME` | 회원·챗봇 세션 (ml-service 와 동일 MariaDB 권장) |
+| `backend/.env` | `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME` | 회원·챗봇·산불이력 동기화 (ml-service 와 동일 MariaDB 권장) |
 | `backend/.env` | `SESSION_SECRET`, `SESSION_DAYS`(선택) | 로그인 세션 쿠키 서명 |
 | `frontend/.env.local` | `NEXT_PUBLIC_KAKAO_MAP_KEY`, `EXPRESS_URL` | 카카오 JS 키 · Express 주소 (`http://127.0.0.1:4000` 권장) |
 
@@ -126,14 +126,16 @@ npm run dev
 
 `frontend`와 `backend`는 지도 JSON(`map-data.json`, `admin-*.json`)을 각자 폴더에 **따로** 둡니다.
 
-- `frontend/public/data` — 브라우저가 정적 파일로 직접 로드
-- `backend/data` — Express `/api/map/*` · 챗봇 폴백 · 리포트 입력이 읽는 사본
+- `frontend/public/data` — 브라우저 첫 로딩 정적 파일
+- `backend/data` — Express `/api/map/*` · 웹 이력 갱신 · 챗봇 폴백
 
-원본은 `etl`이 만듭니다. `frontend/public/data`를 갱신할 때마다
+원본 지도 JSON은 `etl`이 만듭니다. 오프라인에서 `frontend/public/data`를 갱신할 때
 `etl/paths.py`의 `sync_backend_data()`가 `backend/data`로도 복사합니다.
-웹 **산불이력 갱신**(`POST /api/wildfires/sync`)도 `refresh_history_layers()` 안에서 같이 복사합니다.
 
-당일 예측(`predict.daily`)은 `daily_ml_risk.json`을 **frontend·backend data 양쪽에** 씁니다.
+웹 **산불이력 갱신**(`POST /api/wildfires/sync`)은 Express가 MariaDB를 읽고
+`backend/data`의 건수·색만 패치합니다. `frontend/public/data`는 건드리지 않습니다.
+
+당일 예측 스냅샷 `daily_ml_risk.json`은 Express가 `backend/data`에 저장합니다.
 
 ## 회원 · 챗봇 · 보고서 (요약)
 
@@ -172,14 +174,14 @@ python -m predict.daily --kma
 
 ## 산불 이력 갱신 (MariaDB)
 
-MariaDB `forestfire_stats` → `admin-*.json` / `map-data.json` 이력 색·건수 갱신.
+웹: **과거 이력** 모드 → 「산불이력 갱신」  
+API: `POST /api/wildfires/sync` — Express가 MariaDB `forestfire_stats`를 읽어 `backend/data`의 건수·색을 패치합니다.
+
+오프라인에서 `frontend/public/data`까지 맞추려면:
 
 ```powershell
 python etl/pipeline/sync_wildfire_history.py
 ```
-
-웹: **과거 이력** 모드 → 「산불이력 갱신」  
-API: `POST /api/wildfires/sync` (Express → Flask → 위 파이프라인)
 
 (참고) 예전 공공데이터 OpenAPI 증분 스크립트는 `etl/pipeline/sync_wildfire_openapi.py` 에 남아 있으나, **웹 버튼·기본 동기화 경로는 DB**입니다.
 
@@ -215,8 +217,6 @@ API: `POST /api/wildfires/sync` (Express → Flask → 위 파이프라인)
 - `POST /predict/daily` — Express만 호출
 - `POST /predict/scenario` — Express만 호출
 - `POST /report/pdf` — body: `{ region }` — Express만 호출 (PDF 바이트)
-- `POST /sync/wildfires` — MariaDB 이력 동기화
-- `GET /sync/wildfires/status`
 
 ## 배치 파이프라인 (오프라인)
 

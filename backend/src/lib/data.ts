@@ -29,3 +29,10 @@ export async function readJsonCached(name: string): Promise<JsonObject> {
   jsonCache.set(full, { mtimeMs: stat.mtimeMs, json });
   return json;
 }
+
+export async function writeJson(name: string, json: JsonObject): Promise<void> {
+  const full = path.join(DATA_DIR, name);
+  await fs.mkdir(path.dirname(full), { recursive: true });
+  await fs.writeFile(full, JSON.stringify(json), "utf-8");
+  jsonCache.delete(full);
+}

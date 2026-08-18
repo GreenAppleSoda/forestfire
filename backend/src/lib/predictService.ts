@@ -6,6 +6,7 @@ import type {
   PredictScenarioBody,
 } from "../types.js";
 import { callFlaskPredict, callFlaskScenario } from "./mlClient.js";
+import { saveDailyMlRiskToFile } from "./riskSnapshot.js";
 import { whitelistDailyRisk } from "./whitelist.js";
 
 type PredictCache = { at: number; data: DailyRiskDto | null };
@@ -112,6 +113,7 @@ export async function runPredictDaily(
     const data = whitelistDailyRisk(json.data);
     if (!hasManual && source === "kma") {
       setPredictCache(data);
+      if (data) void saveDailyMlRiskToFile(data);
     }
 
     return { ok: true, data, cached: false, status: 200 };
