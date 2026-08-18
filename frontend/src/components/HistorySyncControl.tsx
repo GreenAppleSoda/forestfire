@@ -20,25 +20,6 @@ type Props = {
   }) => void;
 };
 
-type MapBundle = {
-  mapData: MapData;
-  layers: { sido: AdminLayer; sigungu: AdminLayer; emd: AdminLayer };
-};
-
-function sleep(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-/** sync가 public/data 를 갱신한 직후, 캐시 없이 정적 JSON을 읽는다. */
-async function fetchPublicJson<T>(path: string): Promise<T> {
-  const res = await fetch(path, { cache: "no-store" });
-  if (!res.ok) {
-    throw new Error(`${path} (${res.status})`);
-  }
-  const data = (await res.json()) as T;
-  return data;
-}
-
 function isUsableMapData(data: MapData | null | undefined): data is MapData {
   return Array.isArray(data?.regions) || Array.isArray(data?.provinces);
 }
@@ -47,82 +28,43 @@ function isUsableLayer(layer: AdminLayer | null | undefined): layer is AdminLaye
   return Array.isArray(layer?.regions);
 }
 
-/**
- * 동기화 직후 Next가 public/data 변경으로 재컴파일하는 동안
- * /api/map 프록시가 깨질 수 있어, 정적 파일을 우선 재시도한다.
- */
-async function loadMapBundleAfterSync(): Promise<MapBundle> {
-  const attempts = 5;
-  let lastError: unknown;
-
-  for (let i = 0; i < attempts; i++) {
-    // 첫 시도 전·재시도마다 대기 (파일 flush + Next HMR 안정화)
-    await sleep(i === 0 ? 400 : 500 * i);
-    try {
-      const [mapData, sido, sigungu, emd] = await Promise.all([
-        fetchPublicJson<MapData>("/data/map-data.json"),
-        fetchPublicJson<AdminLayer>("/data/admin-sido.json"),
-        fetchPublicJson<AdminLayer>("/data/admin-sigungu.json"),
-        fetchPublicJson<AdminLayer>("/data/admin-emd.json"),
-      ]);
-      if (
-        !isUsableMapData(mapData) ||
-        !isUsableLayer(sido) ||
-        !isUsableLayer(sigungu) ||
-        !isUsableLayer(emd)
-      ) {
-        throw new Error("맵 JSON 형식이 올바르지 않습니다");
-      }
-      return {
-        mapData,
-        layers: { sido, sigungu, emd },
-      };
-    } catch (e) {
-      lastError = e;
-    }
+/** 동기화 후 Express backend/data 를 /api/map 으로 다시 읽는다. */
+async function loadMapBundleAfterSync(): Promise<{
+  mapData: MapData;
+  layers: { sido: AdminLayer; sigungu: AdminLayer; emd: AdminLayer };
+}> {
+  const [mapRes, sidoRes, sigunguRes, emdRes] = await Promise.all([
+    fetch("/api/map/data", { cache: "no-store" }),
+    fetch("/api/map/admin/sido", { cache: "no-store" }),
+    fetch("/api/map/admin/sigungu", { cache: "no-store" }),
+    fetch("/api/map/admin/emd", { cache: "no-store" }),
+  ]);
+  const [mapJson, sidoJson, sigunguJson, emdJson] = await Promise.all([
+    readApiJson(mapRes),
+    readApiJson(sidoRes),
+    readApiJson(sigunguRes),
+    readApiJson(emdRes),
+  ]);
+  if (
+    !mapJson.ok ||
+    !sidoJson.ok ||
+    !sigunguJson.ok ||
+    !emdJson.ok ||
+    !isUsableMapData(mapJson.data as MapData) ||
+    !isUsableLayer(sidoJson.data as AdminLayer) ||
+    !isUsableLayer(sigunguJson.data as AdminLayer) ||
+    !isUsableLayer(emdJson.data as AdminLayer)
+  ) {
+    throw new Error("맵 API 응답이 올바르지 않습니다");
   }
-
-  // 정적 파일이 아직 안 되면 API 프록시로 한 번 더 시도
-  try {
-    const [mapRes, sidoRes, sigunguRes, emdRes] = await Promise.all([
-      fetch("/api/map/data", { cache: "no-store" }),
-      fetch("/api/map/admin/sido", { cache: "no-store" }),
-      fetch("/api/map/admin/sigungu", { cache: "no-store" }),
-      fetch("/api/map/admin/emd", { cache: "no-store" }),
-    ]);
-    const [mapJson, sidoJson, sigunguJson, emdJson] = await Promise.all([
-      readApiJson(mapRes),
-      readApiJson(sidoRes),
-      readApiJson(sigunguRes),
-      readApiJson(emdRes),
-    ]);
-    if (
-      !mapJson.ok ||
-      !sidoJson.ok ||
-      !sigunguJson.ok ||
-      !emdJson.ok ||
-      !isUsableMapData(mapJson.data as MapData) ||
-      !isUsableLayer(sidoJson.data as AdminLayer) ||
-      !isUsableLayer(sigunguJson.data as AdminLayer) ||
-      !isUsableLayer(emdJson.data as AdminLayer)
-    ) {
-      throw new Error("맵 API 응답이 올바르지 않습니다");
-    }
-    return {
-      mapData: mapJson.data as MapData,
-      layers: {
-        sido: sidoJson.data as AdminLayer,
-        sigungu: sigunguJson.data as AdminLayer,
-        emd: emdJson.data as AdminLayer,
-      },
-    };
-  } catch (e) {
-    lastError = e;
-  }
-
-  throw lastError instanceof Error
-    ? lastError
-    : new Error("맵 데이터 갱신 실패");
+  return {
+    mapData: mapJson.data as MapData,
+    layers: {
+      sido: sidoJson.data as AdminLayer,
+      sigungu: sigunguJson.data as AdminLayer,
+      emd: emdJson.data as AdminLayer,
+    },
+  };
 }
 
 export function HistorySyncControl({ onUpdated }: Props) {

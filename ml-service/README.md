@@ -1,7 +1,7 @@
 # ForestFire ML Service (Flask)
 
-당일·시나리오 산불 위험 예측과 산불이력(DB) 맵 갱신 — **localhost 전용**.  
-Express(`backend/`)만 호출하세요.
+당일·시나리오 산불 위험 예측과 PDF 리포트 — **localhost 전용**.  
+Express(`backend/`)만 호출하세요. 웹 산불이력 갱신은 Express가 담당합니다.
 
 ```powershell
 cd ml-service
@@ -28,7 +28,7 @@ python app.py
 | `FOREST_FIRE_SERVICE_KEY` | (선택) 레거시 OpenAPI ETL 스크립트용 — 웹 동기화에는 불필요 |
 
 예측(`predict/daily.py` 등)은 `ml_paths.py`, `predict/kma_client.py`로 `etl/` 없이도 동작합니다.  
-**예외:** 이력 동기화(`routes/sync.py`)는 `etl/pipeline/sync_wildfire_history.py`를 쓰므로 `etl/` 폴더가 필요합니다.
+웹 산불이력 갱신은 Express(`POST /api/wildfires/sync`)가 처리합니다.
 
 ## 예측 시 기상 출처
 
@@ -73,15 +73,13 @@ python -m report.generate --region "부산 중구"
 | `POST` | `/predict/daily` | 당일 예측 |
 | `POST` | `/predict/scenario` | 가정 기상 시나리오 예측 |
 | `POST` | `/report/pdf` | 지역별 산불위험 PDF (body: `{region}`) |
-| `POST` | `/sync/wildfires` | MariaDB 산불 이력 → 맵 JSON 갱신 |
-| `GET` | `/sync/wildfires/status` | 동기화 상태 |
 
 ## 폴더 구조
 
 ```
 ml-service/
 ├── app.py
-├── config.py              # .env · HOST/PORT · etl path (동기화용)
+├── config.py              # .env · HOST/PORT
 ├── ml_paths.py            # 예측용 경로
 ├── requirements.txt
 ├── predict/
@@ -94,8 +92,7 @@ ml-service/
 ├── routes/
 │   ├── health.py
 │   ├── predict.py
-│   ├── report.py          # → report/generate
-│   └── sync.py            # → etl sync_wildfire_history
+│   └── report.py          # → report/generate
 ├── report/                # 지역별 PDF 리포트 (Jinja2 + Playwright)
 │   ├── data.py · geometry.py · render.py · generate.py
 │   └── templates/wildfire_report.html.j2

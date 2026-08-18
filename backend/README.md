@@ -1,8 +1,7 @@
 # ForestFire Express API (`backend/`) — TypeScript
 
-공개 웹 백엔드. Flask(`ml-service`)를 프록시하고, 회원·챗봇·보고서 게이트를 담당합니다.  
-지도 JSON은 자체 `backend/data`에서 서빙합니다
-(`etl`이 `frontend/public/data`와 자동 동기화 — 루트 `README.md` 참고).  
+공개 웹 백엔드. Flask(`ml-service`)를 프록시하고, 회원·챗봇·보고서 게이트와 산불이력 맵 갱신을 담당합니다.  
+지도 JSON은 자체 `backend/data`에서 서빙·패치합니다.  
 브라우저로 나가는 예측·맵 응답은 `lib/whitelist.ts` 로 필터합니다.
 
 ```powershell
@@ -26,7 +25,7 @@ Flask URL: `ML_SERVICE_URL` (기본 `http://127.0.0.1:5000`)
 | `DATA_DIR` | `backend/data` | 지도·`daily_ml_risk.json` 폴더 (ROOT 기준 상대경로) |
 | `GEMINI_API_KEY` | — | 안내 챗봇 (없으면 `/api/chat` → 503) |
 | `GEMINI_MODEL` | `gemini-2.5-flash` | Gemini 모델명 |
-| `DB_HOST` 등 | — | MariaDB `users` · `chat_*` (미설정 시 챗봇은 동작, 대화 비영속) |
+| `DB_HOST` 등 | — | MariaDB `users` · `chat_*` · `forestfire_stats` (미설정 시 챗봇은 동작, 대화 비영속 / 이력 동기화 불가) |
 | `SESSION_SECRET` | (개발용 기본값) | 로그인 쿠키 HMAC — **배포 시 반드시 변경** |
 | `SESSION_DAYS` | `14` | 세션 유효 기간 |
 
@@ -47,7 +46,7 @@ Flask URL: `ML_SERVICE_URL` (기본 `http://127.0.0.1:5000`)
 - `GET /api/map/data` · `/api/map/admin/:level`
 - `POST /api/predict/daily` · `POST /api/predict/scenario`  
   (`scenario` body: `{ year, month, weather }`. 프론트 UI는 접속월부터 12개월만 노출)
-- `POST /api/wildfires/sync` · `GET /api/wildfires/sync/status`
+- `POST /api/wildfires/sync` · `GET /api/wildfires/sync/status` — MariaDB → `backend/data` 이력 패치
 
 **회원** (로컬 이메일/비밀번호; 소셜 로그인은 미지원)
 
@@ -77,7 +76,7 @@ PDF 본체는 `lib/reportService.ts` → Flask `POST /report/pdf` (Jinja2 + Play
 
 ```
 backend/
-├── data/                  # map-data · admin-* · daily_ml_risk.json
+├── data/                  # map-data · admin-* · daily_ml_risk.json · wildfire_sync_state.json
 ├── migrations/
 ├── .env.example
 └── src/
@@ -87,6 +86,7 @@ backend/
     │   ├── data.ts · whitelist.ts · mlClient.ts · predictService.ts
     │   ├── db.ts · gemini.ts · session.ts · users.ts
     │   ├── riskSnapshot.ts · regionFocus.ts
+    │   ├── adminMatch.ts · regionPath.ts · historyRefresh.ts · wildfireSync.ts
     │   ├── reportService.ts   # → Flask PDF
     │   └── reportStore.ts     # 임시 PDF 버퍼
     └── routes/

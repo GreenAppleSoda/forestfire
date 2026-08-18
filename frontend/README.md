@@ -37,11 +37,11 @@ npm run dev
 - 우측 패널 (`FireHistoryPanel`) — 미선택 시 전국 평균·최고 위험 시도, 선택 시 이력·산 상세
 - 범례 (`MapLegend`) — 예측 모드: **산불위험지수 (0~100)** (`ml_risk × 100`)
 - 위성 지도(카카오) · 일반/위성 · 보고서 · 로그인 (`MapChrome` · `AuthModal`)
-- 「산불이력 갱신」 — MariaDB → 맵 JSON (`HistorySyncControl`, 과거 이력 모드)
+- 「산불이력 갱신」 — Express가 MariaDB → `backend/data` 패치 (`HistorySyncControl`, 과거 이력 모드)
 - **안내 챗봇** (`ChatWidget`) — 비로그인 Q&A 가능; 「보고서 만들어줘」는 회원 + PDF 다운로드 버튼
 - **보고서** (`ReportModal`) — 회원 전용 JSON 요약 · 슬라이드형 PDF 다운로드
 
-초기 정적 데이터는 `public/data/` (`map-data.json`, `admin-*.json`, `sigungu_ml_scores.json` 등)에서 로드하고, 예측·동기화·인증·챗봇·보고서는 `/api/*` 로 Express를 호출합니다.
+초기 정적 데이터는 `public/data/` (`map-data.json`, `admin-*.json`, `sigungu_ml_scores.json` 등)에서 로드하고, 예측·이력 동기화·인증·챗봇·보고서는 `/api/*` 로 Express를 호출합니다. 이력 갱신 후에는 `/api/map/*`로 지도를 다시 읽습니다.
 
 `daily_ml_risk.json`은 브라우저가 필수로 읽지 않습니다(당일 예측은 API). 예측 파이프라인이 남겨 두는 스냅샷이며, 서버(`backend/data`) 쪽이 챗봇 폴백·리포트에 쓰입니다.
 
