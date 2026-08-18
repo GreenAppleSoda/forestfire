@@ -59,6 +59,7 @@ router.get("/report/daily", requireAuth, async (req, res) => {
         member: {
           name: user.name,
           nickname: user.nickname,
+          loginId: user.loginId,
           email: user.email,
         },
         predictDate: data.predict_date ?? null,

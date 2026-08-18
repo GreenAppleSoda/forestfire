@@ -5,10 +5,15 @@
  */
 import bcrypt from "bcryptjs";
 import { Router } from "express";
+import {
+  validateLoginId,
+  validatePassword,
+  validatePasswordConfirm,
+} from "../lib/authValidation.js";
 import { isDbConfigured } from "../lib/db.js";
 import {
   createLocalUser,
-  findUserByEmail,
+  findUserByLoginId,
   isUserActive,
   rowToAuthUser,
 } from "../lib/users.js";
@@ -21,6 +26,11 @@ import { optionalAuth } from "../middleware/optionalAuth.js";
 
 const router = Router();
 const BCRYPT_ROUNDS = 12;
+
+function readLoginId(body: unknown): string {
+  const rec = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
+  return String(rec.loginId ?? rec.email ?? "").trim().toLowerCase();
+}
 
 function dbRequired(
   res: import("express").Response,
@@ -42,14 +52,14 @@ router.get("/auth/me", optionalAuth, (req, res) => {
 
 router.post("/auth/login", async (req, res) => {
   if (!dbRequired(res)) return;
-  const email = String(req.body?.email || "").trim().toLowerCase();
+  const loginId = readLoginId(req.body);
   const password = String(req.body?.password || "");
-  if (!email || !password) {
+  if (!loginId || !password) {
     return res.status(400).json({ ok: false, error: "아이디와 비밀번호를 입력해 주세요." });
   }
 
   try {
-    const row = await findUserByEmail(email);
+    const row = await findUserByLoginId(loginId);
     if (!row || !isUserActive(row)) {
       return res.status(401).json({ ok: false, error: "아이디 또는 비밀번호가 올바르지 않습니다." });
     }
@@ -77,34 +87,39 @@ router.post("/auth/login", async (req, res) => {
 
 router.post("/auth/register", async (req, res) => {
   if (!dbRequired(res)) return;
-  const email = String(req.body?.email || "").trim().toLowerCase();
+  const loginId = readLoginId(req.body);
   const password = String(req.body?.password || "");
+  const passwordConfirm = String(req.body?.passwordConfirm ?? "");
   const name = String(req.body?.name || "").trim();
   const nickname = String(req.body?.nickname || "").trim();
 
-  if (!email || !password || !name || !nickname) {
+  if (!loginId || !password || !name || !nickname) {
     return res.status(400).json({
       ok: false,
       error: "아이디, 비밀번호, 이름, 닉네임을 모두 입력해 주세요.",
     });
   }
-  if (password.length < 8) {
-    return res.status(400).json({ ok: false, error: "비밀번호는 8자 이상이어야 합니다." });
-  }
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    return res.status(400).json({ ok: false, error: "아이디 형식이 올바르지 않습니다." });
-  }
+
+  const idError = validateLoginId(loginId);
+  if (idError) return res.status(400).json({ ok: false, error: idError });
+
+  const pwError = validatePassword(password);
+  if (pwError) return res.status(400).json({ ok: false, error: pwError });
+
+  const confirmError = validatePasswordConfirm(password, passwordConfirm);
+  if (confirmError) return res.status(400).json({ ok: false, error: confirmError });
+
   if (nickname.length < 2 || nickname.length > 50) {
     return res.status(400).json({ ok: false, error: "닉네임은 2~50자로 입력해 주세요." });
   }
 
   try {
-    const existing = await findUserByEmail(email);
+    const existing = await findUserByLoginId(loginId);
     if (existing) {
       return res.status(409).json({ ok: false, error: "이미 가입된 아이디입니다." });
     }
     const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
-    const row = await createLocalUser({ email, passwordHash, name, nickname });
+    const row = await createLocalUser({ loginId, passwordHash, name, nickname });
     const user = rowToAuthUser(row);
     const token = createSessionToken(user.id);
     res.cookie(SESSION_COOKIE, token, sessionCookieOptions());

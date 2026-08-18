@@ -24,6 +24,7 @@ import {
   viewFromCenterSvg,
 } from "@/lib/svgProjection";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useAuth } from "@/lib/authContext";
 import { DailyPredictForm } from "./DailyPredictForm";
 import { ScenarioPredictForm } from "./ScenarioPredictForm";
 import { FireHistoryPanel } from "./FireHistoryPanel";
@@ -277,6 +278,10 @@ export function KoreaSvgMap({
   const [predictLoading, setPredictLoading] = useState(false);
   const [predictError, setPredictError] = useState<string | null>(null);
   const [authModal, setAuthModal] = useState<"login" | "register" | null>(null);
+  const { oauthError, clearOauthError } = useAuth();
+  useEffect(() => {
+    if (oauthError) setAuthModal("login");
+  }, [oauthError]);
   /** 지도 마커용 (검색·산도감 공통) */
   const [pinnedMountain, setPinnedMountain] = useState<MountainInfo | null>(
     null,
@@ -1649,7 +1654,10 @@ export function KoreaSvgMap({
       <AuthModal
         open={authModal != null}
         mode={authModal ?? "login"}
-        onClose={() => setAuthModal(null)}
+        onClose={() => {
+          clearOauthError();
+          setAuthModal(null);
+        }}
       />
     </div>
   );

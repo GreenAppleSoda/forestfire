@@ -12,7 +12,7 @@ type ReportRow = {
 type DailyReport = {
   title: string;
   generatedAt: string;
-  member: { name: string; nickname: string; email: string };
+  member: { name: string; nickname: string; loginId: string; email: string };
   predictDate: unknown;
   observedAt: unknown;
   weatherSource: string;
@@ -151,7 +151,8 @@ export function ReportModal({ open, onClose }: Props) {
               <section className="space-y-1 rounded-xl bg-[#f9fafb] px-3 py-2.5 ring-1 ring-[#e5e7eb]">
                 <p>작성 시각: {new Date(report.generatedAt).toLocaleString("ko-KR")}</p>
                 <p>
-                  회원: {report.member.nickname || report.member.name} ({report.member.email})
+                  회원: {report.member.nickname || report.member.name} (
+                  {report.member.loginId || report.member.email || "소셜 계정"})
                 </p>
                 <p>예측일: {fmt(report.predictDate)}</p>
                 <p>관측: {fmt(report.observedAt)}</p>

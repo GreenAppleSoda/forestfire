@@ -7,6 +7,7 @@ import express from "express";
 import { FRONTEND_ORIGIN } from "./config.js";
 import { optionalAuth } from "./middleware/optionalAuth.js";
 import authRoutes from "./routes/auth.js";
+import oauthRoutes from "./routes/oauth.js";
 import chatRoutes from "./routes/chat.js";
 import healthRoutes from "./routes/health.js";
 import mapRoutes from "./routes/map.js";
@@ -33,6 +34,7 @@ export function createApp() {
   app.use("/api", predictRoutes);
   app.use("/api", wildfiresRoutes);
   app.use("/api", authRoutes);
+  app.use("/api", oauthRoutes);
   app.use("/api", chatRoutes);
   app.use("/api", reportRoutes);
 
