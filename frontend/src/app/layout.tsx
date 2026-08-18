@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Noto_Sans_KR, Outfit } from "next/font/google";
 import { ChatWidget } from "@/components/ChatWidget";
+import { SessionIdleHost } from "@/components/SessionIdleHost";
 import { AuthProvider } from "@/lib/authContext";
 import "./globals.css";
 
@@ -33,6 +34,7 @@ export default function RootLayout({
         <AuthProvider>
           {children}
           <ChatWidget />
+          <SessionIdleHost />
         </AuthProvider>
       </body>
     </html>

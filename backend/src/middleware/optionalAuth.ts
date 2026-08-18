@@ -32,6 +32,7 @@ export async function optionalAuth(
       return;
     }
     req.user = rowToAuthUser(row);
+    req.sessionExp = payload.exp;
     next();
   } catch (e) {
     console.error("[optionalAuth]", e);

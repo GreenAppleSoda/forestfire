@@ -19,10 +19,9 @@ import {
 } from "../lib/users.js";
 import {
   SESSION_COOKIE,
-  createSessionToken,
-  sessionCookieOptions,
+  attachSessionCookie,
 } from "../lib/session.js";
-import { optionalAuth } from "../middleware/optionalAuth.js";
+import { optionalAuth, requireAuth } from "../middleware/optionalAuth.js";
 
 const router = Router();
 const BCRYPT_ROUNDS = 12;
@@ -45,9 +44,13 @@ function dbRequired(
 
 router.get("/auth/me", optionalAuth, (req, res) => {
   if (!req.user) {
-    return res.json({ ok: true, user: null });
+    return res.json({ ok: true, user: null, expiresAt: null });
   }
-  return res.json({ ok: true, user: req.user });
+  return res.json({
+    ok: true,
+    user: req.user,
+    expiresAt: req.sessionExp ? req.sessionExp * 1000 : null,
+  });
 });
 
 router.post("/auth/login", async (req, res) => {
@@ -76,9 +79,8 @@ router.post("/auth/login", async (req, res) => {
     }
 
     const user = rowToAuthUser(row);
-    const token = createSessionToken(user.id);
-    res.cookie(SESSION_COOKIE, token, sessionCookieOptions());
-    return res.json({ ok: true, user });
+    const expiresAt = attachSessionCookie(res, user.id);
+    return res.json({ ok: true, user, expiresAt });
   } catch (e) {
     console.error("[auth/login]", e);
     return res.status(502).json({ ok: false, error: "로그인 처리에 실패했습니다." });
@@ -121,9 +123,8 @@ router.post("/auth/register", async (req, res) => {
     const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
     const row = await createLocalUser({ loginId, passwordHash, name, nickname });
     const user = rowToAuthUser(row);
-    const token = createSessionToken(user.id);
-    res.cookie(SESSION_COOKIE, token, sessionCookieOptions());
-    return res.status(201).json({ ok: true, user });
+    const expiresAt = attachSessionCookie(res, user.id);
+    return res.status(201).json({ ok: true, user, expiresAt });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     if (/Duplicate|ER_DUP_ENTRY/i.test(msg)) {
@@ -132,6 +133,12 @@ router.post("/auth/register", async (req, res) => {
     console.error("[auth/register]", e);
     return res.status(502).json({ ok: false, error: "회원가입에 실패했습니다." });
   }
+});
+
+router.post("/auth/extend", requireAuth, (req, res) => {
+  const user = req.user!;
+  const expiresAt = attachSessionCookie(res, user.id);
+  return res.json({ ok: true, user, expiresAt });
 });
 
 router.post("/auth/logout", (_req, res) => {

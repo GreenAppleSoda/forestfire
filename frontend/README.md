@@ -1,6 +1,6 @@
 # FORESTFIRE ATLAS KOREA — Frontend (Next.js)
 
-UI만 담당합니다. API·예측·회원·챗봇·PDF는 Express(`backend/`) / Flask(`ml-service`)가 처리합니다.
+UI만 담당합니다. API·예측·회원(로컬+구글/카카오 OAuth)·챗봇·PDF는 Express(`backend/`) / Flask(`ml-service`)가 처리합니다.
 
 ```powershell
 cd frontend
@@ -22,6 +22,7 @@ npm run dev
 
 `/api/*` 는 `app/api/[...path]/route.ts` 가 Express로 프록시합니다.  
 쿠키(로그인 세션)와 `Set-Cookie`를 양방향으로 전달합니다.  
+OAuth 콜백 리다이렉트(`redirect: "manual"`)도 올바르게 전달합니다.  
 `predict` / `wildfires` / `chat` / `report` 는 타임아웃을 넉넉히 둡니다.
 
 서버 전용 키(`KMA_*`, `DB_*`, `GEMINI_*`, `SESSION_*`, `FOREST_FIRE_*` 등)는 여기에 두지 마세요.
@@ -37,6 +38,8 @@ npm run dev
 - 우측 패널 (`FireHistoryPanel`) — 미선택 시 전국 평균·최고 위험 시도, 선택 시 이력·산 상세
 - 범례 (`MapLegend`) — 예측 모드: **산불위험지수 (0~100)** (`ml_risk × 100`)
 - 위성 지도(카카오) · 일반/위성 · 보고서 · 로그인 (`MapChrome` · `AuthModal`)
+- **로그인 모달** (`AuthModal`) — 아이디/비밀번호 + 구글/카카오 소셜 로그인 (로고 버튼)
+- **유휴 세션 안내** (`SessionIdleHost`) — 30분 유휴 시 안내 모달 (로그아웃 / 시간 연장), 활동 감지 자동 연장
 - 「산불이력 갱신」 — Express가 MariaDB → `backend/data` 패치 (`HistorySyncControl`, 과거 이력 모드)
 - **안내 챗봇** (`ChatWidget`) — 비로그인 Q&A 가능; 「보고서 만들어줘」는 회원 + PDF 다운로드 버튼
 - **보고서** (`ReportModal`) — 회원 전용 JSON 요약 · 슬라이드형 PDF 다운로드
@@ -56,14 +59,14 @@ frontend/
 │   └── chat-bubble.svg
 ├── src/
 │   ├── app/
-│   │   ├── page.tsx · layout.tsx   # AuthProvider · ChatWidget
-│   │   └── api/[...path]/route.ts  # Express 프록시 (+ 쿠키)
-│   ├── components/
-│   │   # KoreaSvgMap · AppSidebar · PlaceSearch · FireHistoryPanel
-│   │   # DailyPredictForm · ScenarioPredictForm · MapLegend
-│   │   # AuthModal · MapChrome · ChatWidget · ReportModal …
-│   └── lib/
-│       # types · apiJson · authContext · choropleth · nationalRisk …
+    │   │   ├── page.tsx · layout.tsx   # AuthProvider · SessionIdleHost · ChatWidget
+    │   │   └── api/[...path]/route.ts  # Express 프록시 (+ 쿠키 + OAuth 리다이렉트)
+    │   ├── components/
+    │   │   # KoreaSvgMap · AppSidebar · PlaceSearch · FireHistoryPanel
+    │   │   # DailyPredictForm · ScenarioPredictForm · MapLegend
+    │   │   # AuthModal · SessionIdleHost · MapChrome · ChatWidget · ReportModal …
+    │   └── lib/
+    │       # types · apiJson · authContext · authValidation · choropleth · nationalRisk …
 ├── next.config.ts
 └── package.json
 ```

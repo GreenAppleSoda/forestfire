@@ -39,7 +39,12 @@ export const SESSION_SECRET =
   (process.env.SESSION_SECRET || "").trim() ||
   "dev-only-forestfire-session-secret-change-me";
 export const SESSION_COOKIE = "ff_session";
-export const SESSION_DAYS = Number(process.env.SESSION_DAYS || 14);
+/** 유휴 세션 만료(분). 조작이 없으면 이 시간 후 로그아웃 */
+export const SESSION_IDLE_MINUTES = Math.max(
+  1,
+  Number(process.env.SESSION_IDLE_MINUTES || 30),
+);
+export const SESSION_IDLE_MS = SESSION_IDLE_MINUTES * 60 * 1000;
 
 function envStr(key: string): string {
   return (process.env[key] || "").trim().replace(/^['"]|['"]$/g, "");

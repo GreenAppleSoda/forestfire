@@ -1,6 +1,6 @@
 # ForestFire Express API (`backend/`) — TypeScript
 
-공개 웹 백엔드. Flask(`ml-service`)를 프록시하고, 회원·챗봇·보고서 게이트와 산불이력 맵 갱신을 담당합니다.  
+공개 웹 백엔드. Flask(`ml-service`)를 프록시하고, 회원(로컬+구글/카카오 OAuth)·챗봇·보고서 게이트와 산불이력 맵 갱신을 담당합니다.  
 지도 JSON은 자체 `backend/data`에서 서빙·패치합니다.  
 브라우저로 나가는 예측·맵 응답은 `lib/whitelist.ts` 로 필터합니다.
 
@@ -27,7 +27,12 @@ Flask URL: `ML_SERVICE_URL` (기본 `http://127.0.0.1:5000`)
 | `GEMINI_MODEL` | `gemini-2.5-flash` | Gemini 모델명 |
 | `DB_HOST` 등 | — | MariaDB `users` · `chat_*` · `forestfire_stats` (미설정 시 챗봇은 동작, 대화 비영속 / 이력 동기화 불가) |
 | `SESSION_SECRET` | (개발용 기본값) | 로그인 쿠키 HMAC — **배포 시 반드시 변경** |
-| `SESSION_DAYS` | `14` | 세션 유효 기간 |
+| `SESSION_IDLE_MINUTES` | `30` | 유휴 세션(조작 없을 때 로그아웃) |
+| `GOOGLE_CLIENT_ID` | — | 구글 OAuth 클라이언트 ID |
+| `GOOGLE_CLIENT_SECRET` | — | 구글 OAuth 클라이언트 시크릿 |
+| `KAKAO_REST_API_KEY` | — | 카카오 REST API 키 |
+| `KAKAO_CLIENT_SECRET` | — | (선택) 카카오 Client Secret |
+| `OAUTH_REDIRECT_BASE` | `FRONTEND_ORIGIN` | OAuth 콜백 베이스 URL |
 
 ## 스크립트
 
@@ -50,7 +55,7 @@ Flask URL: `ML_SERVICE_URL` (기본 `http://127.0.0.1:5000`)
 
 **회원** (로컬 아이디/비밀번호, 구글/카카오 OAuth)
 
-- `POST /api/auth/register` · `login` · `logout`
+- `POST /api/auth/register` · `login` · `extend` · `logout`
 - `GET /api/auth/me`
 - `GET /api/auth/google` · `/kakao` · `/google/callback` · `/kakao/callback`
 
@@ -71,7 +76,26 @@ Flask URL: `ML_SERVICE_URL` (기본 `http://127.0.0.1:5000`)
 
 PDF 본체는 `lib/reportService.ts` → Flask `POST /report/pdf` (Jinja2 + Playwright)입니다.
 
-챗봇 세션 테이블 SQL: `migrations/001_membership_chatbot.sql`
+### 회원가입 규칙
+
+- **아이디:** 영문 소문자로 시작, 소문자+숫자만, 4~20자 (`lib/authValidation.ts`)
+- **비밀번호:** 8~20자, 대문자/소문자/숫자/특수문자 중 2종 이상, 비밀번호 확인 일치
+- **소셜 로그인:** 구글/카카오 OAuth → 자동 가입 (비밀번호 없음)
+
+### 유휴 세션 (30분)
+
+- 마지막 사용자 조작 기준 `SESSION_IDLE_MINUTES`(기본 30분) 후 자동 만료
+- `GET /api/auth/me` 응답에 `expiresAt` 포함 → 프론트가 타이머·안내 모달 표시
+- `POST /api/auth/extend` — 세션 연장 (새 쿠키 발급)
+
+### DB 마이그레이션
+
+| 파일 | 내용 |
+|------|------|
+| `001_membership_chatbot.sql` | 챗봇 세션·메시지 테이블 |
+| `002_daily_ml_risk.sql` | 당일 예측 캐시 |
+| `003_users_drop_unused_columns.sql` | 미사용 컬럼 정리 |
+| `005_users_social_oauth.sql` | `login_id` NULL 허용, `email`·`social_id` 추가, 소셜 유니크 인덱스 |
 
 ## 폴더 구조
 
@@ -86,11 +110,13 @@ backend/
     ├── lib/
     │   ├── data.ts · whitelist.ts · mlClient.ts · predictService.ts
     │   ├── db.ts · gemini.ts · session.ts · users.ts
+    │   ├── authValidation.ts  # 아이디·비밀번호 검증
+    │   ├── oauth.ts           # 구글·카카오 OAuth 유틸
     │   ├── riskSnapshot.ts · regionFocus.ts
     │   ├── adminMatch.ts · regionPath.ts · historyRefresh.ts · wildfireSync.ts
     │   ├── reportService.ts   # → Flask PDF
     │   └── reportStore.ts     # 임시 PDF 버퍼
     └── routes/
         ├── health.ts · map.ts · predict.ts · wildfires.ts
-        ├── auth.ts · chat.ts · report.ts
+        ├── auth.ts · oauth.ts · chat.ts · report.ts
 ```

@@ -11,7 +11,7 @@ export function MapLegend({ mode = "history", auc, predictDate }: Props) {
   const isPredict = mode === "daily" || mode === "scenario";
   const hint = isPredict
     ? `0~100 · 10단계 · ${predictDate ?? "—"} · AUC ${auc != null ? auc.toFixed(2) : "—"}`
-    : "같은 행정 레벨 안에서 과거 산불 건수를 비교 · 스크롤: 시도 → 시군구 → 읍면동";
+    : "";
 
   return (
     <div className="w-[300px] rounded-2xl bg-white px-4 py-3.5 shadow-[var(--shadow-card)] ring-1 ring-[#e5e7eb]">

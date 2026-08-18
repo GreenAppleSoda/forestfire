@@ -3,10 +3,10 @@
 import type {
   AdminLevel,
   AdminRegion,
+  FireEvent,
   MountainInfo,
   RiskMode,
 } from "@/lib/types";
-import type { ReactNode } from "react";
 import { PlaceSearch } from "./PlaceSearch";
 
 type Props = {
@@ -15,7 +15,7 @@ type Props = {
   mountainIndex?: Record<string, MountainInfo>;
   sidoRegions?: AdminRegion[];
   sigunguRegions?: AdminRegion[];
-  syncSlot?: ReactNode;
+  recentFires?: FireEvent[];
   onSelectMountain: (mountain: MountainInfo) => void;
   onSelectRegion: (region: AdminRegion, level: AdminLevel) => void;
   onRiskMode: (mode: RiskMode) => void;
@@ -31,7 +31,7 @@ const RISK_ACTIONS: {
 }[] = [
   { id: "daily", label: "당일 예측", loadingLabel: "예측 중…" },
   { id: "scenario", label: "사용자 지정" },
-  { id: "history", label: "과거 이력" },
+  { id: "history", label: "산불 이력" },
 ];
 
 function ModeButton({
@@ -64,7 +64,7 @@ export function AppSidebar({
   mountainIndex,
   sidoRegions,
   sigunguRegions,
-  syncSlot,
+  recentFires,
   onSelectMountain,
   onSelectRegion,
   onRiskMode,
@@ -129,7 +129,7 @@ export function AppSidebar({
 
       <div className="min-h-0 flex-1 space-y-2 overflow-y-auto px-4 py-4">
         <p className="px-1 text-[11px] font-semibold tracking-[0.12em] text-[#9ca3af] uppercase">
-          위험 표시
+          카테고리
         </p>
         {RISK_ACTIONS.map((a) => (
           <ModeButton
@@ -143,13 +143,40 @@ export function AppSidebar({
             onClick={() => onRiskMode(a.id)}
           />
         ))}
+
+        {recentFires && recentFires.length > 0 && (
+          <div className="mt-4">
+            <p className="px-1 text-[11px] font-semibold tracking-[0.12em] text-[#9ca3af] uppercase">
+              최근 산불 발생
+            </p>
+            <ul className="mt-2 space-y-1.5">
+              {recentFires.map((ev, i) => (
+                <li
+                  key={`${ev.datetime}-${ev.region}-${i}`}
+                  className="rounded-lg bg-[#fafafa] px-3 py-2 ring-1 ring-[#f0f0f0]"
+                >
+                  <div className="flex items-start gap-2">
+                    <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded bg-[#fff1f0] text-[#e03131]">
+                      <svg viewBox="0 0 24 24" className="h-3 w-3" fill="currentColor" aria-hidden>
+                        <path d="M12 2c.4 2.2-.3 3.8-1.4 5.2-.9 1.1-1.6 2-1.6 3.4 0 1.7 1.2 3 2.8 3.4-.6-1.3-.4-2.5.5-3.6 1.2-1.5 2.9-2.4 3.5-4.6.8 1.4 1.2 2.8 1.2 4.3 0 4.3-3 7.9-7 7.9S3 16.1 3 11.8C3 7.6 6.2 4.2 12 2z" />
+                      </svg>
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-[12px] font-medium text-[#111827]">
+                        {ev.region} {ev.city}
+                      </p>
+                      <p className="mt-0.5 text-[10px] text-[#9ca3af]">
+                        {ev.datetime?.slice(0, 10) || "—"}
+                      </p>
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </div>
 
-      {syncSlot ? (
-        <div className="shrink-0 border-t border-[#e5e7eb] px-4 py-3">
-          {syncSlot}
-        </div>
-      ) : null}
     </aside>
   );
 }

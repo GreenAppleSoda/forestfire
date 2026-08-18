@@ -19,16 +19,11 @@ import {
   parseOAuthState,
   type OAuthProvider,
 } from "../lib/oauth.js";
-import {
-  createSessionToken,
-  SESSION_COOKIE,
-  sessionCookieOptions,
-} from "../lib/session.js";
+import { attachSessionCookie } from "../lib/session.js";
 import {
   createSocialUser,
   findUserBySocial,
   isUserActive,
-  rowToAuthUser,
 } from "../lib/users.js";
 
 const router = Router();
@@ -100,9 +95,7 @@ async function finishOAuth(
     if (!isUserActive(row)) {
       return redirectHome(res, { auth_error: "inactive" });
     }
-    const user = rowToAuthUser(row);
-    const token = createSessionToken(user.id);
-    res.cookie(SESSION_COOKIE, token, sessionCookieOptions());
+    attachSessionCookie(res, Number(row.id));
     return redirectHome(res, { auth: "ok" });
   } catch (e) {
     console.error(`[auth/${provider}/callback]`, e);

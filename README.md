@@ -2,7 +2,7 @@
 
 South Korea Wildfire Atlas — 시군구 산불 위험 지도·예측 웹서비스.
 
-지도·당일/시나리오 예측에 더해 **회원 로그인**, **Gemini 안내 챗봇**, **지역별 PDF 보고서**(회원 전용)를 제공합니다.  
+지도·당일/시나리오 예측에 더해 **회원 로그인**(로컬 아이디 + 구글/카카오 OAuth), **Gemini 안내 챗봇**, **지역별 PDF 보고서**(회원 전용)를 제공합니다.  
 화면에 보이는 당일·시나리오 값은 XGBoost `predict_proba` raw 확률(`ml_risk`)을 ×100 한 **산불위험지수 (0~100)** 입니다.
 
 ## 주요 화면
@@ -45,7 +45,8 @@ South Korea Wildfire Atlas — 시군구 산불 위험 지도·예측 웹서비�
 
 `refined_wildfire_data.csv` 는 더 이상 주 데이터가 아닙니다. DB가 정상이면 없어도 일상 운영(예측·이력 갱신·학습)이 가능합니다.
 
-회원/비회원은 **로그인 세션 유무**로만 구분합니다. 구독·결제 테이블은 사용하지 않습니다.
+회원/비회원은 **로그인 세션 유무**로만 구분합니다. 구독·결제 테이블은 사용하지 않습니다.  
+로그인은 로컬(아이디/비밀번호) + 구글/카카오 OAuth를 지원하며, 유휴 30분 후 자동 로그아웃됩니다(연장 가능).
 
 ## 폴더 구조
 
@@ -55,7 +56,7 @@ ForestFire/
 │   └── src/           app · components · lib · app/api/[...path] 프록시
 ├── backend/           Express 공개 API (:4000, TypeScript)
 │   ├── data/          지도·daily_ml_risk JSON 사본
-│   ├── migrations/    챗봇 세션 등 SQL
+│   ├── migrations/    챗봇 세션·소셜 로그인 등 SQL
 │   └── src/
 ├── ml-service/        Flask (:5000, localhost)
 │   ├── predict/       예측 엔진 + weather_db · fire_db (MariaDB)
@@ -115,12 +116,18 @@ npm run dev
 | `backend/.env` | `PORT`, `FRONTEND_ORIGIN`, `ML_SERVICE_URL`, `PREDICT_CACHE_MS`, `DATA_DIR` | CORS · Flask URL · 예측 캐시 · 지도 데이터 폴더 |
 | `backend/.env` | `GEMINI_API_KEY`, `GEMINI_MODEL`(선택) | 안내 챗봇 (`/api/chat`) |
 | `backend/.env` | `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME` | 회원·챗봇·산불이력 동기화 (ml-service 와 동일 MariaDB 권장) |
-| `backend/.env` | `SESSION_SECRET`, `SESSION_DAYS`(선택) | 로그인 세션 쿠키 서명 |
+| `backend/.env` | `SESSION_SECRET`, `SESSION_IDLE_MINUTES`(선택, 기본 30) | 로그인 세션 쿠키 서명 · 유휴 만료 |
+| `backend/.env` | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | 구글 OAuth (미설정 시 버튼 비활성) |
+| `backend/.env` | `KAKAO_REST_API_KEY`, `KAKAO_CLIENT_SECRET`(선택) | 카카오 OAuth |
 | `frontend/.env.local` | `NEXT_PUBLIC_KAKAO_MAP_KEY`, `EXPRESS_URL` | 카카오 JS 키 · Express 주소 (`http://127.0.0.1:4000` 권장) |
 
 카카오 개발자 콘솔에서 **JavaScript 키**를 쓰고, Web 플랫폼에 `http://localhost:3000` 을 등록해야 위성 지도가 표시됩니다.
 
-`KMA_API_AUTH_KEY` / `DB_*` / `FOREST_FIRE_SERVICE_KEY` / `GEMINI_API_KEY` / `SESSION_SECRET` 는 프론트 `.env.local`에 두지 마세요.
+구글/카카오 로그인을 쓰려면 각 콘솔에서 OAuth Redirect URI를 등록하세요:
+- 구글: `http://localhost:3000/api/auth/google/callback`
+- 카카오: **앱 → 플랫폼 키 → REST API 키** 하위에 `http://localhost:3000/api/auth/kakao/callback`
+
+`KMA_API_AUTH_KEY` / `DB_*` / `FOREST_FIRE_SERVICE_KEY` / `GEMINI_API_KEY` / `SESSION_SECRET` / `GOOGLE_CLIENT_SECRET` / `KAKAO_*` 는 프론트 `.env.local`에 두지 마세요.
 
 ### backend와 frontend가 지도 데이터를 나눠 갖는 이유
 
@@ -144,6 +151,19 @@ npm run dev
 | 지도 · 당일/시나리오 예측 · 챗봇 Q&A | ✅ | ✅ |
 | PDF 보고서 생성·다운로드 | ❌ | ✅ |
 | 챗봇 대화 DB 저장 | DB 설정 시 게스트 세션 | `user_id`로 묶여 기기 무관 이어짐 |
+
+### 회원가입 규칙
+
+- **아이디:** 영문 소문자로 시작, 소문자+숫자만, 4~20자, 공백·특수문자 불가
+- **비밀번호:** 8~20자, 영문 대문자/소문자/숫자/특수문자 중 2가지 이상 조합, 비밀번호 확인 일치 필수
+- **소셜 로그인:** 구글/카카오 동의 → 자동 가입 (비밀번호 없음, 닉네임 자동 배정)
+
+### 유휴 세션
+
+- 마지막 사용자 조작(클릭·키보드·스크롤) 기준 30분 (`SESSION_IDLE_MINUTES`)
+- 자동 폴링(예측·동기화)은 연장하지 않음
+- 만료 5분 전 안내 모달 (로그아웃 / 시간 연장)
+- 만료되면 자동 로그아웃
 
 - 챗봇: 예측 API(`runPredictDaily`) 우선 → 실패 시 `backend/data/daily_ml_risk.json`
 - 로그인 회원은 최근 대화를 `user_id` 기준으로 불러와 Gemini·UI에 복원 (게스트는 `sessionId`)
@@ -198,10 +218,11 @@ python etl/pipeline/sync_wildfire_history.py
 - `POST /api/wildfires/sync` — MariaDB 산불 이력 → 맵 갱신
 - `GET /api/wildfires/sync/status`
 
-**회원**
+**회원** (로컬 아이디/비밀번호, 구글/카카오 OAuth, 유휴 30분 세션)
 
-- `POST /api/auth/register` · `POST /api/auth/login` · `POST /api/auth/logout`
+- `POST /api/auth/register` · `login` · `extend` · `logout`
 - `GET /api/auth/me`
+- `GET /api/auth/google` · `/kakao` · `/google/callback` · `/kakao/callback`
 
 **챗봇 · 보고서**
 

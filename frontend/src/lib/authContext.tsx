@@ -22,10 +22,12 @@ export type AuthUser = {
 
 type AuthState = {
   user: AuthUser | null;
+  expiresAt: number | null;
   loading: boolean;
   oauthError: string | null;
   clearOauthError: () => void;
   refresh: () => Promise<void>;
+  extendSession: () => Promise<void>;
   login: (loginId: string, password: string) => Promise<void>;
   register: (input: {
     loginId: string;
@@ -39,14 +41,25 @@ type AuthState = {
 
 const AuthContext = createContext<AuthState | null>(null);
 
-async function parseAuthUser(res: Response): Promise<AuthUser | null> {
-  const json = await readApiJson<{ ok?: boolean; user?: AuthUser | null; error?: string }>(
-    res,
-  );
+type AuthJson = {
+  ok?: boolean;
+  user?: AuthUser | null;
+  expiresAt?: number | null;
+  error?: string;
+};
+
+async function parseAuthSession(res: Response): Promise<{
+  user: AuthUser | null;
+  expiresAt: number | null;
+}> {
+  const json = await readApiJson<AuthJson>(res);
   if (!res.ok || !json.ok) {
     throw new Error(json.error || "인증 요청에 실패했습니다.");
   }
-  return json.user ?? null;
+  return {
+    user: json.user ?? null,
+    expiresAt: typeof json.expiresAt === "number" ? json.expiresAt : null,
+  };
 }
 
 const OAUTH_ERROR_MESSAGES: Record<string, string> = {
@@ -65,24 +78,30 @@ function oauthErrorMessage(code: string): string {
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
+  const [expiresAt, setExpiresAt] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [oauthError, setOauthError] = useState<string | null>(null);
+
+  const applySession = useCallback((next: AuthUser | null, exp: number | null) => {
+    setUser(next);
+    setExpiresAt(next ? exp : null);
+  }, []);
 
   const refresh = useCallback(async () => {
     try {
       const res = await fetch("/api/auth/me", { credentials: "include" });
-      const json = await readApiJson<{ ok?: boolean; user?: AuthUser | null }>(res);
-      if (res.ok && json.ok) {
-        setUser(json.user ?? null);
+      const json = await readApiJson<AuthJson>(res);
+      if (res.ok && json.ok && json.user) {
+        applySession(json.user, typeof json.expiresAt === "number" ? json.expiresAt : null);
       } else {
-        setUser(null);
+        applySession(null, null);
       }
     } catch {
-      setUser(null);
+      applySession(null, null);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [applySession]);
 
   const clearOauthError = useCallback(() => setOauthError(null), []);
 
@@ -102,16 +121,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const login = useCallback(async (loginId: string, password: string) => {
-    const res = await fetch("/api/auth/login", {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ loginId, password }),
-    });
-    const next = await parseAuthUser(res);
-    setUser(next);
-  }, []);
+  const login = useCallback(
+    async (loginId: string, password: string) => {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ loginId, password }),
+      });
+      const next = await parseAuthSession(res);
+      applySession(next.user, next.expiresAt);
+    },
+    [applySession],
+  );
 
   const register = useCallback(
     async (input: {
@@ -127,32 +149,58 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(input),
       });
-      const next = await parseAuthUser(res);
-      setUser(next);
+      const next = await parseAuthSession(res);
+      applySession(next.user, next.expiresAt);
     },
-    [],
+    [applySession],
   );
+
+  const extendSession = useCallback(async () => {
+    const res = await fetch("/api/auth/extend", {
+      method: "POST",
+      credentials: "include",
+    });
+    if (res.status === 401) {
+      applySession(null, null);
+      return;
+    }
+    const next = await parseAuthSession(res);
+    applySession(next.user, next.expiresAt);
+  }, [applySession]);
 
   const logout = useCallback(async () => {
     await fetch("/api/auth/logout", {
       method: "POST",
       credentials: "include",
     });
-    setUser(null);
-  }, []);
+    applySession(null, null);
+  }, [applySession]);
 
   const value = useMemo(
     () => ({
       user,
+      expiresAt,
       loading,
       oauthError,
       clearOauthError,
       refresh,
+      extendSession,
       login,
       register,
       logout,
     }),
-    [user, loading, oauthError, clearOauthError, refresh, login, register, logout],
+    [
+      user,
+      expiresAt,
+      loading,
+      oauthError,
+      clearOauthError,
+      refresh,
+      extendSession,
+      login,
+      register,
+      logout,
+    ],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

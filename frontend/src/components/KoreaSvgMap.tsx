@@ -28,7 +28,7 @@ import { useAuth } from "@/lib/authContext";
 import { DailyPredictForm } from "./DailyPredictForm";
 import { ScenarioPredictForm } from "./ScenarioPredictForm";
 import { FireHistoryPanel } from "./FireHistoryPanel";
-import { HistorySyncControl } from "./HistorySyncControl";
+import { useHistorySync } from "./HistorySyncControl";
 import { MapLegend } from "./MapLegend";
 import { MapChrome } from "./MapChrome";
 import { AuthModal } from "./AuthModal";
@@ -1005,14 +1005,17 @@ export function KoreaSvgMap({
       ? `Lv.${satView.level}`
       : `${view.scale.toFixed(1)}×`;
 
-  const sidebarSync = (
-    <HistorySyncControl
-      onUpdated={({ mapData: nextMap, layers: nextLayers }) => {
-        setMapData(nextMap);
-        setLayers(nextLayers);
-      }}
-    />
-  );
+  const handleSyncUpdated = useCallback((payload: { mapData: MapData; layers: { sido: AdminLayer; sigungu: AdminLayer; emd: AdminLayer } }) => {
+    setMapData(payload.mapData);
+    setLayers(payload.layers);
+  }, []);
+  const { syncing, syncLastAt, runSync } = useHistorySync(handleSyncUpdated);
+
+  const recentFires = useMemo(() => {
+    return [...allHistoryEvents]
+      .sort((a, b) => (b.datetime ?? "").localeCompare(a.datetime ?? ""))
+      .slice(0, 5);
+  }, [allHistoryEvents]);
 
   const sidebarProps = {
     riskMode,
@@ -1020,7 +1023,7 @@ export function KoreaSvgMap({
     mountainIndex: mapData.mountains,
     sidoRegions: layers.sido.regions,
     sigunguRegions: layers.sigungu.regions,
-    syncSlot: sidebarSync,
+    recentFires,
     onSelectMountain: onMountainSelect,
     onSelectRegion: onRegionSearchSelect,
     onGoHome: () => {
@@ -1507,7 +1510,7 @@ export function KoreaSvgMap({
             </div>
           </div>
 
-          <div className="pointer-events-none absolute bottom-5 left-5 z-20">
+          <div className="pointer-events-none absolute right-5 bottom-5 z-20">
             <div className="pointer-events-auto">
               <MapLegend
                 mode={riskMode}
@@ -1588,6 +1591,9 @@ export function KoreaSvgMap({
               predictRegions={isPredictMode ? activePredict?.regions : null}
               riskMode={riskMode}
               onLocateMountain={onLocateMountain}
+              syncLastAt={syncLastAt}
+              syncing={syncing}
+              onSync={runSync}
               onClose={() => {
                 setSelected(null);
                 setSelectedAdmin(null);
@@ -1642,6 +1648,9 @@ export function KoreaSvgMap({
             predictRegions={isPredictMode ? activePredict?.regions : null}
             riskMode={riskMode}
             onLocateMountain={onLocateMountain}
+            syncLastAt={syncLastAt}
+            syncing={syncing}
+            onSync={runSync}
             onClose={() => {
               setSelected(null);
               setSelectedAdmin(null);

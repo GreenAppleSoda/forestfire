@@ -2,7 +2,7 @@
 
 import type { AdminLayer, MapData } from "@/lib/types";
 import { readApiJson } from "@/lib/apiJson";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 type SyncInfo = {
   last_sync_at?: string;
@@ -10,14 +10,6 @@ type SyncInfo = {
   fetched?: number;
   refined_total?: number;
   source?: string;
-};
-
-type Props = {
-  onUpdated: (payload: {
-    mapData: MapData;
-    layers: { sido: AdminLayer; sigungu: AdminLayer; emd: AdminLayer };
-    sync: SyncInfo;
-  }) => void;
 };
 
 function isUsableMapData(data: MapData | null | undefined): data is MapData {
@@ -28,7 +20,6 @@ function isUsableLayer(layer: AdminLayer | null | undefined): layer is AdminLaye
   return Array.isArray(layer?.regions);
 }
 
-/** 동기화 후 Express backend/data 를 /api/map 으로 다시 읽는다. */
 async function loadMapBundleAfterSync(): Promise<{
   mapData: MapData;
   layers: { sido: AdminLayer; sigungu: AdminLayer; emd: AdminLayer };
@@ -67,10 +58,12 @@ async function loadMapBundleAfterSync(): Promise<{
   };
 }
 
-export function HistorySyncControl({ onUpdated }: Props) {
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [info, setInfo] = useState<SyncInfo | null>(null);
+export function useHistorySync(onUpdated: (payload: {
+  mapData: MapData;
+  layers: { sido: AdminLayer; sigungu: AdminLayer; emd: AdminLayer };
+}) => void) {
+  const [syncing, setSyncing] = useState(false);
+  const [syncLastAt, setSyncLastAt] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -78,20 +71,17 @@ export function HistorySyncControl({ onUpdated }: Props) {
       try {
         const res = await fetch("/api/wildfires/sync/status");
         const json = await readApiJson(res);
-        if (!cancelled && json.ok && json.data) setInfo(json.data as SyncInfo);
-      } catch {
-        /* ignore */
-      }
+        if (!cancelled && json.ok && json.data) {
+          const info = json.data as SyncInfo;
+          if (info.last_sync_at) setSyncLastAt(info.last_sync_at);
+        }
+      } catch { /* ignore */ }
     })();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, []);
 
-  const run = async () => {
-    setLoading(true);
-    setError(null);
-    let syncOk = false;
+  const runSync = useCallback(async () => {
+    setSyncing(true);
     try {
       const syncRes = await fetch("/api/wildfires/sync", {
         method: "POST",
@@ -102,59 +92,17 @@ export function HistorySyncControl({ onUpdated }: Props) {
       if (!syncRes.ok || !syncJson.ok) {
         throw new Error(syncJson.error || "동기화 실패");
       }
-      const sync = (syncJson.data || {}) as SyncInfo;
-      setInfo(sync);
-      syncOk = true;
+      const info = (syncJson.data || {}) as SyncInfo;
+      if (info.last_sync_at) setSyncLastAt(info.last_sync_at);
 
       const bundle = await loadMapBundleAfterSync();
-      onUpdated({
-        ...bundle,
-        sync,
-      });
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "동기화 실패";
-      if (syncOk) {
-        setError(
-          "이력은 반영됐습니다. 지도 표시 갱신에 실패했습니다. 페이지를 새로고침해 주세요.",
-        );
-      } else {
-        setError(msg);
-      }
+      onUpdated(bundle);
+    } catch {
+      /* errors handled silently */
     } finally {
-      setLoading(false);
+      setSyncing(false);
     }
-  };
+  }, [onUpdated]);
 
-  return (
-    <div className="space-y-2">
-      <div className="min-w-0">
-        <p className="text-[12px] font-semibold text-[#111827]">
-          산불 이력 동기화
-        </p>
-        {info?.last_sync_at ? (
-          <p className="mt-0.5 truncate text-[10px] text-[#6b7280]">
-            최근 {info.last_sync_at}
-            {typeof info.refined_total === "number"
-              ? ` · 전체 ${info.refined_total.toLocaleString()}건`
-              : ""}
-          </p>
-        ) : (
-          <p className="mt-0.5 text-[10px] text-[#6b7280]">
-            버튼을 눌러 최신 이력 반영
-          </p>
-        )}
-        {error && (
-          <p className="mt-0.5 text-[10px] text-[#e03131]">{error}</p>
-        )}
-      </div>
-      <button
-        type="button"
-        disabled={loading}
-        onClick={run}
-        className="w-full rounded-xl bg-[#111827] px-3 py-2 text-[12px] font-semibold text-white disabled:opacity-50"
-      >
-        {loading ? "갱신 중…" : "산불이력 갱신"}
-      </button>
-    </div>
-  );
+  return { syncing, syncLastAt, runSync };
 }

@@ -95,7 +95,6 @@ export function ScenarioPredictForm({ onPredicted }: Props) {
   );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [note, setNote] = useState<string | null>(null);
 
   const summary = useMemo(
     () =>
@@ -144,7 +143,6 @@ export function ScenarioPredictForm({ onPredicted }: Props) {
       }
       const data = json.data as DailyMlRisk;
       onPredicted(data);
-      setNote(data.scenario_summary || summary);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -258,12 +256,9 @@ export function ScenarioPredictForm({ onPredicted }: Props) {
         onClick={() => void run()}
         className="mt-2 w-full rounded-xl bg-[#111827] px-2 py-2.5 text-[12px] font-semibold text-white disabled:opacity-50"
       >
-        {loading ? "시나리오 예측 중…" : "이 가정으로 예측"}
+        {loading ? "시나리오 예측 중…" : "시나리오 예측"}
       </button>
 
-      {note && !error && (
-        <p className="mt-1.5 text-[10px] leading-snug text-[#4b5563]">{note}</p>
-      )}
       {error && (
         <p className="mt-1.5 text-[10px] leading-snug text-[#e03131]">{error}</p>
       )}

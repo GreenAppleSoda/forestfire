@@ -31,6 +31,9 @@ type Props = {
   /** 산 클릭 시 지도에 마커 표시 */
   onLocateMountain?: (mountain: MountainInfo) => void;
   onClose: () => void;
+  syncLastAt?: string | null;
+  syncing?: boolean;
+  onSync?: () => void;
 };
 
 type Tab = "fires" | "linked" | "catalog";
@@ -82,6 +85,9 @@ export function FireHistoryPanel({
   totalMountains,
   matchedFires,
   probability,
+  syncLastAt,
+  syncing,
+  onSync,
   probabilityLabel,
   predictRegions,
   riskMode,
@@ -161,19 +167,42 @@ export function FireHistoryPanel({
   return (
     <aside className="flex h-full w-full flex-col border-l border-[#e5e7eb] bg-white">
       <div className="shrink-0 border-b border-[#e5e7eb] px-5 py-4">
-        <p className="text-[12px] font-medium text-[#6b7280]">전체 산불 이력</p>
-        <p className="mt-1 text-[1.75rem] font-bold tracking-tight text-[#111827]">
-          {totalFires.toLocaleString()}
-          <span className="ml-1 text-base font-semibold text-[#6b7280]">건</span>
-        </p>
-        <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[12px] text-[#6b7280]">
-          {totalMountains != null ? (
-            <span>산 {totalMountains.toLocaleString()}개</span>
-          ) : null}
-          {matchedFires != null ? (
-            <span>발생지 일치 {matchedFires.toLocaleString()}</span>
-          ) : null}
+        <p className="text-[12px] font-medium text-[#6b7280]">전체 산불 이력 ∣ 2011 ~</p>
+        <div className="mt-1 flex items-center gap-2">
+          <p className="text-[1.75rem] font-bold tracking-tight text-[#111827]">
+            {totalFires.toLocaleString()}
+            <span className="ml-1 text-base font-semibold text-[#6b7280]">건</span>
+          </p>
+          {onSync && (
+            <button
+              type="button"
+              disabled={syncing}
+              onClick={onSync}
+              title="산불이력 갱신"
+              aria-label="산불이력 갱신"
+              className="ml-auto inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-[#6b7280] ring-1 ring-[#e5e7eb] transition hover:bg-[#f9fafb] hover:text-[#111827] disabled:opacity-50"
+            >
+              <svg
+                viewBox="0 0 24 24"
+                className={`h-3.5 w-3.5 ${syncing ? "animate-spin" : ""}`}
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={2}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden
+              >
+                <path d="M21 12a9 9 0 1 1-2.2-5.8" />
+                <path d="M21 3v6h-6" />
+              </svg>
+            </button>
+          )}
         </div>
+        {syncLastAt && (
+          <p className="mt-1 text-[10px] text-[#6b7280]">
+            {syncLastAt.replace("T", " ")}
+          </p>
+        )}
       </div>
 
       {!province ? (
