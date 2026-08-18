@@ -30,17 +30,18 @@ OAuth 콜백 리다이렉트(`redirect: "manual"`)도 올바르게 전달합니�
 ## 주요 UI
 
 - 좌측 브랜드: 원형 로고(`logo-chatbot-circle.png`) + FORESTFIRE ATLAS / KOREA 텍스트 (`AppSidebar`)
+- 좌측 하단: **최근 산불 발생** 피드 — DB 이력에서 최근 5건을 날짜·지역명으로 표시
 - SVG 행정구역 지도 (시도·시군구·읍면동) + 산불 이력 색 / 당일·시나리오 산불위험지수 오버레이
 - 위험 표시: 당일 예측 · 사용자 지정 · 과거 이력
 - 당일 기상 (`DailyPredictForm`) — 지역 미선택 시 전국, 선택 시 해당 시군구(또는 시도 평균)
 - 사용자 지정 시나리오 (`ScenarioPredictForm`) — 연/월 통합 선택, 접속월부터 12개월, 기본값 다음 달
 - 지역·산 통합 검색 (`PlaceSearch`) — 결과는 지역/산으로 구분, 기존 선택 핸들러 유지
-- 우측 패널 (`FireHistoryPanel`) — 미선택 시 전국 평균·최고 위험 시도, 선택 시 이력·산 상세
-- 범례 (`MapLegend`) — 예측 모드: **산불위험지수 (0~100)** (`ml_risk × 100`)
+- 우측 패널 (`FireHistoryPanel`) — 헤더에 전체 건수·갱신 날짜·갱신 버튼, 미선택 시 전국 평균·최고 위험 시도, 선택 시 이력·산 상세
+- 범례 (`MapLegend`) — 지도 우측 하단, 예측 모드: **산불위험지수 (0~100)** (`ml_risk × 100`)
 - 위성 지도(카카오) · 일반/위성 · 보고서 · 로그인 (`MapChrome` · `AuthModal`)
 - **로그인 모달** (`AuthModal`) — 아이디/비밀번호 + 구글/카카오 소셜 로그인 (로고 버튼)
 - **유휴 세션 안내** (`SessionIdleHost`) — 30분 유휴 시 안내 모달 (로그아웃 / 시간 연장), 활동 감지 자동 연장
-- 「산불이력 갱신」 — Express가 MariaDB → `backend/data` 패치 (`HistorySyncControl`, 과거 이력 모드)
+- 「산불이력 갱신」 — 우측 패널 헤더의 새로고침 버튼 → Express가 MariaDB → `backend/data` 패치 (`useHistorySync` 훅)
 - **안내 챗봇** (`ChatWidget`) — 비로그인 Q&A 가능; 「보고서 만들어줘」는 회원 + PDF 다운로드 버튼
 - **보고서** (`ReportModal`) — 회원 전용 JSON 요약 · 슬라이드형 PDF 다운로드
 
@@ -59,14 +60,14 @@ frontend/
 │   └── chat-bubble.svg
 ├── src/
 │   ├── app/
-    │   │   ├── page.tsx · layout.tsx   # AuthProvider · SessionIdleHost · ChatWidget
-    │   │   └── api/[...path]/route.ts  # Express 프록시 (+ 쿠키 + OAuth 리다이렉트)
-    │   ├── components/
-    │   │   # KoreaSvgMap · AppSidebar · PlaceSearch · FireHistoryPanel
-    │   │   # DailyPredictForm · ScenarioPredictForm · MapLegend
-    │   │   # AuthModal · SessionIdleHost · MapChrome · ChatWidget · ReportModal …
-    │   └── lib/
-    │       # types · apiJson · authContext · authValidation · choropleth · nationalRisk …
+│   │   ├── page.tsx · layout.tsx   # AuthProvider · SessionIdleHost · ChatWidget
+│   │   └── api/[...path]/route.ts  # Express 프록시 (+ 쿠키 + OAuth 리다이렉트)
+│   ├── components/
+│   │   # KoreaSvgMap · AppSidebar · PlaceSearch · FireHistoryPanel
+│   │   # DailyPredictForm · ScenarioPredictForm · MapLegend
+│   │   # AuthModal · SessionIdleHost · MapChrome · ChatWidget · ReportModal …
+│   └── lib/
+│       # types · apiJson · authContext · authValidation · choropleth · nationalRisk …
 ├── next.config.ts
 └── package.json
 ```
