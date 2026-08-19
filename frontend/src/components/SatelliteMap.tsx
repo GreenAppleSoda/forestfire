@@ -16,6 +16,7 @@ import {
   svgToWgs84,
   type LatLng,
 } from "@/lib/svgProjection";
+import { visualCenterFromPath } from "@/lib/svgLabelLayout";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 export type SatelliteViewState = {
@@ -51,6 +52,43 @@ type PolyEntry = {
   region: AdminRegion;
   polygons: KakaoPolygon[];
 };
+
+/** 시도 라벨: 도청 좌표가 경계에 붙는 곳은 폴리곤 안쪽 시각 중심. */
+const SIDO_LABEL_CENTER: Record<string, [number, number]> = {
+  "51": [406, 172],
+  "41": [324, 200],
+  "43": [350, 308],
+  "48": [385, 525],
+  "12": [262, 582],
+};
+
+function regionLabelText(name: string, level: AdminLevel) {
+  if (level === "sido") {
+    const short = name
+      .replace("특별자치시", "")
+      .replace("특별자치도", "")
+      .replace("광역시", "")
+      .replace("특별시", "")
+      .replace("도", "")
+      .replace("전남광주통합", "전남·광주");
+    const SIDO_SHORT: Record<string, string> = {
+      충청남: "충남",
+      충청북: "충북",
+      경상북: "경북",
+      경상남: "경남",
+      전라남: "전남",
+      전라북: "전북",
+    };
+    return SIDO_SHORT[short] ?? short;
+  }
+  if (/특별자치시$/.test(name)) return name.replace("특별자치시", "");
+  return name;
+}
+
+function labelSvgPoint(r: AdminRegion, level: AdminLevel): [number, number] {
+  if (level === "sido") return SIDO_LABEL_CENTER[r.code] ?? r.label;
+  return visualCenterFromPath(r.d, r.code) ?? r.label;
+}
 
 function findFocusSigungu(
   sigungu: AdminRegion[],
@@ -96,6 +134,11 @@ export function SatelliteMap({
   const overlayRef = useRef<{ setMap: (m: KakaoMap | null) => void } | null>(
     null,
   );
+  const labelOverlayRef = useRef<{
+    setMap: (m: KakaoMap | null) => void;
+    setPosition: (latlng: { getLat(): number; getLng(): number }) => void;
+  } | null>(null);
+  const labelElRef = useRef<HTMLDivElement | null>(null);
   const handlersRef = useRef({
     onRegionClick,
     onRegionHover,
@@ -120,6 +163,49 @@ export function SatelliteMap({
   /** 폴리곤 클릭 시 맵 click 도 같이 떠서 선택이 바로 풀리는 것 방지 */
   const suppressMapClickRef = useRef(false);
   const lastAppliedSyncKey = useRef<number | null>(null);
+
+  const hideHoverLabel = () => {
+    labelOverlayRef.current?.setMap(null);
+  };
+
+  const showHoverLabel = (region: AdminRegion, adminLevel: AdminLevel) => {
+    const map = mapRef.current;
+    const maps = mapsRef.current;
+    if (!map || !maps) return;
+    const pt = labelSvgPoint(region, adminLevel);
+    const wgs = svgToWgs84(pt[0], pt[1]);
+    const pos = new maps.LatLng(wgs.lat, wgs.lng);
+    let el = labelElRef.current;
+    if (!el) {
+      el = document.createElement("div");
+      el.style.cssText = [
+        "pointer-events:none",
+        "white-space:nowrap",
+        "color:#fff",
+        "font-weight:700",
+        "font-family:var(--font-sans),system-ui,sans-serif",
+        "letter-spacing:0.02em",
+        "text-shadow:-1px -1px 0 #1c1917,1px -1px 0 #1c1917,-1px 1px 0 #1c1917,1px 1px 0 #1c1917,0 2px 8px rgba(0,0,0,.5)",
+      ].join(";");
+      labelElRef.current = el;
+    }
+    el.style.fontSize =
+      adminLevel === "sido" ? "16px" : adminLevel === "sigungu" ? "13px" : "12px";
+    el.textContent = regionLabelText(region.name, adminLevel);
+    if (!labelOverlayRef.current) {
+      labelOverlayRef.current = new maps.CustomOverlay({
+        map,
+        position: pos,
+        content: el,
+        xAnchor: 0.5,
+        yAnchor: 0.5,
+        zIndex: 20,
+      });
+    } else {
+      labelOverlayRef.current.setPosition(pos);
+      labelOverlayRef.current.setMap(map);
+    }
+  };
 
   const displayRegions = useMemo(() => {
     if (level !== "emd") return regions;
@@ -153,7 +239,7 @@ export function SatelliteMap({
           center: new maps.LatLng(start.lat, start.lng),
           level: Math.min(KAKAO_MAX_LEVEL, Math.max(1, lv)),
           maxLevel: KAKAO_MAX_LEVEL,
-          mapTypeId: maps.MapTypeId.HYBRID,
+          mapTypeId: maps.MapTypeId.SKYVIEW,
         });
         map.setMaxLevel(KAKAO_MAX_LEVEL);
         mapRef.current = map;
@@ -206,6 +292,9 @@ export function SatelliteMap({
       markerRef.current = null;
       overlayRef.current?.setMap(null);
       overlayRef.current = null;
+      labelOverlayRef.current?.setMap(null);
+      labelOverlayRef.current = null;
+      labelElRef.current = null;
       mapRef.current = null;
       setReady(false);
     };
@@ -288,6 +377,7 @@ export function SatelliteMap({
 
     polyRef.current.forEach((e) => e.polygons.forEach((p) => p.setMap(null)));
     polyRef.current = [];
+    hideHoverLabel();
 
     const entries: PolyEntry[] = [];
     for (const region of displayRegions) {
@@ -326,6 +416,7 @@ export function SatelliteMap({
         });
         maps.event.addListener(polygon, "mouseover", () => {
           handlersRef.current.onRegionHover(region);
+          showHoverLabel(region, level);
           polygon.setOptions({
             fillOpacity: 0.9,
             strokeWeight: 2.6,
@@ -336,6 +427,7 @@ export function SatelliteMap({
         });
         maps.event.addListener(polygon, "mouseout", () => {
           handlersRef.current.onRegionHover(null);
+          hideHoverLabel();
           const isSel = region.code === selectedCode;
           const peer =
             level === "sido"
@@ -391,9 +483,11 @@ export function SatelliteMap({
         maps.event.addListener(polygon, "mouseover", () => {
           setFocusCode(region.code);
           handlersRef.current.onRegionHover(region);
+          showHoverLabel(region, "sigungu");
         });
         maps.event.addListener(polygon, "mouseout", () => {
           handlersRef.current.onRegionHover(null);
+          hideHoverLabel();
         });
         maps.event.addListener(polygon, "click", () => {
           suppressMapClickRef.current = true;

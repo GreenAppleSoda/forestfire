@@ -2,29 +2,31 @@
 <html lang="ko">
 <head>
 <meta charset="utf-8" />
-<title>{{ title_label }} 산불위험 브리핑</title>
+<title>산불발생위험도 보고서</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
 <style>
   :root {
-    --bg: #eef1ec;
+    --bg: #ffffff;
     --surface: #ffffff;
-    --surface-2: #e6e9e1;
-    --ink: #1c1a16;
-    --ink-soft: #4b463e;
-    --muted: #7a7568;
-    --line: #dcded4;
-    --accent: #8a5a3b;
-    --accent-strong: #6b4128;
+    --surface-2: #f4f4f5;
+    --ink: #111827;
+    --ink-soft: #4b5563;
+    --muted: #6b7280;
+    --line: #e5e7eb;
+    --accent: #111827;
+    --accent-strong: #111827;
     --accent-ink: #ffffff;
   }
 
-  * { box-sizing: border-box; }
+  * { box-sizing: border-box; font-family: "Noto Sans KR", "Noto Sans CJK KR", sans-serif; }
 
   body {
     margin: 0;
     background: var(--bg);
     color: var(--ink);
-    font-family: -apple-system, BlinkMacSystemFont, "Malgun Gothic", "Apple SD Gothic Neo",
-      "Noto Sans CJK KR", "Noto Sans KR", "NanumGothic", "Segoe UI", sans-serif;
+    font-family: "Noto Sans KR", "Noto Sans CJK KR", sans-serif;
     font-size: 13.5px;
     line-height: 1.6;
     -webkit-print-color-adjust: exact;
@@ -34,78 +36,150 @@
   .doc { max-width: 100%; padding: 0 40px; }
 
   section.spread {
-    padding: 30px 0 26px;
+    padding: 28px 0 22px;
     break-after: page;
     page-break-after: always;
   }
   section.spread:last-of-type { break-after: auto; page-break-after: auto; }
 
-  .eyebrow {
+  .sec-head {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     gap: 10px;
-    color: var(--accent);
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-    margin-bottom: 12px;
+    margin-bottom: 6px;
   }
-  .eyebrow::before { content: ""; width: 20px; height: 1px; background: var(--accent); }
+  .sec-dot {
+    flex: none;
+    width: 11px;
+    height: 11px;
+    margin-top: 8px;
+    border-radius: 50%;
+    background: var(--accent);
+  }
+  .sec-head .titles { min-width: 0; flex: 1; }
 
   h1.page-title, h2.page-title {
-    font-family: Batang, "바탕", "Noto Serif CJK KR", "Noto Serif KR", "NanumMyeongjo",
-      "Nanum Myeongjo", Georgia, serif;
+    font-family: "Noto Sans KR", "Noto Sans CJK KR", sans-serif;
     font-weight: 700;
-    margin: 0 0 8px;
+    margin: 0 0 4px;
     color: var(--ink);
+    letter-spacing: -0.02em;
   }
-  h1.page-title { font-size: 32px; }
-  h2.page-title { font-size: 24px; }
+  h1.page-title { font-size: 30px; line-height: 1.25; }
+  h2.page-title { font-size: 22px; }
 
-  .lede { max-width: 66ch; color: var(--ink-soft); font-size: 14px; margin: 0 0 22px; }
+  .lede { max-width: 70ch; color: var(--ink-soft); font-size: 13px; margin: 0 0 18px; }
+  .lede.one-line { max-width: none; white-space: nowrap; }
   .lede strong { color: var(--ink); font-weight: 700; }
-  p.copy { max-width: 68ch; color: var(--ink-soft); }
+  p.copy { max-width: 70ch; color: var(--ink-soft); margin: 0; word-break: keep-all; overflow-wrap: normal; }
   p.copy strong { color: var(--ink); }
-  .footnote { font-size: 11px; color: var(--muted); margin-top: 8px; }
+  .footnote { font-size: 11px; color: var(--muted); margin-top: 10px; }
+  svg text { font-family: "Noto Sans KR", "Noto Sans CJK KR", sans-serif; }
+  hr.rule {
+    border: 0;
+    border-top: 1px solid var(--line);
+    margin: 16px 0;
+  }
 
   /* ---------- Cover ---------- */
-  .cover-date { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; margin-bottom: 16px; }
-  .cover-grid { display: flex; gap: 30px; align-items: center; margin-top: 18px; }
+  .cover-date { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; margin: 0 0 16px; }
+  .cover-grid { display: flex; gap: 10px; align-items: center; }
   .cover-grid > .lede-col { flex: 1 1 auto; min-width: 0; }
-  .gauge-wrap { position: relative; width: 260px; height: 260px; flex: none; }
+  .cover-grid .lede { margin-bottom: 0; max-width: none; word-break: keep-all; }
+  .gauge-wrap { position: relative; width: 400px; height: 400px; flex: none; margin-right: -40px; }
+  .gauge-wrap svg { display: block; width: 400px; height: 400px; }
   .gauge-center {
-    position: absolute; inset: 0; display: flex; flex-direction: column;
-    align-items: center; justify-content: center; text-align: center; top: 14px;
+    position: absolute;
+    left: 50%;
+    top: 46%;
+    transform: translate(-50%, -50%);
+    width: 156px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    pointer-events: none;
   }
-  .gauge-number { font-size: 40px; font-weight: 800; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; line-height: 1; }
-  .gauge-scale { font-size: 11px; color: var(--muted); margin-top: 4px; }
-  .gauge-band-label { margin-top: 6px; font-size: 10.5px; font-weight: 700; padding: 3px 9px; border-radius: 999px; }
+  .gauge-number { font-size: 48px; font-weight: 800; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; line-height: 1; }
+  .gauge-scale { font-size: 13px; color: var(--muted); margin-top: 6px; }
+  .gauge-band-label { margin-top: 8px; font-size: 12px; font-weight: 700; padding: 4px 11px; border-radius: 999px; }
 
-  .meta-row { display: flex; flex-wrap: wrap; gap: 10px 26px; margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--line); }
-  .meta-item { display: flex; flex-direction: column; gap: 2px; }
-  .meta-item .k { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
-  .meta-item .v { font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .kpi-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+  .kpi {
+    border: 1px solid var(--accent);
+    border-radius: 12px;
+    overflow: hidden;
+    background: var(--surface);
+    break-inside: avoid;
+  }
+  .kpi-head {
+    background: var(--accent);
+    color: var(--accent-ink);
+    font-size: 12px;
+    font-weight: 700;
+    text-align: center;
+    padding: 8px 10px;
+  }
+  .kpi-body { padding: 12px 12px 14px; text-align: center; }
+  .kpi-desc { font-size: 10.5px; color: var(--muted); min-height: 1.4em; }
+  .kpi-val { font-size: 22px; font-weight: 800; font-variant-numeric: tabular-nums; margin-top: 4px; letter-spacing: -0.03em; }
+  .kpi-val small { font-size: 12px; font-weight: 600; color: var(--muted); }
 
   /* ---------- Ranking ---------- */
   .rank-list { column-count: 2; column-gap: 26px; }
   .rank-row {
-    display: grid; grid-template-columns: 22px 92px minmax(0, 1fr) 36px;
-    align-items: center; gap: 8px; padding: 4px 6px; break-inside: avoid;
+    display: grid; grid-template-columns: 22px 118px minmax(0, 1fr) 36px;
+    align-items: center; gap: 8px; padding: 3px 4px; break-inside: avoid;
   }
   .rank-row .r { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
   .rank-row .name { font-size: 12.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .rank-row.top .name { color: var(--accent-strong); font-weight: 800; }
   .rank-row.highlight .name { text-decoration: underline; text-decoration-color: var(--accent); text-underline-offset: 3px; }
-  .rank-track { position: relative; height: 9px; background: var(--surface-2); border-radius: 999px; overflow: hidden; }
+  .rank-track { position: relative; height: 8px; background: var(--surface-2); border-radius: 999px; overflow: hidden; }
   .rank-fill { position: absolute; inset: 0 auto 0 0; border-radius: 999px; }
   .rank-row .val { font-size: 11.5px; text-align: right; font-variant-numeric: tabular-nums; color: var(--ink-soft); }
 
-  .legend-note { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 18px; font-size: 11px; color: var(--muted); }
-  .dot { width: 8px; height: 8px; border-radius: 999px; display: inline-block; }
+  .legend-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin-top: 18px;
+    padding: 10px 16px;
+    background: var(--surface-2);
+    border-radius: 8px;
+    font-size: 11px;
+    color: var(--muted);
+  }
+  .legend-items {
+    display: grid;
+    grid-template-columns: repeat(3, auto);
+    gap: 6px 16px;
+    min-width: 0;
+  }
+  .legend-item { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+  .legend-item .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+  .legend-hint { flex: none; text-align: right; white-space: nowrap; }
+
+  section.spread#p2 {
+    min-height: 258mm;
+    display: flex;
+    flex-direction: column;
+  }
+  section.spread#p2 .legend-bar {
+    margin-top: auto;
+  }
 
   /* ---------- Comparison ---------- */
-  .range-card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 24px 24px 16px; margin-bottom: 26px; break-inside: avoid; }
+  .range-card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 22px 22px 14px;
+    margin-bottom: 22px;
+    break-inside: avoid;
+  }
   .range-strip { position: relative; height: 12px; border-radius: 999px; overflow: hidden; display: flex; margin: 40px 4px 26px; }
   .range-strip span { flex: 1; }
   .range-marker { position: absolute; top: -32px; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; font-size: 10px; white-space: nowrap; }
@@ -117,45 +191,90 @@
   .range-marker.below { top: auto; bottom: -32px; flex-direction: column-reverse; }
   .range-marker.below .stem { margin-top: 0; margin-bottom: 2px; }
 
-  .section-label { font-size: 12px; letter-spacing: 0.04em; color: var(--muted); text-transform: uppercase; margin: 0 0 12px; }
+  .section-label { font-size: 12px; letter-spacing: 0.02em; color: var(--muted); margin: 0 0 12px; font-weight: 700; }
   .prov-list { display: flex; flex-direction: column; gap: 6px; }
   .prov-row { display: grid; grid-template-columns: 84px minmax(0, 1fr) 42px; align-items: center; gap: 10px; break-inside: avoid; }
   .prov-row .name { font-size: 12.5px; font-weight: 600; display: flex; align-items: center; gap: 6px; }
   .prov-row.target .name { font-weight: 800; color: var(--accent-strong); }
-  .prov-track { position: relative; height: 14px; background: var(--surface-2); border-radius: 4px; overflow: hidden; }
+  .prov-track { position: relative; height: 12px; background: var(--surface-2); border-radius: 4px; overflow: hidden; }
   .prov-fill { position: absolute; inset: 0 auto 0 0; border-radius: 4px; }
   .prov-row.target .prov-fill { outline: 2px solid var(--accent-strong); outline-offset: -2px; }
   .prov-row .val { font-size: 11.5px; text-align: right; font-variant-numeric: tabular-nums; color: var(--ink-soft); }
   .badge { font-size: 9.5px; font-weight: 800; background: var(--accent); color: var(--accent-ink); border-radius: 999px; padding: 1px 7px; }
 
-  /* ---------- Weather ---------- */
-  .tile-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 22px; }
-  .tile { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px 14px; break-inside: avoid; }
-  .tile svg { color: var(--accent); margin-bottom: 8px; }
-  .tile .k { font-size: 11px; color: var(--muted); }
-  .tile .v { font-size: 21px; font-weight: 800; font-variant-numeric: tabular-nums; margin-top: 2px; }
-  .tile .v small { font-size: 12px; font-weight: 600; color: var(--muted); }
-  .tile .range { font-size: 10.5px; color: var(--muted); margin-top: 2px; }
-
-  /* ---------- District cards ---------- */
-  .card-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
-  .district-card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 18px; break-inside: avoid; }
-  .district-card .chip { display: inline-flex; align-items: center; gap: 6px; font-size: 10px; font-weight: 700; color: var(--muted); }
-  .district-card .swatch { width: 9px; height: 9px; border-radius: 3px; }
-  .district-card h3 { margin: 8px 0 2px; font-size: 17px; }
-  .district-card .idx { font-size: 30px; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--accent-strong); }
-  .district-card .idx small { font-size: 13px; color: var(--muted); font-weight: 600; }
-  .compare { position: relative; height: 6px; background: var(--surface-2); border-radius: 999px; margin: 18px 2px 24px; }
+  /* ---------- Spotlight rows ---------- */
+  .spot-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    flex: 1;
+  }
+  .spot-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 248px;
+    gap: 18px;
+    align-items: center;
+    border: 1px solid var(--accent);
+    border-radius: 12px;
+    padding: 14px 16px 16px;
+    background: var(--surface);
+    break-inside: avoid;
+    flex: 1;
+  }
+  .spot-main { min-width: 0; }
+  .spot-head {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    margin-bottom: 4px;
+  }
+  .spot-rank { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; font-weight: 700; }
+  .spot-name { font-size: 16px; font-weight: 800; letter-spacing: -0.02em; }
+  .spot-head .chip { display: inline-flex; align-items: center; gap: 6px; font-size: 10px; font-weight: 700; color: var(--muted); }
+  .spot-head .swatch { width: 9px; height: 9px; border-radius: 50%; }
+  .spot-idx { font-size: 26px; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--accent-strong); line-height: 1; margin: 4px 0 10px; }
+  .spot-idx small { font-size: 12px; color: var(--muted); font-weight: 600; }
+  .compare { position: relative; height: 6px; background: var(--surface-2); border-radius: 999px; margin: 22px 2px 26px; }
   .compare i { position: absolute; top: -6px; width: 2px; height: 16px; background: var(--muted); }
   .compare i.self { background: var(--accent-strong); width: 3px; }
   .compare em { position: absolute; top: -20px; transform: translateX(-50%); font-style: normal; font-size: 9.5px; color: var(--muted); white-space: nowrap; }
   .compare em.self { color: var(--accent-strong); font-weight: 800; }
-  .district-card .note { font-size: 11.5px; color: var(--ink-soft); margin: 0; }
+  .compare em.below { top: auto; bottom: -18px; }
+
+  .wx-mini {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+    background: var(--surface-2);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .wx-mini th {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--muted);
+    text-align: center;
+    padding: 7px 4px 2px;
+  }
+  .wx-mini td {
+    font-size: 14px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    text-align: center;
+    padding: 2px 4px 8px;
+  }
+  .wx-mini td small { font-size: 10px; font-weight: 600; color: var(--muted); }
+
+  section.spread#p4 {
+    min-height: 250mm;
+    display: flex;
+    flex-direction: column;
+  }
 
   /* ---------- Methodology ---------- */
   .method-grid { display: flex; gap: 36px; align-items: flex-start; }
   .method-grid > div { flex: 1 1 0; min-width: 0; }
-  .stat-line { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px dashed var(--line); font-size: 12.5px; }
+  .stat-line { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 12.5px; }
   .stat-line span:first-child { color: var(--muted); }
   .stat-line span:last-child { font-weight: 700; font-variant-numeric: tabular-nums; }
 
@@ -163,8 +282,27 @@
   ul.guide li { display: flex; gap: 10px; font-size: 12.5px; color: var(--ink-soft); }
   ul.guide li::before { content: ""; flex: none; width: 6px; height: 6px; margin-top: 6px; border-radius: 999px; background: var(--accent); }
 
-  .report-footer { padding: 22px 0 8px; color: var(--muted); font-size: 10.5px; line-height: 1.7; }
+  .report-footer {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 2px;
+    margin: 0;
+    padding-top: 12px;
+    border-top: 1px solid var(--line);
+    color: var(--muted);
+    font-size: 10.5px;
+    line-height: 1.7;
+    text-align: center;
+  }
   .report-footer strong { color: var(--ink-soft); }
+
+  section.spread:last-of-type {
+    position: relative;
+    min-height: 258mm;
+    display: block;
+    padding-bottom: 56px;
+  }
 </style>
 </head>
 <body>
@@ -172,37 +310,36 @@
 
   <!-- 1: 표지 -->
   <section class="spread" id="p1">
-    <div class="eyebrow">Wildfire Risk Bulletin</div>
-    <h1 class="page-title">{{ title_label }}, 오늘의<br />산불발생위험도</h1>
-    <p class="cover-date">{{ predict_date }}{% if weekday %} {{ weekday }}요일{% endif %} · 기상관측 {{ observed_at }} 기준 · ML 예측모델</p>
+    <div class="sec-head">
+      <span class="sec-dot"></span>
+      <div class="titles">
+        <h1 class="page-title">산불발생위험도 보고서</h1>
+        <p class="cover-date">{{ predict_date }}{% if weekday %} {{ weekday }}요일{% endif %} · 기상관측 {{ observed_at }} 기준 · ML 예측모델</p>
+      </div>
+    </div>
 
     <div class="cover-grid">
       <div class="lede-col">
-        <p class="lede">{{ narrative.cover }}</p>
-        <div class="meta-row">
-          <div class="meta-item"><span class="k">대상 지역</span><span class="v">{{ n_regions }}개</span></div>
-          <div class="meta-item"><span class="k">기온</span><span class="v">{{ "%.1f"|format(weather.temp_avg) }}℃</span></div>
-          <div class="meta-item"><span class="k">습도</span><span class="v">{{ weather.humidity_avg|round|int }}%</span></div>
-          <div class="meta-item"><span class="k">풍속</span><span class="v">{{ "%.1f"|format(weather.wind_avg) }} m/s</span></div>
-          <div class="meta-item"><span class="k">강수</span><span class="v">{{ "%.1f"|format(weather.precip_avg) }} mm</span></div>
-        </div>
+        <p class="lede">{{ narrative.cover }}{% if narrative.cover_avg %}<br />{{ narrative.cover_avg }}{% endif %}</p>
       </div>
-
       <div class="gauge-wrap">
-        <svg viewBox="0 0 300 300" width="260" height="260" role="img" aria-label="{{ province }} 평균 산불위험지수 {{ province_stat.avg }}, 100점 만점">
+        <svg viewBox="-90 -80 480 460" width="400" height="400" role="img" aria-label="{{ province }} 평균 산불위험지수 {{ province_stat.avg }}, 100점 만점">
           {% for arc in gauge.arcs %}
           <path d="{{ arc.path }}" stroke="{{ arc.color }}" stroke-width="22" fill="none" stroke-linecap="round"/>
           {% endfor %}
 
-          <circle cx="{{ gauge.dots.national_avg.x }}" cy="{{ gauge.dots.national_avg.y }}" r="4" fill="var(--surface)" stroke="var(--muted)" stroke-width="2"/>
-          <circle cx="{{ gauge.dots.province_min.x }}" cy="{{ gauge.dots.province_min.y }}" r="4" fill="var(--surface)" stroke="var(--muted)" stroke-width="2"/>
-          <circle cx="{{ gauge.dots.province_max.x }}" cy="{{ gauge.dots.province_max.y }}" r="4" fill="var(--surface)" stroke="var(--muted)" stroke-width="2"/>
-
-          <line x1="150" y1="150" x2="{{ gauge.needle.x }}" y2="{{ gauge.needle.y }}" stroke="var(--accent-strong)" stroke-width="4" stroke-linecap="round"/>
-          <circle cx="150" cy="150" r="8" fill="var(--accent-strong)"/>
+          <line x1="150" y1="150" x2="{{ gauge.needle.x }}" y2="{{ gauge.needle.y }}" stroke="var(--ink)" stroke-width="4" stroke-linecap="round"/>
+          <circle cx="150" cy="150" r="8" fill="var(--ink)"/>
 
           {% for t in gauge.ticks %}
           <text x="{{ t.x }}" y="{{ t.y + 4 }}" text-anchor="middle" font-size="10" fill="var(--muted)">{{ t.v }}</text>
+          {% endfor %}
+
+          {% for c in gauge.captions %}
+          <line x1="{{ c.dot_x }}" y1="{{ c.dot_y }}" x2="{{ c.bx }}" y2="{{ c.by }}" stroke="#4b5563" stroke-width="1.3"/>
+          <circle cx="{{ c.dot_x }}" cy="{{ c.dot_y }}" r="4.5" fill="#fff" stroke="#111827" stroke-width="2"/>
+          <rect x="{{ c.rx }}" y="{{ c.ry }}" width="{{ c.rw }}" height="{{ c.rh }}" rx="12" fill="#fff" stroke="#111827" stroke-width="1.5"/>
+          <text x="{{ c.bx }}" y="{{ c.ty }}" text-anchor="middle" font-size="12" font-weight="700" fill="#111827">{{ c.text }}</text>
           {% endfor %}
         </svg>
         <div class="gauge-center">
@@ -212,14 +349,59 @@
         </div>
       </div>
     </div>
-    <p class="footnote">회색 점 = 전국 평균({{ national.avg }}) · {{ province }} 최저({{ province_stat.min }}) · {{ province }} 최고({{ province_stat.max }}) — 왼쪽부터 순서대로</p>
+
+    <hr class="rule" />
+
+    <div class="sec-head">
+      <span class="sec-dot"></span>
+      <div class="titles">
+        <h2 class="page-title">오늘의 기상 조건</h2>
+        <p class="lede">{{ narrative.weather_note }}</p>
+      </div>
+    </div>
+
+    <div class="kpi-grid">
+      <div class="kpi">
+        <div class="kpi-head">기온</div>
+        <div class="kpi-body">
+          <div class="kpi-desc">{% if weather.uniform %}대표 관측{% else %}{{ "%.1f"|format(weather.temp_min) }} ~ {{ "%.1f"|format(weather.temp_max) }}{% endif %}</div>
+          <div class="kpi-val">{{ "%.1f"|format(weather.temp_avg) }}<small> ℃</small></div>
+        </div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-head">습도</div>
+        <div class="kpi-body">
+          <div class="kpi-desc">{% if weather.uniform %}대표 관측{% else %}{{ weather.humidity_min|round|int }} ~ {{ weather.humidity_max|round|int }}%{% endif %}</div>
+          <div class="kpi-val">{{ weather.humidity_avg|round|int }}<small> %</small></div>
+        </div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-head">풍속</div>
+        <div class="kpi-body">
+          <div class="kpi-desc">{% if weather.uniform %}대표 관측{% else %}{{ "%.1f"|format(weather.wind_min) }} ~ {{ "%.1f"|format(weather.wind_max) }}{% endif %}</div>
+          <div class="kpi-val">{{ "%.1f"|format(weather.wind_avg) }}<small> m/s</small></div>
+        </div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-head">강수</div>
+        <div class="kpi-body">
+          <div class="kpi-desc">{% if weather.uniform %}대표 관측{% else %}최대 {{ "%.1f"|format(weather.precip_max) }} mm{% endif %}</div>
+          <div class="kpi-val">{{ "%.1f"|format(weather.precip_avg) }}<small> mm</small></div>
+        </div>
+      </div>
+    </div>
+    <p class="copy" style="margin-top:14px">{{ narrative.weather_desc }}</p>
   </section>
 
   <!-- 2: 지역별 순위 -->
   <section class="spread" id="p2">
-    <div class="eyebrow">District Ranking</div>
-    <h2 class="page-title">지역별 산불위험지수 순위</h2>
-    <p class="lede">{{ narrative.rank_summary }}</p>
+    <div class="sec-head">
+      <span class="sec-dot"></span>
+      <div class="titles">
+        <h2 class="page-title">지역별 산불위험지수 순위</h2>
+        <p class="lede">{{ narrative.rank_summary }}</p>
+      </div>
+    </div>
 
     <div class="rank-list">
       {% for row in ranking %}
@@ -232,24 +414,32 @@
       {% endfor %}
     </div>
 
-    <div class="legend-note">
-      {% for b in band_legend %}
-      <span class="dot" style="background:{{ b.color }}"></span> {{ b.lo }}–{{ b.hi }} 구간{% if not loop.last %}&nbsp;&nbsp;{% endif %}
-      {% endfor %}
-      <span style="margin-left:auto">막대 길이 = 위험지수(0–100 기준) · 동일 지수는 공동 순위</span>
+    <div class="legend-bar">
+      <div class="legend-items">
+        {% for b in band_legend %}
+        <span class="legend-item"><span class="dot" style="background:{{ b.color }}"></span>{{ b.lo }}–{{ b.hi }} 구간</span>
+        {% endfor %}
+      </div>
+      <span class="legend-hint">막대 길이 = 위험지수(0–100 기준) · 동일 지수는 같은 순위 · 나열은 가나다순</span>
     </div>
   </section>
 
   <!-- 3: 전국 비교 -->
   <section class="spread" id="p3">
-    <div class="eyebrow">vs. National</div>
-    {% if is_national %}
-    <h2 class="page-title">전국 17개 시·도별 산불위험지수 비교</h2>
-    <p class="lede">전국 {{ national.count }}개 시·군·구를 시·도 단위로 묶어 평균을 비교했습니다.</p>
-    {% else %}
-    <h2 class="page-title">{{ province }}{{ province_eun_neun }} 전국 {{ province_stat.count }}개 시·도 중 {{ province_stat.rank }}위</h2>
-    <p class="lede">전국 {{ national.count }}개 시·군·구 분포 대비 {{ province }}의 위치를 표시했습니다.</p>
+    <div class="sec-head">
+      <span class="sec-dot"></span>
+      <div class="titles">
+        {% if is_national %}
+        <h2 class="page-title">전국 17개 시·도별 산불위험지수 비교</h2>
+        <p class="lede">전국 {{ national.count }}개 시·군·구를 시·도 단위로 묶어 평균을 비교했습니다.</p>
+        {% else %}
+        <h2 class="page-title">{{ province }}{{ province_eun_neun }} 전국 {{ province_stat.count }}개 시·도 중 {{ province_stat.rank }}위</h2>
+        <p class="lede">전국 {{ national.count }}개 시·군·구 분포 대비 {{ province }}의 위치를 표시했습니다.</p>
+        {% endif %}
+      </div>
+    </div>
 
+    {% if not is_national %}
     <div class="range-card">
       <div class="range-strip">
         <span style="background:#0D2F6B"></span><span style="background:#1E5AA8"></span>
@@ -277,79 +467,75 @@
       </div>
       {% endfor %}
     </div>
-    <p class="footnote">지수는 기상 4개 + 시군구 이력 2개 + 건조지수 + 강수파생 3개 변수를 결합한 상대값입니다. 자세한 해석은 06 방법론을 참고하세요.</p>
+    <p class="footnote">지수는 기상 4개 + 시군구 이력 2개 + 건조지수 + 강수파생 3개 변수를 결합한 상대값입니다. 자세한 해석은 방법론 페이지를 참고하세요.</p>
   </section>
 
-  <!-- 4: 기상 조건 -->
+  <!-- 4: 상위 지역 상세 -->
   <section class="spread" id="p4">
-    <div class="eyebrow">Weather Conditions</div>
-    <h2 class="page-title">오늘의 기상 조건</h2>
-    <p class="lede">{{ narrative.weather_note }}</p>
-
-    <div class="tile-grid">
-      <div class="tile">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 15.5a2 2 0 1 0 0 4 2 2 0 0 0 0-4Z"/><path d="M12 15V5.5a2 2 0 1 0-4 0"/><path d="M8 5.5v9.9"/></svg>
-        <div class="k">기온</div>
-        <div class="v">{{ "%.1f"|format(weather.temp_avg) }}<small> ℃</small></div>
-        {% if not weather.uniform %}<div class="range">{{ "%.1f"|format(weather.temp_min) }} ~ {{ "%.1f"|format(weather.temp_max) }}</div>{% endif %}
-      </div>
-      <div class="tile">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3s6 6.5 6 11a6 6 0 0 1-12 0c0-4.5 6-11 6-11Z"/></svg>
-        <div class="k">습도</div>
-        <div class="v">{{ weather.humidity_avg|round|int }}<small> %</small></div>
-        {% if not weather.uniform %}<div class="range">{{ weather.humidity_min|round|int }} ~ {{ weather.humidity_max|round|int }}</div>{% endif %}
-      </div>
-      <div class="tile">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3 8h11a2.5 2.5 0 1 0-2.2-3.6"/><path d="M3 12h14a2.5 2.5 0 1 1-2.2 3.6"/><path d="M3 16h8"/></svg>
-        <div class="k">풍속</div>
-        <div class="v">{{ "%.1f"|format(weather.wind_avg) }}<small> m/s</small></div>
-        {% if not weather.uniform %}<div class="range">{{ "%.1f"|format(weather.wind_min) }} ~ {{ "%.1f"|format(weather.wind_max) }}</div>{% endif %}
-      </div>
-      <div class="tile">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 14.5a4 4 0 0 1 .7-7.9 5 5 0 0 1 9.6 1.4A3.5 3.5 0 0 1 17 14.5H7Z"/><path d="M9 18v1.2M12.5 18v1.2M16 18v1.2"/></svg>
-        <div class="k">강수</div>
-        <div class="v">{{ "%.1f"|format(weather.precip_avg) }}<small> mm</small></div>
-        {% if not weather.uniform %}<div class="range">최대 {{ "%.1f"|format(weather.precip_max) }}</div>{% endif %}
+    <div class="sec-head">
+      <span class="sec-dot"></span>
+      <div class="titles">
+        <h2 class="page-title">주요 지역 상세</h2>
+        <p class="lede one-line">위험도 상위 5개 지역의 {% if is_national %}전국 평균({{ national.avg }}){% else %}{{ province }} 평균({{ province_stat.avg }})·전국 평균({{ national.avg }}){% endif %} 대비 위치와 기상 조건을 함께 표시했습니다.</p>
       </div>
     </div>
-    <p class="copy">{{ narrative.weather_desc }}</p>
-  </section>
 
-  <!-- 5: 상위 지역 상세 -->
-  <section class="spread" id="p5">
-    <div class="eyebrow">Top Districts</div>
-    <h2 class="page-title">{% if province_stat.top_group_size > 1 %}공동 1위 지역 상세{% else %}주요 지역 상세{% endif %}</h2>
-    <p class="lede">{{ province }} 평균({{ province_stat.avg }})·전국 평균({{ national.avg }}) 대비 위치를 함께 표시했습니다.</p>
-
-    <div class="card-grid">
+    <div class="spot-list">
       {% for row in spotlight %}
-      <div class="district-card">
-        <div class="chip"><span class="swatch" style="background:{{ row.color }}"></span>{{ row.band_lo }}–{{ row.band_hi }} 구간{% if row.is_highlight and not row.is_top %} · 조회 지역{% endif %}</div>
-        <h3>{{ row.name }}</h3>
-        <div class="idx">{{ "%.1f"|format(row.idx) }}<small> / 100</small></div>
-        <div class="compare">
-          {% for m in row.marks %}
-          <i class="{{ 'self' if m.is_self else '' }}" style="left:{{ m.value }}%"></i>
-          <em class="{{ 'self' if m.is_self else '' }}" style="left:{{ m.value }}%">{{ m.label }}</em>
-          {% endfor %}
+      <div class="spot-row">
+        <div class="spot-main">
+          <div class="spot-head">
+            <span class="spot-rank">{{ row.rank }}</span>
+            <span class="spot-name">{{ row.name }}</span>
+            <span class="chip"><span class="swatch" style="background:{{ row.color }}"></span>{{ row.band_lo }}–{{ row.band_hi }} 구간{% if row.is_highlight and not row.is_top %} · 조회 지역{% endif %}</span>
+          </div>
+          <div class="spot-idx">{{ "%.1f"|format(row.idx) }}<small> / 100</small></div>
+          <div class="compare">
+            {% for m in row.marks %}
+            <i class="{{ 'self' if m.is_self else '' }}" style="left:{{ m.value }}%"></i>
+            <em class="{{ 'self' if m.is_self else '' }}{{ ' below' if m.below else '' }}" style="left:{{ m.value }}%">{{ m.label }}</em>
+            {% endfor %}
+          </div>
         </div>
-        <p class="note">{{ province }}에서 {{ row.rank }}위{% if row.rank == 1 and province_stat.top_group_size > 1 %} (공동 1위 {{ province_stat.top_group_size }}개 지역 중){% endif %}.</p>
+        <table class="wx-mini">
+          <thead>
+            <tr>
+              <th>기온</th>
+              <th>습도</th>
+              <th>풍속</th>
+              <th>강수</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>{{ "%.1f"|format(row.weather.temp) }}<small> ℃</small></td>
+              <td>{{ row.weather.humidity }}<small> %</small></td>
+              <td>{{ "%.1f"|format(row.weather.wind) }}<small> m/s</small></td>
+              <td>{{ "%.1f"|format(row.weather.precip) }}<small> mm</small></td>
+            </tr>
+          </tbody>
+        </table>
       </div>
       {% endfor %}
     </div>
   </section>
 
-  <!-- 6: 해석 및 안내 -->
-  <section class="spread" id="p6">
-    <div class="eyebrow">Methodology &amp; Guidance</div>
-    <h2 class="page-title">지수를 읽는 법</h2>
+  <!-- 5: 해석 및 안내 -->
+  <section class="spread" id="p5">
+    <div class="sec-head">
+      <span class="sec-dot"></span>
+      <div class="titles">
+        <h2 class="page-title">지수를 읽는 법</h2>
+        <p class="lede">예측 지수의 의미와 일반 산불예방 수칙입니다.</p>
+      </div>
+    </div>
 
     <div class="method-grid">
       <div>
         <p class="copy">
           위험지수는 XGBoost 일별 예측모델의 원시 확률(y_prob)에 100을 곱한 값입니다.
-          산불은 매우 드문 사건이라 정밀도가 낮고, <strong>확률 보정(calibration)도 적용되지 않았습니다.</strong>
-          따라서 이 지수는 "오늘 실제 산불이 날 절대 확률"이 아니라,
+          산불은 매우 드문 사건이라 정밀도가 낮고, <strong>확률 보정(calibration)도 적용되지 않았습니다.</strong><br />
+          따라서 이 지수는 "오늘 실제 산불이 날 절대 확률"이 아니라,<br />
           <strong>지역 간 상대적 위험 서열</strong>로 해석하는 것이 안전합니다.
         </p>
         <div class="stat-line"><span>모델</span><span>XGBoost (일별 시군구 단위)</span></div>

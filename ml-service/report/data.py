@@ -19,10 +19,12 @@ from report.geometry import (
     band_color,
     band_range,
     band_text_color,
+    gauge_angle,
     gauge_band_arcs,
     gauge_needle_tip,
     gauge_ring_dot,
     gauge_tick,
+    gauge_xy_at_angle,
 )
 
 _WEEKDAY_KR = ["월", "화", "수", "목", "금", "토", "일"]
@@ -155,22 +157,141 @@ def resolve_target(regions: list[dict], query: str) -> ResolvedTarget:
     raise ValueError(f"'{q}'에 해당하는 시·도/시군구를 찾을 수 없습니다.")
 
 
+_BARE_GU = {"동구", "서구", "남구", "북구", "중구"}
+
+
+def ranking_label(name: str, province: str) -> str:
+    """순위표용 표기. 동·서·남·북·중구는 시 이름을 붙이고, 마산 자치구는 구 이름을 유지한다."""
+    n = str(name or "").strip()
+    if "마산합포구" in n:
+        return "마산합포구"
+    if "마산회원구" in n:
+        return "마산회원구"
+    if n in _BARE_GU:
+        city = str(province or "").strip()
+        if city and city != NATIONAL_SCOPE:
+            return f"{city}시 {n}"
+    return n
+
+
 def _compare_marks(
     self_name: str, self_val: float, province: str, province_val: float, national_val: float
 ) -> list[dict]:
-    """지역 상세 카드의 미니 비교축 마커. 값이 가까우면(0-100 스케일에서 8p 이내)
-    라벨이 겹치므로 뒤쪽(자기 자신 우선) 것을 건너뛴다."""
-    candidates = [
-        (self_val, f"{self_name} {self_val:.1f}", True),
-        (province_val, f"{province} {province_val:.1f}", False),
-        (national_val, f"전국 {national_val:.1f}", False),
-    ]
+    """지역 상세 카드의 미니 비교축 마커.
+
+    지역명 라벨은 항상 막대 위에 둔다. 값이 가까워 겹치면 전국·시·도 라벨을 아래로 내린다.
+    """
+    candidates = [(self_val, f"{self_name} {self_val:.1f}", True)]
+    if province != NATIONAL_SCOPE:
+        candidates.append((province_val, f"{province} {province_val:.1f}", False))
+    candidates.append((national_val, f"전국 {national_val:.1f}", False))
+
     kept: list[dict] = []
     for value, label, is_self in candidates:
-        if any(abs(value - k["value"]) < 8 for k in kept):
-            continue
-        kept.append({"value": value, "label": label, "is_self": is_self})
+        kept.append({"value": value, "label": label, "is_self": is_self, "below": False})
+
+    overlap_pts = 30
+    for i, a in enumerate(kept):
+        for b in kept[i + 1 :]:
+            if abs(a["value"] - b["value"]) >= overlap_pts:
+                continue
+            if a["is_self"]:
+                b["below"] = True
+            elif b["is_self"]:
+                a["below"] = True
+            else:
+                b["below"] = True
     return kept
+
+
+def _caption_text_width(text: str, size: float = 12.0) -> float:
+    w = 0.0
+    for ch in text:
+        if ch == " ":
+            w += size * 0.35
+        elif ch.isdigit() or ch == ".":
+            w += size * 0.62
+        else:
+            w += size * 1.02
+    return w
+
+
+def _bubbles_overlap(a: dict, b: dict, pad: float = 12.0) -> bool:
+    return not (
+        a["rx"] + a["rw"] + pad <= b["rx"]
+        or b["rx"] + b["rw"] + pad <= a["rx"]
+        or a["ry"] + a["rh"] + pad <= b["ry"]
+        or b["ry"] + b["rh"] + pad <= a["ry"]
+    )
+
+
+def _make_bubble(text: str, value: float, radius: float, angle: float) -> dict:
+    dx, dy = gauge_ring_dot(value)
+    bx, by = gauge_xy_at_angle(angle, radius)
+    rw = round(_caption_text_width(text) + 20, 1)
+    rh = 26.0
+    return {
+        "text": text,
+        "dot_x": round(dx, 2),
+        "dot_y": round(dy, 2),
+        "bx": round(bx, 1),
+        "by": round(by, 1),
+        "rx": round(bx - rw / 2, 1),
+        "ry": round(by - rh / 2, 1),
+        "rw": rw,
+        "rh": rh,
+        "ty": round(by + 4.5, 1),
+        "_angle": angle,
+        "_radius": radius,
+        "_value": value,
+    }
+
+
+def _national_gauge_captions(nat_min: float, nat_avg: float, nat_max: float) -> list[dict]:
+    """전국 최저·평균·최고 말풍선. AABB가 겹치지 않을 때까지 각도·반지름을 벌린다."""
+    items = [
+        {"value": nat_min, "text": f"전국 최저 {nat_min:.1f}"},
+        {"value": nat_avg, "text": f"전국 평균 {nat_avg:.1f}"},
+        {"value": nat_max, "text": f"전국 최고 {nat_max:.1f}"},
+    ]
+    items.sort(key=lambda d: d["value"])
+    placed = [
+        _make_bubble(it["text"], it["value"], 176.0, gauge_angle(it["value"]))
+        for it in items
+    ]
+
+    for _ in range(80):
+        moved = False
+        for i in range(len(placed)):
+            for j in range(i + 1, len(placed)):
+                if not _bubbles_overlap(placed[i], placed[j]):
+                    continue
+                moved = True
+                hi = placed[j]
+                placed[j] = _make_bubble(
+                    hi["text"],
+                    hi["_value"],
+                    min(hi["_radius"] + 14, 232.0),
+                    hi["_angle"] + 16,
+                )
+        if not moved:
+            break
+
+    return [{k: v for k, v in p.items() if not k.startswith("_")} for p in placed]
+
+
+def _rank_dense(rows_sorted_desc: list[dict], value_key: str) -> list[int]:
+    """같은 값은 같은 순위, 다음 값은 +1 (1,2,3,3,4 …). 번호를 건너뛰지 않는다."""
+    ranks: list[int] = []
+    rank = 0
+    prev = object()
+    for row in rows_sorted_desc:
+        v = row[value_key]
+        if v != prev:
+            rank += 1
+            prev = v
+        ranks.append(rank)
+    return ranks
 
 
 def _rank_with_ties(rows_sorted_desc: list[dict], value_key: str) -> list[int]:
@@ -201,23 +322,30 @@ def build_context(payload: dict, query: str, generated_at: datetime | None = Non
     national_max = max(all_idx)
     national_max_region = max(regions, key=lambda r: r["ml_risk"])
 
-    if is_national:
-        prov_rows = sorted(regions, key=lambda r: -r["ml_risk"])
-    else:
-        prov_rows = sorted(
-            [r for r in regions if r["province"] == province], key=lambda r: -r["ml_risk"]
-        )
+    source_rows = regions if is_national else [r for r in regions if r["province"] == province]
+    # 지수 내림차순, 동점은 가나다순 나열. 같은 지수는 같은 순위(1,2,3,3,4…).
+    prov_rows = sorted(
+        source_rows,
+        key=lambda r: (-risk_index(r["ml_risk"]), r["name"]),
+    )
     if not prov_rows:
         raise ValueError(f"'{province}' 데이터가 없습니다.")
 
-    ranking = [
-        {"name": r["name"], "idx": risk_index(r["ml_risk"])} for r in prov_rows
-    ]
-    ranks = _rank_with_ties(ranking, "idx")
+    ranking = []
+    for r in prov_rows:
+        raw = str(r.get("name") or "")
+        ranking.append({
+            "name": ranking_label(raw, str(r.get("province") or province)),
+            "raw_name": raw,
+            "idx": risk_index(r["ml_risk"]),
+        })
+    ranks = _rank_dense(ranking, "idx")
     for row, rk in zip(ranking, ranks):
         row["rank"] = rk
         row["is_top"] = rk == 1
-        row["is_highlight"] = target.highlight_name is not None and row["name"] == target.highlight_name
+        row["is_highlight"] = (
+            target.highlight_name is not None and row["raw_name"] == target.highlight_name
+        )
         row["color"] = band_color(row["idx"])
         row["text_color"] = band_text_color(row["idx"])
         row["width_pct"] = max(1.5, row["idx"])
@@ -232,15 +360,26 @@ def build_context(payload: dict, query: str, generated_at: datetime | None = Non
         {(band_range(v)[0], band_range(v)[1], band_color(v)) for v in idxs}, reverse=True
     )
 
-    top_group = [row for row in ranking if row["rank"] == 1]
-    spotlight = list(top_group)
-    if target.highlight_name and not any(row["name"] == target.highlight_name for row in spotlight):
-        hl = next((row for row in ranking if row["name"] == target.highlight_name), None)
+    top_group = [row for row in ranking if row["idx"] == prov_max]
+    spotlight = ranking[:5]
+    if target.highlight_name and not any(row["raw_name"] == target.highlight_name for row in spotlight):
+        hl = next((row for row in ranking if row["raw_name"] == target.highlight_name), None)
         if hl:
-            spotlight.append(hl)
-    spotlight = spotlight[:4]
+            spotlight = [*spotlight[:4], hl]
+    weather_by_name = {str(r.get("name") or ""): r for r in prov_rows}
     for row in spotlight:
         row["marks"] = _compare_marks(row["name"], row["idx"], province, prov_avg, national_avg)
+        src = weather_by_name.get(row["raw_name"]) or {}
+        temp = float(src.get("temp_avg") or 0)
+        humidity = float(src.get("humidity_avg") or 0)
+        wind = float(src.get("wind_avg") or 0)
+        precip = float(src.get("precip") or 0)
+        row["weather"] = {
+            "temp": round(temp, 1),
+            "humidity": int(round(humidity)),
+            "wind": round(wind, 1),
+            "precip": round(precip, 1),
+        }
 
     buckets: dict[str, list[float]] = defaultdict(list)
     for r in regions:
@@ -308,11 +447,10 @@ def build_context(payload: dict, query: str, generated_at: datetime | None = Non
             f"풍속 {weather['wind_min']:.1f}~{weather['wind_max']:.1f}m/s 범위를 보입니다."
         )
 
+    cover_avg = None
     if is_national:
-        cover_sentence = (
-            f"전국 {len(prov_rows)}개 지역의 산불위험지수는 {range_phrase}. "
-            f"전국 평균은 {prov_avg:.1f}입니다."
-        )
+        cover_sentence = f"전국 {len(prov_rows)}개 지역의 산불위험지수는 {range_phrase}."
+        cover_avg = f"전국 평균은 {prov_avg:.1f}입니다."
     else:
         cover_sentence = (
             f"{province} {len(prov_rows)}개 지역의 산불위험지수는 {range_phrase}. "
@@ -322,6 +460,7 @@ def build_context(payload: dict, query: str, generated_at: datetime | None = Non
 
     narrative = {
         "cover": cover_sentence,
+        "cover_avg": cover_avg,
         "rank_summary": rank_summary,
         "weather_note": weather_note,
         "weather_desc": describe_weather(
@@ -330,9 +469,7 @@ def build_context(payload: dict, query: str, generated_at: datetime | None = Non
     }
 
     needle_x, needle_y = gauge_needle_tip(prov_avg)
-    dot_natavg_x, dot_natavg_y = gauge_ring_dot(national_avg)
-    dot_provmin_x, dot_provmin_y = gauge_ring_dot(prov_min)
-    dot_provmax_x, dot_provmax_y = gauge_ring_dot(prov_max)
+    captions = _national_gauge_captions(national_min, national_avg, national_max)
     ticks = [{"v": v, "x": round(x, 1), "y": round(y, 1)} for v in (0, 20, 40, 60, 80, 100) for x, y in [gauge_tick(v)]]
 
     predict_date = payload.get("predict_date") or ""
@@ -380,11 +517,7 @@ def build_context(payload: dict, query: str, generated_at: datetime | None = Non
             "arcs": gauge_band_arcs(),
             "ticks": ticks,
             "needle": {"x": round(needle_x, 2), "y": round(needle_y, 2)},
-            "dots": {
-                "national_avg": {"x": round(dot_natavg_x, 2), "y": round(dot_natavg_y, 2)},
-                "province_min": {"x": round(dot_provmin_x, 2), "y": round(dot_provmin_y, 2)},
-                "province_max": {"x": round(dot_provmax_x, 2), "y": round(dot_provmax_y, 2)},
-            },
+            "captions": captions,
         },
         "metrics": {
             "roc_auc": metrics.get("roc_auc"),

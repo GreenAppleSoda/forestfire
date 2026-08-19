@@ -108,6 +108,16 @@ def gauge_band_arcs(gap_deg: float = 2.2, radius: float = _GAUGE_RADIUS) -> list
     return arcs
 
 
-def gauge_tick(value: float, radius: float = 142.0) -> tuple[float, float]:
+def gauge_tick(value: float, radius: float = 148.0) -> tuple[float, float]:
     """0/20/40/60/80/100 눈금 라벨 좌표."""
     return _polar(radius, _angle_of(value))
+
+
+def gauge_angle(value: float) -> float:
+    """0~100 값 → 게이지 각도(도)."""
+    return _angle_of(value)
+
+
+def gauge_xy_at_angle(angle_deg: float, radius: float) -> tuple[float, float]:
+    """각도와 반지름 → SVG 좌표."""
+    return _polar(radius, angle_deg)
