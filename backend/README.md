@@ -50,7 +50,7 @@ Flask URL: `ML_SERVICE_URL` (기본 `http://127.0.0.1:5000`)
 - `GET /api/health`
 - `GET /api/map/data` · `/api/map/admin/:level`
 - `POST /api/predict/daily` · `POST /api/predict/scenario`  
-  (`scenario` body: `{ year, month, weather }`. 프론트 UI는 접속월부터 12개월만 노출)
+  (`scenario` body: `{ year, month, weather }`. UI는 접속월부터 12개월, 월별 평년 + 프리셋으로 슬라이더를 채움)
 - `POST /api/wildfires/sync` · `GET /api/wildfires/sync/status` — MariaDB → `backend/data` 이력 패치
 
 **회원** (로컬 아이디/비밀번호, 구글/카카오 OAuth)
@@ -64,17 +64,19 @@ Flask URL: `ML_SERVICE_URL` (기본 `http://127.0.0.1:5000`)
 
 - `POST /api/chat` — `{ message, sessionId? }`  
   - 위험도 Q&A: 예측 API 우선 → `data/daily_ml_risk.json` 폴백 후 Gemini  
-  - 로그인 회원: `user_id` 기준 최근 대화(기기 무관)를 맥락에 포함  
-  - 게스트: `sessionId` 기준  
-  - 「보고서/PDF」요청: **로그인 필수** → `lib/regionFocus.ts`로 지역 해석  
-    (현재 메시지 → 최근 유저 발화 → 어시스턴트; 「예시)」는 제외) → 없으면 되묻기 → PDF 생성 후 `pdf.downloadPath` 반환
+  - 로그인 회원: `user_id` 기준 최근 대화(기기 무관)를 맥락에 포함 (게스트 12턴 / 회원 24턴)  
+  - 게스트: `sessionId` 기준. 로그인 직후 같은 `sessionId`에 `user_id`를 붙여 계정 히스토리에 합침  
+  - 「보고서/PDF」요청: **로그인 필수** → `lib/regionFocus.ts` `extractRegionLabel`이 확신 있는 지명만 추출  
+    (잡음·「예시)」·따옴표 문장 제외. 「전국」가능)  
+    순서: 현재 메시지 → 최근 유저 발화 → 어시스턴트 → 없으면 되묻기 → PDF 생성 후 `pdf.downloadPath` 반환
 - `GET /api/chat/history` — 최근 대화 조회 (회원=`user_id`, 게스트=`?sessionId=`; UI는 「이전 대화내역 불러오기」로 호출)
 
 **보고서** (로그인 필수, DB에 파일 저장 안 함)
 
-- `GET /api/report/daily` — JSON 요약
-- `POST /api/report/pdf` — `{ regionQuery? }` → `{ downloadPath, filename, … }`
-- `GET /api/report/download/:id` — PDF 바이너리 (임시 TTL, `Content-Disposition: attachment`)
+- `GET /api/report/daily` — JSON 요약 (`?region=` / `?q=` 로 지역 필터 가능)
+- `POST /api/report/pdf` — `{ regionQuery? }` → `{ downloadPath, filename, … }`  
+  (`regionQuery` 비우면 전국. 시·도 / 시군구 / 「전국」)
+- `GET /api/report/download/:id` — PDF 바이너리 (메모리 보관, TTL 30분, `Content-Disposition: attachment`)
 
 PDF 본체는 `lib/reportService.ts` → Flask `POST /report/pdf` (Jinja2 + Playwright)입니다.
 

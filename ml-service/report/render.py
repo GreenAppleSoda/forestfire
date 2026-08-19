@@ -29,14 +29,14 @@ def _header_footer(title_label: str, predict_date: str) -> tuple[str, str]:
     """Playwright page.pdf()의 header/footer는 별도 격리 컨텍스트라 인라인 스타일만 먹는다."""
     font = '"Noto Sans KR", "Noto Sans CJK KR", sans-serif'
     header = f"""
-    <div style="font-size:9px; width:100%; padding:0 40px; color:#6b7280;
+    <div style="font-size:8px; width:100%; padding:0 28px; color:#6b7280;
                 display:flex; justify-content:space-between; font-family:{font};">
       <span>산불발생위험도 보고서</span>
       <span>{predict_date}</span>
     </div>
     """
     footer = f"""
-    <div style="font-size:9px; width:100%; padding:0 40px; color:#6b7280;
+    <div style="font-size:8px; width:100%; padding:0 28px; color:#6b7280;
                 display:flex; justify-content:flex-end; font-family:{font};">
       <span class="pageNumber"></span>&nbsp;/&nbsp;<span class="totalPages"></span>
     </div>
@@ -74,11 +74,12 @@ def render_pdf(
             page.pdf(
                 path=str(out_path),
                 format="A4",
+                landscape=True,
                 print_background=True,
                 display_header_footer=True,
                 header_template=header_html,
                 footer_template=footer_html,
-                margin={"top": "60px", "bottom": "40px", "left": "0px", "right": "0px"},
+                margin={"top": "44px", "bottom": "32px", "left": "0px", "right": "0px"},
             )
         finally:
             browser.close()

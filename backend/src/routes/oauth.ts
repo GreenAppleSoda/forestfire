@@ -105,6 +105,8 @@ async function finishOAuth(
         name: profile.name,
         nickname: profile.nickname,
       });
+    } else if (intent === "register") {
+      return redirectHome(res, { auth_error: "social_already_registered" });
     }
     if (!isUserActive(row)) {
       return redirectHome(res, { auth_error: "inactive" });

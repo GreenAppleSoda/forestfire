@@ -71,6 +71,8 @@ const OAUTH_ERROR_MESSAGES: Record<string, string> = {
   profile_failed: "소셜 계정 정보를 가져오지 못했습니다.",
   social_not_registered:
     "가입되지 않은 소셜 계정입니다. 회원가입으로 진행해 주세요.",
+  social_already_registered:
+    "이미 가입된 소셜 계정입니다. 로그인으로 진행해 주세요.",
   inactive: "비활성화된 계정입니다.",
 };
 

@@ -307,7 +307,12 @@ def _rank_with_ties(rows_sorted_desc: list[dict], value_key: str) -> list[int]:
     return ranks
 
 
-def build_context(payload: dict, query: str, generated_at: datetime | None = None) -> dict:
+def build_context(
+    payload: dict,
+    query: str,
+    generated_at: datetime | None = None,
+    cover: dict | None = None,
+) -> dict:
     regions = payload.get("regions") or []
     if not regions:
         raise ValueError("payload.regions 가 비어 있습니다.")
@@ -434,6 +439,23 @@ def build_context(payload: dict, query: str, generated_at: datetime | None = Non
     else:
         names_joined = "·".join(top_names)
         rank_summary = f"{names_joined}{josa(names_joined, '이가')} 지수 {prov_max:.1f}로 공동 1위입니다."
+
+    # 전국 PDF: 순위 페이지는 상위 10 + 하위 5만 (전체 나열로 페이지가 늘어나지 않게)
+    ranking_full_count = len(ranking)
+    ranking_groups = None
+    if is_national and ranking_full_count > 15:
+        high = ranking[:10]
+        high_names = {row["raw_name"] for row in high}
+        low = [row for row in ranking[-5:] if row["raw_name"] not in high_names]
+        ranking_groups = [
+            {"title": f"위험지수 상위 {len(high)}곳", "rows": high},
+            {"title": f"위험지수 하위 {len(low)}곳", "rows": low},
+        ]
+        ranking = [*high, *low]
+        rank_summary = (
+            f"전국 {ranking_full_count}개 시·군·구 중 위험지수 상위 10곳과 하위 5곳만 표시합니다. "
+            + rank_summary
+        )
     if weather["uniform"]:
         weather_note = (
             f"{province}{josa(province, '은는')} 단일 대표 관측지점 값이 모든 하위 지역에 동일하게 적용됩니다. "
@@ -476,6 +498,14 @@ def build_context(payload: dict, query: str, generated_at: datetime | None = Non
     metrics = payload.get("model_metrics") or {}
     prov_band_lo, prov_band_hi = band_range(prov_avg)
 
+    now = generated_at or datetime.now()
+    cover_in = cover or {}
+    issued_at = str(cover_in.get("issuedAt") or cover_in.get("issued_at") or "").strip()
+    if not issued_at:
+        issued_at = f"{now.year}년 {now.month}월 {now.day}일"
+    author = str(cover_in.get("author") or "").strip() or "산불 예측 챗봇 서비스"
+    nickname = str(cover_in.get("nickname") or "").strip() or "회원"
+
     return {
         "title_label": target.title_label,
         "province": province,
@@ -486,7 +516,15 @@ def build_context(payload: dict, query: str, generated_at: datetime | None = Non
         "weekday": weekday_kr(predict_date) if predict_date else "",
         "observed_at": payload.get("observed_at") or "",
         "weather_source": payload.get("weather_source") or "",
-        "generated_at": (generated_at or datetime.now()).strftime("%Y-%m-%d %H:%M"),
+        "generated_at": now.strftime("%Y-%m-%d %H:%M"),
+        "cover_meta": {
+            "banner": "AI 챗봇 · 당일 산불 예측 리포트",
+            "title": "산불 당일 예측 보고서",
+            "subtitle": f"대상 지역 · {target.title_label}",
+            "issued_at": issued_at,
+            "author": author,
+            "nickname": nickname,
+        },
         "n_regions": len(prov_rows),
         "national": {
             "avg": national_avg,
@@ -509,6 +547,7 @@ def build_context(payload: dict, query: str, generated_at: datetime | None = Non
             "top_group_size": len(top_group),
         },
         "ranking": ranking,
+        "ranking_groups": ranking_groups,
         "band_legend": [{"lo": lo, "hi": hi, "color": color} for lo, hi, color in band_legend],
         "spotlight": spotlight,
         "province_table": prov_table,

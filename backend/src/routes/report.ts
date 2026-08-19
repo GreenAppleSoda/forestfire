@@ -7,7 +7,7 @@
 import { randomUUID } from "node:crypto";
 import { Router } from "express";
 import { resolveRegionFocus } from "../lib/regionFocus.js";
-import { buildRegionReportPdf } from "../lib/reportService.js";
+import { buildRegionReportPdf, formatIssuedAtKo } from "../lib/reportService.js";
 import { getReportPdf, putReportPdf } from "../lib/reportStore.js";
 import {
   resolveRiskSnapshot,
@@ -95,7 +95,11 @@ router.post("/report/pdf", requireAuth, async (req, res) => {
     const regionQuery = String(req.body?.regionQuery || req.body?.region || "").trim();
     const focus = resolveRegionFocus(regionQuery);
 
-    const built = await buildRegionReportPdf(focus.label);
+    const built = await buildRegionReportPdf(focus.label, {
+      issuedAt: formatIssuedAtKo(),
+      author: "산불 예측 챗봇 서비스",
+      nickname: req.user?.nickname || req.user?.name || "회원",
+    });
     if (!built.ok) {
       return res.status(built.status).json({ ok: false, error: built.error });
     }

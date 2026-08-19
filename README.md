@@ -8,9 +8,9 @@ South Korea Wildfire Atlas — 시군구 산불 위험 지도·예측 웹서비�
 ## 주요 화면
 
 - 좌측: FORESTFIRE ATLAS KOREA 브랜드, 지역·산 통합 검색, 위험 표시(당일 예측 / 사용자 지정 / 과거 이력), 최근 산불 발생 피드
-- 지도: SVG 행정구역 + 카카오 위성, 범례는 우측 하단에 산불위험지수 0~100
-- 우측: 전체 산불 건수·갱신 날짜·갱신 버튼, 지역 미선택 시 전국 평균·최고 위험 시도 요약 → 선택 시 이력·산 상세
-- 사용자 지정: 접속월부터 12개월만 선택(기본값 다음 달). API는 `year`/`month` 그대로 전달
+- 지도: SVG 행정구역 + 카카오 위성, 범례는 우측 하단(예측 모드: 산불위험지수 0~100 · 예측일 · AUC)
+- 우측: 접을 수 있는 패널. 전체 산불 건수·갱신 날짜·갱신 버튼, 지역 미선택 시 전국 평균·최고 위험 시도 요약 → 선택 시 이력·산 상세. 로그인 시 지도 상단에 보고서 버튼
+- 사용자 지정: 접속월부터 12개월만 선택(기본값 다음 달). 월별 평년 기상에 프리셋(평년 / 건조·강풍 / 고온·건조 / 습함·비 많음)을 더해 슬라이더로 조정. API는 `year`/`month`/`weather` 그대로 전달
 - 기상 카드: 선택 지역이 있으면 해당 시군구(또는 시도 평균) 기상
 
 ## 런타임 구조 (역할 분리)
@@ -31,8 +31,8 @@ South Korea Wildfire Atlas — 시군구 산불 위험 지도·예측 웹서비�
 쿠키·`Set-Cookie`와 PDF의 `Content-Disposition`도 전달합니다.  
 브라우저에는 Express가 필터한 DTO만 전달됩니다. 파이썬 stdout·모델 경로·API 키는 응답에 포함되지 않습니다.
 
-**PDF 보고서:** 회원 세션 확인(Express) → `ml-service` Jinja2+Playwright로 PDF 생성 → 임시 다운로드 URL 발급.  
-UI는 현재 탭을 이동하지 않고 blob으로 받아 브라우저 다운로드로 저장합니다.
+**PDF 보고서:** 회원 세션 확인(Express) → `ml-service` Jinja2+Playwright로 **A4 가로** PDF 생성 → 메모리에 임시 보관(TTL 30분) 후 다운로드 URL 발급.  
+표지(발행일·작성·닉네임 + 요약·게이지) 뒤 본문. 전국 리포트는 시군구 순위를 **상위 10·하위 5**만 넣고, 특정 지역 리포트는 해당 범위를 유지합니다.
 
 ## 데이터 소스 (현재)
 
@@ -65,11 +65,10 @@ ForestFire/
 │   ├── reference/     시군구 hist · 관측소 매핑 CSV
 │   ├── predict/       예측 엔진 + weather_db · fire_db (MariaDB)
 │   ├── report/        지역별 PDF (Jinja2 + Playwright)
-│   └── routes/        health · predict · report · sync
+│   └── routes/        health · predict · report
 ├── etl/               오프라인 ETL · 분석 · 학습
 ├── db/                로컬 대용량 CSV (Git 제외)
-├── db-archive/        ETL·분석 원본·중간 산출물
-└── docs/
+└── db-archive/        ETL·분석 원본·중간 산출물 (Git 제외)
 ```
 
 ## 웹 앱 실행 (3개 프로세스)
@@ -123,6 +122,7 @@ npm run dev
 | `backend/.env` | `SESSION_SECRET`, `SESSION_IDLE_MINUTES`(선택, 기본 30) | 로그인 세션 쿠키 서명 · 유휴 만료 |
 | `backend/.env` | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | 구글 OAuth (미설정 시 버튼 비활성) |
 | `backend/.env` | `KAKAO_REST_API_KEY`, `KAKAO_CLIENT_SECRET`(선택) | 카카오 OAuth |
+| `backend/.env` | `OAUTH_REDIRECT_BASE`(선택) | OAuth 콜백 베이스. 기본값은 `FRONTEND_ORIGIN` |
 | `frontend/.env.local` | `NEXT_PUBLIC_KAKAO_MAP_KEY`, `EXPRESS_URL` | 카카오 JS 키 · Express 주소 (`http://127.0.0.1:4000` 권장) |
 
 카카오 개발자 콘솔에서 **JavaScript 키**를 쓰고, Web 플랫폼에 `http://localhost:3000` 을 등록해야 위성 지도가 표시됩니다.
@@ -171,11 +171,14 @@ npm run dev
 - 만료 5분 전 안내 모달 (로그아웃 / 시간 연장)
 - 만료되면 자동 로그아웃
 
+### 챗봇 · PDF
+
 - 챗봇: 예측 API(`runPredictDaily`) 우선 → 실패 시 `backend/data/daily_ml_risk.json`
-- 로그인 회원은 최근 대화를 `user_id` 기준으로 Gemini 맥락에 포함 (게스트는 `sessionId`). UI는 열 때 인삿말만 보이고, **「이전 대화내역 불러오기」**로 화면 복원
-- 「보고서/PDF 만들어줘」: **로그인 필수**. 지역은 현재 문장 → 최근 유저 발화 → (예시 제외) 어시스턴트 순으로 찾고 (`regionFocus`), 없으면 지역을 되물음. 확정 후 Flask `POST /report/pdf`
-- 보고서는 DB에 저장하지 않고, 생성 후 짧은 TTL로 다운로드만 제공합니다
-- UI 보고서 모달의 PDF는 blob 다운로드(화면 유지). 모달은 상단 오버레이가 범례보다 위
+- 로그인 회원은 최근 대화를 `user_id` 기준으로 Gemini 맥락에 포함 (게스트는 `sessionId`). 로그인 직후 게스트로 쓰던 `sessionId`는 계정 히스토리에 합쳐집니다
+- UI는 열 때 인삿말만 보이고, **「이전 대화내역 불러오기」**로 화면 복원. 헤더에 닉네임·회원/게스트 뱃지
+- 「보고서/PDF 만들어줘」: **로그인 필수**. `regionFocus`가 확신 있는 지명만 추출(잡음·예시·따옴표 문장 제외). 순서는 현재 문장 → 최근 유저 발화 → 어시스턴트. 「전국」도 가능. 없으면 지역을 되물은 뒤 Flask `POST /report/pdf`
+- 보고서는 DB에 저장하지 않고, 생성 후 30분 TTL로 다운로드만 제공합니다
+- 지도 **보고서** 모달의 PDF는 blob 다운로드(화면 유지). 모달은 상단 오버레이가 범례보다 위. 챗봇 PDF는 다운로드 링크
 - 챗봇 창은 헤더 드래그로 위치 이동 가능 (플로팅 버튼은 우측 하단 고정)
 
 자세한 API·폴더 구조는 `backend/README.md` · `frontend/README.md` · `ml-service/README.md` 참고.
@@ -223,7 +226,7 @@ python etl/pipeline/sync_wildfire_history.py
 - `GET /api/map/admin/:level` (`sido` \| `sigungu` \| `emd`)
 - `POST /api/predict/daily` — body: `{ source, force, date?, weather? }`
 - `POST /api/predict/scenario` — body: `{ year, month, weather: { temp_avg, humidity_avg, wind_avg, precip } }`  
-  (UI는 접속 시점 월부터 12개월만 고름. 기본 선택은 다음 달)
+  (UI는 접속월부터 12개월, 기본 다음 달. 월별 평년 + 프리셋으로 기상 슬라이더를 채움)
 - `POST /api/wildfires/sync` — MariaDB 산불 이력 → 맵 갱신
 - `GET /api/wildfires/sync/status`
 
@@ -236,11 +239,11 @@ python etl/pipeline/sync_wildfire_history.py
 
 **챗봇 · 보고서**
 
-- `POST /api/chat` — body: `{ message, sessionId? }` (비로그인 가능; 보고서 요청은 회원; 회원은 user 기준 히스토리; PDF 지역은 대화 맥락 반영)
+- `POST /api/chat` — body: `{ message, sessionId? }` (비로그인 가능; 보고서 요청은 회원; 회원은 user 기준 히스토리; PDF 지역은 대화 맥락·`regionFocus`)
 - `GET /api/chat/history` — 최근 대화 (회원=`user_id`, 게스트=`sessionId`; UI는 버튼으로 불러오기)
 - `GET /api/report/daily` — JSON 요약 (**회원**)
-- `POST /api/report/pdf` — body: `{ regionQuery? }` → 다운로드 메타 (**회원**)
-- `GET /api/report/download/:id` — PDF 바이너리 (**회원**, 임시, `Content-Disposition: attachment`)
+- `POST /api/report/pdf` — body: `{ regionQuery? }` → 다운로드 메타 (**회원**, 비우면 전국)
+- `GET /api/report/download/:id` — PDF 바이너리 (**회원**, 메모리 TTL 30분, `Content-Disposition: attachment`)
 
 ## Flask API (내부)
 

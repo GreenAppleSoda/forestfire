@@ -11,7 +11,7 @@ import { Router } from "express";
 import type { RowDataPacket } from "mysql2";
 import { isDbConfigured, getPool } from "../lib/db.js";
 import { DEFAULT_MODEL, getGeminiClient } from "../lib/gemini.js";
-import { buildRegionReportPdf } from "../lib/reportService.js";
+import { buildRegionReportPdf, formatIssuedAtKo } from "../lib/reportService.js";
 import { putReportPdf } from "../lib/reportStore.js";
 import { resolveRegionFocusForPdf, wantsPdfReport } from "../lib/regionFocus.js";
 import { resolveRiskSnapshot, snapshotToPromptJson } from "../lib/riskSnapshot.js";
@@ -218,7 +218,11 @@ router.post("/chat", async (req, res) => {
         });
       }
 
-      const built = await buildRegionReportPdf(focus.label);
+      const built = await buildRegionReportPdf(focus.label, {
+        issuedAt: formatIssuedAtKo(),
+        author: "산불 예측 챗봇 서비스",
+        nickname: req.user.nickname || req.user.name || "회원",
+      });
       if (!built.ok) {
         const answer =
           `PDF 보고서를 만들지 못했습니다.\n${built.error}\n` +

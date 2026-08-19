@@ -13,7 +13,7 @@
 | `ml-service/reference/` | 시군구 hist · ASOS 매핑 CSV (예측 런타임) |
 | `db/` | 로컬 대용량 CSV (Git 제외, weather 폴백) |
 | `db-archive/` | 원본·중간 산출물·학습 메트릭·분석 CSV |
-| `frontend/public/data/` | 지도·점수 JSON (웹 정적 파일) → `backend/data`에도 동기화 |
+| `frontend/public/data/` | 지도·점수 JSON (웹 정적 파일). `paths.sync_backend_data()`가 `backend/data`로 복사 |
 
 주요 런타임 파일:
 
@@ -77,7 +77,8 @@ pip install -r requirements.txt
 python -m predict.daily --kma
 ```
 
-산불 이력 → 맵 갱신 (MariaDB, 웹 **과거 이력**의 「산불이력 갱신」과 동일):
+산불 이력 → 맵 갱신 (MariaDB). 웹 버튼(`POST /api/wildfires/sync`)은 `backend/data`만 패치합니다.  
+이 CLI는 `frontend/public/data`를 갱신한 뒤 `sync_backend_data()`로 `backend/data`에도 복사합니다.
 
 ```powershell
 python etl/pipeline/sync_wildfire_history.py

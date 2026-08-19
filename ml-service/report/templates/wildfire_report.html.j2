@@ -27,31 +27,47 @@
     background: var(--bg);
     color: var(--ink);
     font-family: "Noto Sans KR", "Noto Sans CJK KR", sans-serif;
-    font-size: 13.5px;
-    line-height: 1.6;
+    font-size: 15px;
+    line-height: 1.5;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
 
-  .doc { max-width: 100%; padding: 0 40px; }
+  .doc { max-width: 100%; padding: 0 28px; }
 
+  /* 섹션은 기본적으로 자연스럽게 흘러 페이지를 빈틈없이 채운다.
+     표지(.cover-page)만 별도 타이틀 페이지로 강제 분리한다. */
   section.spread {
-    padding: 28px 0 22px;
+    padding: 12px 0 14px;
+  }
+  section.spread.cover-page {
     break-after: page;
     page-break-after: always;
   }
-  section.spread:last-of-type { break-after: auto; page-break-after: auto; }
+  .spread + .spread {
+    margin-top: 8px;
+    padding-top: 14px;
+    border-top: 1px solid var(--line);
+  }
+  .cover-page + .spread {
+    margin-top: 0;
+    border-top: none;
+  }
 
   .sec-head {
     display: flex;
     align-items: flex-start;
-    gap: 10px;
+    gap: 9px;
     margin-bottom: 6px;
+    break-after: avoid;
+    break-inside: avoid;
+    page-break-after: avoid;
+    page-break-inside: avoid;
   }
   .sec-dot {
     flex: none;
-    width: 11px;
-    height: 11px;
+    width: 10px;
+    height: 10px;
     margin-top: 8px;
     border-radius: 50%;
     background: var(--accent);
@@ -65,35 +81,32 @@
     color: var(--ink);
     letter-spacing: -0.02em;
   }
-  h1.page-title { font-size: 30px; line-height: 1.25; }
-  h2.page-title { font-size: 22px; }
+  h1.page-title { font-size: 28px; line-height: 1.25; }
+  h2.page-title { font-size: 23px; }
 
-  .lede { max-width: 70ch; color: var(--ink-soft); font-size: 13px; margin: 0 0 18px; }
+  .lede { max-width: 80ch; color: var(--ink-soft); font-size: 14px; margin: 0 0 10px; }
   .lede.one-line { max-width: none; white-space: nowrap; }
   .lede strong { color: var(--ink); font-weight: 700; }
-  p.copy { max-width: 70ch; color: var(--ink-soft); margin: 0; word-break: keep-all; overflow-wrap: normal; }
+  p.copy { max-width: 80ch; color: var(--ink-soft); margin: 0; font-size: 14px; word-break: keep-all; overflow-wrap: normal; }
   p.copy strong { color: var(--ink); }
-  .footnote { font-size: 11px; color: var(--muted); margin-top: 10px; }
+  .footnote { font-size: 12.5px; color: var(--muted); margin-top: 8px; }
   svg text { font-family: "Noto Sans KR", "Noto Sans CJK KR", sans-serif; }
   hr.rule {
     border: 0;
     border-top: 1px solid var(--line);
-    margin: 16px 0;
+    margin: 8px 0;
   }
 
-  /* ---------- Cover ---------- */
-  .cover-date { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; margin: 0 0 16px; }
-  .cover-grid { display: flex; gap: 10px; align-items: center; }
-  .cover-grid > .lede-col { flex: 1 1 auto; min-width: 0; }
-  .cover-grid .lede { margin-bottom: 0; max-width: none; word-break: keep-all; }
-  .gauge-wrap { position: relative; width: 400px; height: 400px; flex: none; margin-right: -40px; }
-  .gauge-wrap svg { display: block; width: 400px; height: 400px; }
+  /* ---------- Gauge (표지 대형) ---------- */
+  .gauge-wrap { position: relative; width: 420px; height: 420px; flex: none; }
+  .gauge-wrap.hero { width: 500px; height: 500px; }
+  .gauge-wrap svg { display: block; width: 100%; height: 100%; }
   .gauge-center {
     position: absolute;
     left: 50%;
     top: 46%;
     transform: translate(-50%, -50%);
-    width: 156px;
+    width: 198px;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -101,14 +114,14 @@
     text-align: center;
     pointer-events: none;
   }
-  .gauge-number { font-size: 48px; font-weight: 800; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; line-height: 1; }
-  .gauge-scale { font-size: 13px; color: var(--muted); margin-top: 6px; }
-  .gauge-band-label { margin-top: 8px; font-size: 12px; font-weight: 700; padding: 4px 11px; border-radius: 999px; }
+  .gauge-number { font-size: 58px; font-weight: 800; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; line-height: 1; }
+  .gauge-scale { font-size: 15px; color: var(--muted); margin-top: 6px; }
+  .gauge-band-label { margin-top: 8px; font-size: 14px; font-weight: 700; padding: 4px 13px; border-radius: 999px; }
 
-  .kpi-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+  .kpi-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
   .kpi {
     border: 1px solid var(--accent);
-    border-radius: 12px;
+    border-radius: 8px;
     overflow: hidden;
     background: var(--surface);
     break-inside: avoid;
@@ -116,74 +129,81 @@
   .kpi-head {
     background: var(--accent);
     color: var(--accent-ink);
-    font-size: 12px;
+    font-size: 13.5px;
     font-weight: 700;
     text-align: center;
-    padding: 8px 10px;
+    padding: 7px 9px;
   }
-  .kpi-body { padding: 12px 12px 14px; text-align: center; }
-  .kpi-desc { font-size: 10.5px; color: var(--muted); min-height: 1.4em; }
-  .kpi-val { font-size: 22px; font-weight: 800; font-variant-numeric: tabular-nums; margin-top: 4px; letter-spacing: -0.03em; }
-  .kpi-val small { font-size: 12px; font-weight: 600; color: var(--muted); }
+  .kpi-body { padding: 10px 9px 13px; text-align: center; }
+  .kpi-desc { font-size: 12px; color: var(--muted); min-height: 1.2em; }
+  .kpi-val { font-size: 24px; font-weight: 800; font-variant-numeric: tabular-nums; margin-top: 3px; letter-spacing: -0.03em; }
+  .kpi-val small { font-size: 12.5px; font-weight: 600; color: var(--muted); }
 
   /* ---------- Ranking ---------- */
-  .rank-list { column-count: 2; column-gap: 26px; }
-  .rank-row {
-    display: grid; grid-template-columns: 22px 118px minmax(0, 1fr) 36px;
-    align-items: center; gap: 8px; padding: 3px 4px; break-inside: avoid;
+  .rank-list { column-count: 2; column-gap: 20px; }
+  .rank-list.compact { column-count: 2; }
+  .rank-section {
+    break-inside: avoid;
+    margin-bottom: 10px;
   }
-  .rank-row .r { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
-  .rank-row .name { font-size: 12.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .rank-section-label {
+    font-size: 12.5px;
+    font-weight: 700;
+    color: var(--ink);
+    margin: 0 0 6px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid var(--line);
+  }
+  .rank-row {
+    display: grid; grid-template-columns: 24px 122px minmax(0, 1fr) 42px;
+    align-items: center; gap: 7px; padding: 3px 2px; break-inside: avoid;
+  }
+  .rank-row .r { font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .rank-row .name { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .rank-row.top .name { color: var(--accent-strong); font-weight: 800; }
-  .rank-row.highlight .name { text-decoration: underline; text-decoration-color: var(--accent); text-underline-offset: 3px; }
+  .rank-row.highlight .name { text-decoration: underline; text-decoration-color: var(--accent); text-underline-offset: 2px; }
   .rank-track { position: relative; height: 8px; background: var(--surface-2); border-radius: 999px; overflow: hidden; }
   .rank-fill { position: absolute; inset: 0 auto 0 0; border-radius: 999px; }
-  .rank-row .val { font-size: 11.5px; text-align: right; font-variant-numeric: tabular-nums; color: var(--ink-soft); }
+  .rank-row .val { font-size: 12px; text-align: right; font-variant-numeric: tabular-nums; color: var(--ink-soft); }
 
   .legend-bar {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 16px;
-    margin-top: 18px;
-    padding: 10px 16px;
+    gap: 12px;
+    margin-top: 10px;
+    padding: 7px 11px;
     background: var(--surface-2);
-    border-radius: 8px;
-    font-size: 11px;
+    border-radius: 6px;
+    font-size: 11.5px;
     color: var(--muted);
+    break-inside: avoid;
+    page-break-inside: avoid;
   }
   .legend-items {
     display: grid;
-    grid-template-columns: repeat(3, auto);
-    gap: 6px 16px;
+    grid-template-columns: repeat(5, auto);
+    gap: 4px 12px;
     min-width: 0;
   }
-  .legend-item { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+  .legend-item { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
   .legend-item .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
-  .legend-hint { flex: none; text-align: right; white-space: nowrap; }
-
-  section.spread#p2 {
-    min-height: 258mm;
-    display: flex;
-    flex-direction: column;
-  }
-  section.spread#p2 .legend-bar {
-    margin-top: auto;
-  }
+  .legend-hint { flex: none; text-align: right; white-space: nowrap; font-size: 11px; }
 
   /* ---------- Comparison ---------- */
   .range-card {
     background: var(--surface);
     border: 1px solid var(--line);
-    border-radius: 12px;
-    padding: 22px 22px 14px;
-    margin-bottom: 22px;
+    border-radius: 8px;
+    padding: 14px 16px 10px;
+    margin-bottom: 12px;
     break-inside: avoid;
   }
-  .range-strip { position: relative; height: 12px; border-radius: 999px; overflow: hidden; display: flex; margin: 40px 4px 26px; }
-  .range-strip span { flex: 1; }
-  .range-marker { position: absolute; top: -32px; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; font-size: 10px; white-space: nowrap; }
-  .range-marker .stem { width: 1px; height: 14px; background: var(--muted); margin-top: 2px; }
+  .range-strip { position: relative; margin: 32px 4px 24px; }
+  .range-track { height: 11px; border-radius: 999px; overflow: hidden; display: flex; }
+  .range-track span { flex: 1; }
+  .range-marker { position: absolute; top: -32px; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; font-size: 10.5px; white-space: nowrap; }
+  .range-marker .stem { width: 1px; height: 13px; background: var(--muted); margin-top: 2px; }
   .range-marker.emph .stem { background: var(--accent-strong); width: 2px; }
   .range-marker .lbl { color: var(--muted); font-weight: 600; }
   .range-marker.emph .lbl { color: var(--accent-strong); font-weight: 800; }
@@ -191,167 +211,310 @@
   .range-marker.below { top: auto; bottom: -32px; flex-direction: column-reverse; }
   .range-marker.below .stem { margin-top: 0; margin-bottom: 2px; }
 
-  .section-label { font-size: 12px; letter-spacing: 0.02em; color: var(--muted); margin: 0 0 12px; font-weight: 700; }
-  .prov-list { display: flex; flex-direction: column; gap: 6px; }
-  .prov-row { display: grid; grid-template-columns: 84px minmax(0, 1fr) 42px; align-items: center; gap: 10px; break-inside: avoid; }
-  .prov-row .name { font-size: 12.5px; font-weight: 600; display: flex; align-items: center; gap: 6px; }
-  .prov-row.target .name { font-weight: 800; color: var(--accent-strong); }
-  .prov-track { position: relative; height: 12px; background: var(--surface-2); border-radius: 4px; overflow: hidden; }
-  .prov-fill { position: absolute; inset: 0 auto 0 0; border-radius: 4px; }
-  .prov-row.target .prov-fill { outline: 2px solid var(--accent-strong); outline-offset: -2px; }
-  .prov-row .val { font-size: 11.5px; text-align: right; font-variant-numeric: tabular-nums; color: var(--ink-soft); }
-  .badge { font-size: 9.5px; font-weight: 800; background: var(--accent); color: var(--accent-ink); border-radius: 999px; padding: 1px 7px; }
+  .section-label {
+    font-size: 12.5px; letter-spacing: 0.02em; color: var(--muted); margin: 0 0 7px; font-weight: 700;
+    break-after: avoid; page-break-after: avoid;
+  }
+
+  /* 시·도 비교 차트 (가로 막대 + 전국 평균선) */
+  .prov-chart {
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    overflow: hidden;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .prov-chart-meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 7px 11px;
+    background: var(--surface-2);
+    font-size: 11.5px;
+    color: var(--muted);
+  }
+  .prov-chart-meta .keys { display: inline-flex; align-items: center; gap: 12px; }
+  .prov-chart-meta .key { display: inline-flex; align-items: center; gap: 5px; }
+  .prov-chart-meta .swatch-bar {
+    width: 14px; height: 8px; border-radius: 2px; background: #1e3a5f;
+  }
+  .prov-chart-meta .swatch-line {
+    width: 14px; height: 0; border-top: 2px dashed #c2410c;
+  }
+  .prov-chart-row {
+    display: grid;
+    grid-template-columns: 84px minmax(0, 1fr) 46px;
+    align-items: center;
+    gap: 9px;
+    padding: 4px 11px;
+    break-inside: avoid;
+  }
+  .prov-chart-row.alt { background: #f9fafb; }
+  .prov-chart-row.target { background: #eff6ff; }
+  .prov-chart-row .name {
+    font-size: 13px; font-weight: 600;
+    display: flex; align-items: center; gap: 5px; white-space: nowrap;
+  }
+  .prov-chart-row.target .name { font-weight: 800; color: var(--accent-strong); }
+  .prov-chart-track {
+    position: relative;
+    height: 16px;
+    background: #eef2f7;
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  .prov-chart-fill {
+    position: absolute; inset: 0 auto 0 0; border-radius: 3px;
+    background: #1e3a5f;
+    min-width: 2px;
+  }
+  .prov-chart-row.target .prov-chart-fill { background: #0f172a; }
+  .prov-chart-avg {
+    position: absolute; top: 0; bottom: 0; width: 0;
+    border-left: 1.5px dashed #c2410c;
+    z-index: 2;
+  }
+  .prov-chart-row .val {
+    font-size: 12.5px; text-align: right; font-variant-numeric: tabular-nums; color: var(--ink-soft); font-weight: 700;
+  }
+  .badge { font-size: 10.5px; font-weight: 800; background: var(--accent); color: var(--accent-ink); border-radius: 999px; padding: 2px 7px; }
 
   /* ---------- Spotlight rows ---------- */
   .spot-list {
     display: flex;
     flex-direction: column;
-    gap: 12px;
-    flex: 1;
+    gap: 10px;
   }
   .spot-row {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 248px;
-    gap: 18px;
+    grid-template-columns: minmax(0, 1fr) 240px;
+    gap: 14px;
     align-items: center;
     border: 1px solid var(--accent);
-    border-radius: 12px;
-    padding: 14px 16px 16px;
+    border-radius: 8px;
+    padding: 10px 14px 12px;
     background: var(--surface);
     break-inside: avoid;
-    flex: 1;
   }
   .spot-main { min-width: 0; }
   .spot-head {
     display: flex;
     align-items: baseline;
-    gap: 10px;
-    margin-bottom: 4px;
+    gap: 9px;
+    margin-bottom: 3px;
   }
-  .spot-rank { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; font-weight: 700; }
-  .spot-name { font-size: 16px; font-weight: 800; letter-spacing: -0.02em; }
-  .spot-head .chip { display: inline-flex; align-items: center; gap: 6px; font-size: 10px; font-weight: 700; color: var(--muted); }
+  .spot-rank { font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; font-weight: 700; }
+  .spot-name { font-size: 17px; font-weight: 800; letter-spacing: -0.02em; }
+  .spot-head .chip { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 700; color: var(--muted); }
   .spot-head .swatch { width: 9px; height: 9px; border-radius: 50%; }
-  .spot-idx { font-size: 26px; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--accent-strong); line-height: 1; margin: 4px 0 10px; }
-  .spot-idx small { font-size: 12px; color: var(--muted); font-weight: 600; }
-  .compare { position: relative; height: 6px; background: var(--surface-2); border-radius: 999px; margin: 22px 2px 26px; }
-  .compare i { position: absolute; top: -6px; width: 2px; height: 16px; background: var(--muted); }
+  .spot-idx { font-size: 24px; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--accent-strong); line-height: 1; margin: 3px 0 8px; }
+  .spot-idx small { font-size: 11.5px; color: var(--muted); font-weight: 600; }
+  .compare { position: relative; height: 5px; background: var(--surface-2); border-radius: 999px; margin: 18px 2px 20px; }
+  .compare i { position: absolute; top: -5px; width: 2px; height: 15px; background: var(--muted); }
   .compare i.self { background: var(--accent-strong); width: 3px; }
-  .compare em { position: absolute; top: -20px; transform: translateX(-50%); font-style: normal; font-size: 9.5px; color: var(--muted); white-space: nowrap; }
+  .compare em { position: absolute; top: -18px; transform: translateX(-50%); font-style: normal; font-size: 10.5px; color: var(--muted); white-space: nowrap; }
   .compare em.self { color: var(--accent-strong); font-weight: 800; }
-  .compare em.below { top: auto; bottom: -18px; }
+  .compare em.below { top: auto; bottom: -16px; }
 
   .wx-mini {
     width: 100%;
     border-collapse: collapse;
     table-layout: fixed;
     background: var(--surface-2);
-    border-radius: 8px;
+    border-radius: 6px;
     overflow: hidden;
   }
   .wx-mini th {
-    font-size: 10px;
+    font-size: 10.5px;
     font-weight: 700;
     color: var(--muted);
     text-align: center;
-    padding: 7px 4px 2px;
+    padding: 6px 3px 2px;
   }
   .wx-mini td {
     font-size: 14px;
     font-weight: 800;
     font-variant-numeric: tabular-nums;
     text-align: center;
-    padding: 2px 4px 8px;
+    padding: 2px 3px 8px;
   }
-  .wx-mini td small { font-size: 10px; font-weight: 600; color: var(--muted); }
-
-  section.spread#p4 {
-    min-height: 250mm;
-    display: flex;
-    flex-direction: column;
-  }
+  .wx-mini td small { font-size: 10.5px; font-weight: 600; color: var(--muted); }
 
   /* ---------- Methodology ---------- */
-  .method-grid { display: flex; gap: 36px; align-items: flex-start; }
+  .method-grid {
+    display: flex;
+    gap: 24px;
+    align-items: flex-start;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
   .method-grid > div { flex: 1 1 0; min-width: 0; }
-  .stat-line { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 12.5px; }
+  .stat-line {
+    display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--line); font-size: 13px;
+    break-inside: avoid; page-break-inside: avoid;
+  }
   .stat-line span:first-child { color: var(--muted); }
   .stat-line span:last-child { font-weight: 700; font-variant-numeric: tabular-nums; }
 
-  ul.guide { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
-  ul.guide li { display: flex; gap: 10px; font-size: 12.5px; color: var(--ink-soft); }
-  ul.guide li::before { content: ""; flex: none; width: 6px; height: 6px; margin-top: 6px; border-radius: 999px; background: var(--accent); }
+  ul.guide { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 7px; }
+  ul.guide li { display: flex; gap: 8px; font-size: 13px; color: var(--ink-soft); break-inside: avoid; page-break-inside: avoid; }
+  ul.guide li::before { content: ""; flex: none; width: 5px; height: 5px; margin-top: 6px; border-radius: 999px; background: var(--accent); }
 
   .report-footer {
-    position: absolute;
-    left: 0;
-    right: 0;
-    bottom: 2px;
-    margin: 0;
-    padding-top: 12px;
+    margin-top: 16px;
+    padding-top: 9px;
     border-top: 1px solid var(--line);
     color: var(--muted);
-    font-size: 10.5px;
-    line-height: 1.7;
+    font-size: 11px;
+    line-height: 1.55;
     text-align: center;
   }
   .report-footer strong { color: var(--ink-soft); }
 
-  section.spread:last-of-type {
+  /* ---------- Cover sheet ---------- */
+  .cover-sheet {
     position: relative;
-    min-height: 258mm;
-    display: block;
-    padding-bottom: 56px;
+    min-height: 178mm;
+    padding: 12px 0 16px 18px;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 12px;
+  }
+  .cover-accent {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 8px;
+    background: linear-gradient(180deg, #166534 0%, #166534 48%, #b91c1c 52%, #b91c1c 100%);
+    border-radius: 2px;
+  }
+  .cover-left {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+  .cover-right {
+    flex: none;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding-right: 0;
+  }
+  .cover-banner {
+    display: inline-block;
+    align-self: flex-start;
+    background: #111827;
+    color: #fff;
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    padding: 10px 20px;
+    margin: 10px 0 24px;
+  }
+  .cover-main-title {
+    margin: 0 0 12px;
+    font-size: 44px;
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    color: #111827;
+    line-height: 1.2;
+  }
+  .cover-sub {
+    margin: 0 0 18px;
+    font-size: 17px;
+    font-weight: 600;
+    color: #166534;
+  }
+  .cover-rule {
+    border: 0;
+    border-top: 1px solid #e5e7eb;
+    margin: 0 0 20px;
+  }
+  .cover-meta {
+    display: grid;
+    grid-template-columns: 78px 1fr;
+    gap: 13px 14px;
+    max-width: 440px;
+    font-size: 16px;
+  }
+  .cover-meta dt {
+    margin: 0;
+    color: #6b7280;
+    font-weight: 600;
+  }
+  .cover-meta dd {
+    margin: 0;
+    color: #111827;
+    font-weight: 600;
+  }
+  .cover-summary {
+    margin-top: 24px;
+    max-width: 42ch;
+    font-size: 16px;
+    line-height: 1.55;
+    color: #4b5563;
+    word-break: keep-all;
   }
 </style>
 </head>
 <body>
 <div class="doc">
 
-  <!-- 1: 표지 -->
-  <section class="spread" id="p1">
-    <div class="sec-head">
-      <span class="sec-dot"></span>
-      <div class="titles">
-        <h1 class="page-title">산불발생위험도 보고서</h1>
-        <p class="cover-date">{{ predict_date }}{% if weekday %} {{ weekday }}요일{% endif %} · 기상관측 {{ observed_at }} 기준 · ML 예측모델</p>
+  <!-- 0: 표지 (제목·메타 + 요약·게이지) -->
+  <section class="spread cover-page" id="p0">
+    <div class="cover-sheet">
+      <div class="cover-accent" aria-hidden="true"></div>
+      <div class="cover-left">
+        <div class="cover-banner">{{ cover_meta.banner }}</div>
+        <h1 class="cover-main-title">{{ cover_meta.title }}</h1>
+        <p class="cover-sub">{{ cover_meta.subtitle }}</p>
+        <hr class="cover-rule" />
+        <dl class="cover-meta">
+          <dt>발행일</dt>
+          <dd>{{ cover_meta.issued_at }}</dd>
+          <dt>작성</dt>
+          <dd>{{ cover_meta.author }}</dd>
+          <dt>닉네임</dt>
+          <dd>{{ cover_meta.nickname }}</dd>
+        </dl>
+        <p class="cover-summary">{{ narrative.cover }}{% if narrative.cover_avg %} {{ narrative.cover_avg }}{% endif %}</p>
       </div>
-    </div>
-
-    <div class="cover-grid">
-      <div class="lede-col">
-        <p class="lede">{{ narrative.cover }}{% if narrative.cover_avg %}<br />{{ narrative.cover_avg }}{% endif %}</p>
-      </div>
-      <div class="gauge-wrap">
-        <svg viewBox="-90 -80 480 460" width="400" height="400" role="img" aria-label="{{ province }} 평균 산불위험지수 {{ province_stat.avg }}, 100점 만점">
-          {% for arc in gauge.arcs %}
-          <path d="{{ arc.path }}" stroke="{{ arc.color }}" stroke-width="22" fill="none" stroke-linecap="round"/>
-          {% endfor %}
-
-          <line x1="150" y1="150" x2="{{ gauge.needle.x }}" y2="{{ gauge.needle.y }}" stroke="var(--ink)" stroke-width="4" stroke-linecap="round"/>
-          <circle cx="150" cy="150" r="8" fill="var(--ink)"/>
-
-          {% for t in gauge.ticks %}
-          <text x="{{ t.x }}" y="{{ t.y + 4 }}" text-anchor="middle" font-size="10" fill="var(--muted)">{{ t.v }}</text>
-          {% endfor %}
-
-          {% for c in gauge.captions %}
-          <line x1="{{ c.dot_x }}" y1="{{ c.dot_y }}" x2="{{ c.bx }}" y2="{{ c.by }}" stroke="#4b5563" stroke-width="1.3"/>
-          <circle cx="{{ c.dot_x }}" cy="{{ c.dot_y }}" r="4.5" fill="#fff" stroke="#111827" stroke-width="2"/>
-          <rect x="{{ c.rx }}" y="{{ c.ry }}" width="{{ c.rw }}" height="{{ c.rh }}" rx="12" fill="#fff" stroke="#111827" stroke-width="1.5"/>
-          <text x="{{ c.bx }}" y="{{ c.ty }}" text-anchor="middle" font-size="12" font-weight="700" fill="#111827">{{ c.text }}</text>
-          {% endfor %}
-        </svg>
-        <div class="gauge-center">
-          <div class="gauge-number">{{ "%.1f"|format(province_stat.avg) }}</div>
-          <div class="gauge-scale">{{ province }} 평균 · 100점 만점</div>
-          <div class="gauge-band-label" style="background:{{ province_stat.band_color }}; color:{{ province_stat.band_text }};">{{ province_stat.band_lo }}–{{ province_stat.band_hi }} 구간</div>
+      <div class="cover-right">
+        <div class="gauge-wrap hero">
+          <svg viewBox="-90 -80 480 460" width="500" height="500" role="img" aria-label="{{ province }} 평균 산불위험지수 {{ province_stat.avg }}, 100점 만점">
+            {% for arc in gauge.arcs %}
+            <path d="{{ arc.path }}" stroke="{{ arc.color }}" stroke-width="22" fill="none" stroke-linecap="round"/>
+            {% endfor %}
+            <line x1="150" y1="150" x2="{{ gauge.needle.x }}" y2="{{ gauge.needle.y }}" stroke="var(--ink)" stroke-width="4" stroke-linecap="round"/>
+            <circle cx="150" cy="150" r="8" fill="var(--ink)"/>
+            {% for t in gauge.ticks %}
+            <text x="{{ t.x }}" y="{{ t.y + 4 }}" text-anchor="middle" font-size="10" fill="var(--muted)">{{ t.v }}</text>
+            {% endfor %}
+            {% for c in gauge.captions %}
+            <line x1="{{ c.dot_x }}" y1="{{ c.dot_y }}" x2="{{ c.bx }}" y2="{{ c.by }}" stroke="#4b5563" stroke-width="1.3"/>
+            <circle cx="{{ c.dot_x }}" cy="{{ c.dot_y }}" r="4.5" fill="#fff" stroke="#111827" stroke-width="2"/>
+            <rect x="{{ c.rx }}" y="{{ c.ry }}" width="{{ c.rw }}" height="{{ c.rh }}" rx="12" fill="#fff" stroke="#111827" stroke-width="1.5"/>
+            <text x="{{ c.bx }}" y="{{ c.ty }}" text-anchor="middle" font-size="12" font-weight="700" fill="#111827">{{ c.text }}</text>
+            {% endfor %}
+          </svg>
+          <div class="gauge-center">
+            <div class="gauge-number">{{ "%.1f"|format(province_stat.avg) }}</div>
+            <div class="gauge-scale">{{ province }} 평균 · 100점 만점</div>
+            <div class="gauge-band-label" style="background:{{ province_stat.band_color }}; color:{{ province_stat.band_text }};">{{ province_stat.band_lo }}–{{ province_stat.band_hi }} 구간</div>
+          </div>
         </div>
       </div>
     </div>
+  </section>
 
-    <hr class="rule" />
-
+  <!-- 1: 기상 -->
+  <section class="spread" id="p1">
     <div class="sec-head">
       <span class="sec-dot"></span>
       <div class="titles">
@@ -390,7 +553,7 @@
         </div>
       </div>
     </div>
-    <p class="copy" style="margin-top:14px">{{ narrative.weather_desc }}</p>
+    <p class="copy" style="margin-top:8px">{{ narrative.weather_desc }}</p>
   </section>
 
   <!-- 2: 지역별 순위 -->
@@ -403,15 +566,32 @@
       </div>
     </div>
 
-    <div class="rank-list">
-      {% for row in ranking %}
-      <div class="rank-row{% if row.is_top %} top{% endif %}{% if row.is_highlight %} highlight{% endif %}">
-        <span class="r">{{ row.rank }}</span>
-        <span class="name">{{ row.name }}</span>
-        <div class="rank-track"><div class="rank-fill" style="width:{{ row.width_pct }}%; background:{{ row.color }}"></div></div>
-        <span class="val">{{ "%.1f"|format(row.idx) }}</span>
-      </div>
-      {% endfor %}
+    <div class="rank-block">
+    <div class="rank-list{% if ranking_groups %} compact{% endif %}">
+      {% if ranking_groups %}
+        {% for group in ranking_groups %}
+        <div class="rank-section">
+          <div class="rank-section-label">{{ group.title }}</div>
+          {% for row in group.rows %}
+          <div class="rank-row{% if row.is_top %} top{% endif %}{% if row.is_highlight %} highlight{% endif %}">
+            <span class="r">{{ row.rank }}</span>
+            <span class="name">{{ row.name }}</span>
+            <div class="rank-track"><div class="rank-fill" style="width:{{ row.width_pct }}%; background:{{ row.color }}"></div></div>
+            <span class="val">{{ "%.1f"|format(row.idx) }}</span>
+          </div>
+          {% endfor %}
+        </div>
+        {% endfor %}
+      {% else %}
+        {% for row in ranking %}
+        <div class="rank-row{% if row.is_top %} top{% endif %}{% if row.is_highlight %} highlight{% endif %}">
+          <span class="r">{{ row.rank }}</span>
+          <span class="name">{{ row.name }}</span>
+          <div class="rank-track"><div class="rank-fill" style="width:{{ row.width_pct }}%; background:{{ row.color }}"></div></div>
+          <span class="val">{{ "%.1f"|format(row.idx) }}</span>
+        </div>
+        {% endfor %}
+      {% endif %}
     </div>
 
     <div class="legend-bar">
@@ -420,7 +600,8 @@
         <span class="legend-item"><span class="dot" style="background:{{ b.color }}"></span>{{ b.lo }}–{{ b.hi }} 구간</span>
         {% endfor %}
       </div>
-      <span class="legend-hint">막대 길이 = 위험지수(0–100 기준) · 동일 지수는 같은 순위 · 나열은 가나다순</span>
+      <span class="legend-hint">{% if ranking_groups %}상위·하위 요약 · {% endif %}막대 길이 = 위험지수(0–100 기준) · 동일 지수는 같은 순위</span>
+    </div>
     </div>
   </section>
 
@@ -442,11 +623,13 @@
     {% if not is_national %}
     <div class="range-card">
       <div class="range-strip">
-        <span style="background:#0D2F6B"></span><span style="background:#1E5AA8"></span>
-        <span style="background:#0E7C8A"></span><span style="background:#3DB8E8"></span>
-        <span style="background:#7BCB2E"></span><span style="background:#C5D94A"></span>
-        <span style="background:#F2E14A"></span><span style="background:#F5B84A"></span>
-        <span style="background:#F07A1A"></span><span style="background:#E53935"></span>
+        <div class="range-track">
+          <span style="background:#0D2F6B"></span><span style="background:#1E5AA8"></span>
+          <span style="background:#0E7C8A"></span><span style="background:#3DB8E8"></span>
+          <span style="background:#7BCB2E"></span><span style="background:#C5D94A"></span>
+          <span style="background:#F2E14A"></span><span style="background:#F5B84A"></span>
+          <span style="background:#F07A1A"></span><span style="background:#E53935"></span>
+        </div>
 
         <div class="range-marker below" style="left:{{ national.min }}%"><span class="num">{{ "%.1f"|format(national.min) }}</span><span class="lbl">전국 최저</span><span class="stem"></span></div>
         <div class="range-marker" style="left:{{ national.avg }}%"><span class="lbl">전국 평균</span><span class="num">{{ national.avg }}</span><span class="stem"></span></div>
@@ -458,16 +641,26 @@
     {% endif %}
 
     <h3 class="section-label">시·도별 평균 위험지수</h3>
-    <div class="prov-list">
+    <div class="prov-chart">
+      <div class="prov-chart-meta">
+        <div class="keys">
+          <span class="key"><span class="swatch-bar"></span>시·도 평균</span>
+          <span class="key"><span class="swatch-line"></span>전국 평균 {{ "%.1f"|format(national.avg) }}</span>
+        </div>
+        <span>내림차순 · 0–100</span>
+      </div>
       {% for row in province_table %}
-      <div class="prov-row{% if row.is_target %} target{% endif %}">
+      <div class="prov-chart-row{% if loop.index is odd %} alt{% endif %}{% if row.is_target %} target{% endif %}">
         <span class="name">{{ row.name }}{% if row.is_target %} <span class="badge">{{ row.rank }}위</span>{% endif %}</span>
-        <div class="prov-track"><div class="prov-fill" style="width:{{ row.width_pct }}%; background:{{ row.color }}"></div></div>
+        <div class="prov-chart-track">
+          <div class="prov-chart-fill" style="width:{{ row.width_pct }}%"></div>
+          <div class="prov-chart-avg" style="left:{{ national.avg }}%"></div>
+        </div>
         <span class="val">{{ "%.1f"|format(row.avg) }}</span>
       </div>
       {% endfor %}
     </div>
-    <p class="footnote">지수는 기상 4개 + 시군구 이력 2개 + 건조지수 + 강수파생 3개 변수를 결합한 상대값입니다. 자세한 해석은 방법론 페이지를 참고하세요.</p>
+    <p class="footnote">지수는 기상 4개 + 시군구 이력 2개 + 건조지수 + 강수파생 3개 변수를 결합한 상대값입니다. 점선은 전국 시군구 평균({{ "%.1f"|format(national.avg) }})입니다.</p>
   </section>
 
   <!-- 4: 상위 지역 상세 -->

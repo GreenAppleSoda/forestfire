@@ -4,6 +4,13 @@
  */
 import { callFlaskReportPdf } from "./mlClient.js";
 
+export type ReportCoverMeta = {
+  /** 표시용 발행일 (없으면 ml-service 가 생성 시각 사용) */
+  issuedAt?: string;
+  author?: string;
+  nickname?: string;
+};
+
 export type ReportPdfResult =
   | { ok: true; buffer: Buffer; filename: string; regionLabel: string }
   | { ok: false; error: string; status: number };
@@ -12,8 +19,18 @@ export type ReportPdfResult =
  * region: 시·도명("서울"), 시군구명("노원구"), "시·도 시군구"(동명이인 구분),
  * 또는 빈 문자열/"전국" — 전국 종합 리포트. report.data.resolve_target() 참고.
  */
-export async function buildRegionReportPdf(region: string): Promise<ReportPdfResult> {
-  const result = await callFlaskReportPdf({ region });
+export async function buildRegionReportPdf(
+  region: string,
+  cover?: ReportCoverMeta,
+): Promise<ReportPdfResult> {
+  const result = await callFlaskReportPdf({
+    region,
+    cover: {
+      issuedAt: cover?.issuedAt ?? null,
+      author: cover?.author ?? "산불 예측 챗봇 서비스",
+      nickname: cover?.nickname ?? "회원",
+    },
+  });
 
   if (result.ok) {
     return {
@@ -37,4 +54,11 @@ export async function buildRegionReportPdf(region: string): Promise<ReportPdfRes
   }
   console.error("[reportService] ml-service error", result.status, result.json);
   return { ok: false, error: "PDF 생성에 실패했습니다. 잠시 후 다시 시도해 주세요.", status: 502 };
+}
+
+export function formatIssuedAtKo(d = new Date()): string {
+  const y = d.getFullYear();
+  const m = d.getMonth() + 1;
+  const day = d.getDate();
+  return `${y}년 ${m}월 ${day}일`;
 }

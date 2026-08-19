@@ -19,6 +19,7 @@ def report_pdf():
 
     body = request.get_json(silent=True) or {}
     region = (body.get("region") or "").strip()  # 빈 문자열 → 전국 종합 (data.resolve_target 참고)
+    cover = body.get("cover") if isinstance(body.get("cover"), dict) else {}
 
     try:
         payload = load_payload()
@@ -27,7 +28,7 @@ def report_pdf():
         return jsonify({"ok": False, "error": "predict_data_missing", "detail": str(e)}), 503
 
     try:
-        context = build_context(payload, region)
+        context = build_context(payload, region, cover=cover)
     except ValueError as e:
         # 지역을 못 찾았거나(resolve_target) 동명이인이라 모호한 경우
         return jsonify({"ok": False, "error": "invalid_region", "detail": str(e)}), 400

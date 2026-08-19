@@ -26,9 +26,11 @@ python app.py
 | `ML_HOST` | 기본 `127.0.0.1` |
 | `ML_PORT` | 기본 `5000` |
 | `FOREST_FIRE_SERVICE_KEY` | (선택) 레거시 OpenAPI ETL 스크립트용 — 웹 동기화에는 불필요 |
+| `WEB_DATA_DIR`(선택) | CLI 당일예측 스냅샷(`daily_ml_risk.json`) 경로. 기본 `frontend/public/data` |
 
 예측(`predict/daily.py` 등)은 `ml_paths.py`, `predict/kma_client.py`로 `etl/` 없이도 동작합니다.  
-웹 산불이력 갱신은 Express(`POST /api/wildfires/sync`)가 처리합니다.
+웹 산불이력 갱신은 Express(`POST /api/wildfires/sync`)가 처리합니다.  
+챗봇·웹 리포트가 읽는 당일 스냅샷은 Express가 `backend/data/daily_ml_risk.json`에 저장합니다. Flask CLI(`python -m predict.daily`)가 남기는 파일은 위의 `WEB_DATA_DIR`입니다.
 
 ## 예측 시 기상 출처
 
@@ -55,7 +57,10 @@ python -m predict.daily --date 2026-07-23 --temp-avg 28 --humidity-avg 45 --wind
 ## PDF 리포트 (`report/`)
 
 지역(시·도/시군구/전국) 단위 산불위험 PDF를 만듭니다. daily_ml_risk 예측 데이터 + Jinja2 템플릿을
-Playwright(Chromium)로 인쇄해 A4 PDF로 뽑습니다 — 지역 데이터 양에 따라 페이지 수가 자동으로 늘어납니다.
+Playwright(Chromium)로 인쇄해 **A4 가로(landscape)** PDF로 뽑습니다.  
+첫 장은 표지(`AI 챗봇 · 당일 산불 예측 리포트` / 발행일·작성·닉네임 + 요약·대형 게이지), 이어서 기상·순위·시·도 비교 본문입니다.
+여백·게이지·카드 간격을 줄여 표지 이후 내용이 빽빽하게 들어가도록 구성합니다.
+전국 리포트의 시군구 순위는 **상위 10곳 + 하위 5곳**만 넣고, 시·도 비교는 전국 평균 기준선이 있는 가로 막대 차트로 표시합니다.
 
 **웹에서는 Express가 회원 세션을 확인한 뒤** 이 서비스의 `POST /report/pdf` 를 호출합니다.
 챗봇에서 지역명이 빠진 「PDF 만들어줘」는 Express `regionFocus`가 대화 히스토리로 지역을 채운 뒤 여기로 넘깁니다.
