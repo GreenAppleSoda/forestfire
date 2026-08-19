@@ -12,8 +12,8 @@
   db-archive/output/wildfire_xgb_metrics.json
   db-archive/output/sigungu_ml_risk_scores.csv
   db-archive/output/wildfire_xgb_feature_importance.csv
-  db/output/wildfire_xgb_model.json · wildfire_xgb_bundle.json
-  db/processed/sigungu_hist_state.csv  (시군구 이력 feature, 예측용)
+  ml-service/models/wildfire_xgb_model.json · wildfire_xgb_bundle.json
+  ml-service/reference/sigungu_hist_state.csv  (시군구 이력 feature, 예측용)
   frontend/public/data/sigungu_ml_scores.json  (지도 연동용)
 
 feature: 사용자 입력 기상 4개 + 시군구 산불이력 2개 + DWI + 강수파생 3개

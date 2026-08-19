@@ -1,0 +1,30 @@
+{
+  "model_path": "db/output/wildfire_xgb_model.json",
+  "calibrator_path": "db/output/wildfire_xgb_calibrator.joblib",
+  "calibration": "isotonic",
+  "calib_start": "2024-01-01",
+  "features": [
+    "temp_avg",
+    "precip",
+    "wind_avg",
+    "humidity_avg",
+    "hist_fire_rate",
+    "hist_fire_count_365",
+    "dwi",
+    "precip_sum_7d",
+    "precip_sum_14d",
+    "dry_days"
+  ],
+  "test_start": "2025-01-01",
+  "trained_at": "2026-08-12T11:44:36",
+  "metrics": {
+    "roc_auc": 0.8535,
+    "pr_auc": 0.034,
+    "threshold": 0.0328,
+    "mean_pred": 0.006318,
+    "base_rate_test": 0.006716,
+    "brier": 0.006627
+  },
+  "hist_state": "db/processed/sigungu_hist_state.csv",
+  "note": "daily.py: XGB raw → Isotonic 보정 확률 (기상4+이력2+DWI+강수파생3)"
+}
