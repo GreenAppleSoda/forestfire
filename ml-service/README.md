@@ -58,6 +58,7 @@ python -m predict.daily --date 2026-07-23 --temp-avg 28 --humidity-avg 45 --wind
 Playwright(Chromium)로 인쇄해 A4 PDF로 뽑습니다 — 지역 데이터 양에 따라 페이지 수가 자동으로 늘어납니다.
 
 **웹에서는 Express가 회원 세션을 확인한 뒤** 이 서비스의 `POST /report/pdf` 를 호출합니다.
+챗봇에서 지역명이 빠진 「PDF 만들어줘」는 Express `regionFocus`가 대화 히스토리로 지역을 채운 뒤 여기로 넘깁니다.
 브라우저가 Flask를 직접 호출하지 마세요.
 
 ```powershell

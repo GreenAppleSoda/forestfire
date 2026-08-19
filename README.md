@@ -170,10 +170,11 @@ npm run dev
 - 만료되면 자동 로그아웃
 
 - 챗봇: 예측 API(`runPredictDaily`) 우선 → 실패 시 `backend/data/daily_ml_risk.json`
-- 로그인 회원은 최근 대화를 `user_id` 기준으로 불러와 Gemini·UI에 복원 (게스트는 `sessionId`)
-- 「보고서 만들어줘」류 요청 / UI 보고서 버튼 → Express가 회원 확인 후 Flask `POST /report/pdf` 호출
+- 로그인 회원은 최근 대화를 `user_id` 기준으로 Gemini 맥락에 포함 (게스트는 `sessionId`). UI는 열 때 인삿말만 보이고, **「이전 대화내역 불러오기」**로 화면 복원
+- 「보고서/PDF 만들어줘」: **로그인 필수**. 지역은 현재 문장 → 최근 유저 발화 → (예시 제외) 어시스턴트 순으로 찾고 (`regionFocus`), 없으면 지역을 되물음. 확정 후 Flask `POST /report/pdf`
 - 보고서는 DB에 저장하지 않고, 생성 후 짧은 TTL로 다운로드만 제공합니다
 - UI 보고서 모달의 PDF는 blob 다운로드(화면 유지). 모달은 상단 오버레이가 범례보다 위
+- 챗봇 창은 헤더 드래그로 위치 이동 가능 (플로팅 버튼은 우측 하단 고정)
 
 자세한 API·폴더 구조는 `backend/README.md` · `frontend/README.md` · `ml-service/README.md` 참고.
 
@@ -233,8 +234,8 @@ python etl/pipeline/sync_wildfire_history.py
 
 **챗봇 · 보고서**
 
-- `POST /api/chat` — body: `{ message, sessionId? }` (비로그인 가능; 보고서 요청은 회원; 회원은 user 기준 히스토리)
-- `GET /api/chat/history` — 최근 대화 복원 (회원=`user_id`, 게스트=`sessionId`)
+- `POST /api/chat` — body: `{ message, sessionId? }` (비로그인 가능; 보고서 요청은 회원; 회원은 user 기준 히스토리; PDF 지역은 대화 맥락 반영)
+- `GET /api/chat/history` — 최근 대화 (회원=`user_id`, 게스트=`sessionId`; UI는 버튼으로 불러오기)
 - `GET /api/report/daily` — JSON 요약 (**회원**)
 - `POST /api/report/pdf` — body: `{ regionQuery? }` → 다운로드 메타 (**회원**)
 - `GET /api/report/download/:id` — PDF 바이너리 (**회원**, 임시, `Content-Disposition: attachment`)

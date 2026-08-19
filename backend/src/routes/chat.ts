@@ -13,7 +13,7 @@ import { isDbConfigured, getPool } from "../lib/db.js";
 import { DEFAULT_MODEL, getGeminiClient } from "../lib/gemini.js";
 import { buildRegionReportPdf } from "../lib/reportService.js";
 import { putReportPdf } from "../lib/reportStore.js";
-import { resolveRegionFocus, wantsPdfReport } from "../lib/regionFocus.js";
+import { resolveRegionFocusForPdf, wantsPdfReport } from "../lib/regionFocus.js";
 import { resolveRiskSnapshot, snapshotToPromptJson } from "../lib/riskSnapshot.js";
 import "../types/express.js";
 
@@ -203,10 +203,26 @@ router.post("/chat", async (req, res) => {
         });
       }
 
-      const focus = resolveRegionFocus(message);
+      const focus = resolveRegionFocusForPdf(message, history);
+      if (!focus) {
+        const answer =
+          "어느 지역 PDF 보고서를 만들까요?\n" +
+          "시·도나 시군구를 알려 주세요. 예) 대구, 군위군, 전국";
+        if (dbReady) await saveMessage(sessionId, "assistant", answer);
+        return res.json({
+          ok: true,
+          sessionId,
+          answer,
+          historyPersisted: dbReady,
+          pdf: null,
+        });
+      }
+
       const built = await buildRegionReportPdf(focus.label);
       if (!built.ok) {
-        const answer = `PDF 보고서를 만들지 못했습니다.\n${built.error}`;
+        const answer =
+          `PDF 보고서를 만들지 못했습니다.\n${built.error}\n` +
+          `다른 지역명으로 다시 요청해 주세요. 예) 서울 보고서 만들어줘`;
         if (dbReady) await saveMessage(sessionId, "assistant", answer);
         return res.json({
           ok: true,

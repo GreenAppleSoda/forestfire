@@ -66,8 +66,9 @@ Flask URL: `ML_SERVICE_URL` (기본 `http://127.0.0.1:5000`)
   - 위험도 Q&A: 예측 API 우선 → `data/daily_ml_risk.json` 폴백 후 Gemini  
   - 로그인 회원: `user_id` 기준 최근 대화(기기 무관)를 맥락에 포함  
   - 게스트: `sessionId` 기준  
-  - 「보고서」요청: **로그인 필수** → PDF 생성 후 `pdf.downloadPath` 반환
-- `GET /api/chat/history` — 최근 대화 복원 (회원=`user_id`, 게스트=`?sessionId=`)
+  - 「보고서/PDF」요청: **로그인 필수** → `lib/regionFocus.ts`로 지역 해석  
+    (현재 메시지 → 최근 유저 발화 → 어시스턴트; 「예시)」는 제외) → 없으면 되묻기 → PDF 생성 후 `pdf.downloadPath` 반환
+- `GET /api/chat/history` — 최근 대화 조회 (회원=`user_id`, 게스트=`?sessionId=`; UI는 「이전 대화내역 불러오기」로 호출)
 
 **보고서** (로그인 필수, DB에 파일 저장 안 함)
 
