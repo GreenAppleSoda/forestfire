@@ -1,6 +1,11 @@
 ﻿"use client";
 
 import { KoreaSvgMap } from "@/components/KoreaSvgMap";
+import {
+  loadAdminLayer,
+  loadCoreMapFromApi,
+  loadCoreMapFromStatic,
+} from "@/lib/mapBundle";
 import type { AdminLayer, MapData, SigunguMlScores } from "@/lib/types";
 import { useEffect, useState } from "react";
 
@@ -44,35 +49,42 @@ export default function HomePage() {
     const signal = controller.signal;
 
     const load = async () => {
-      // 1차: 시도/시군구로 바로 지도 표시 (읍면동은 백그라운드)
-      const [mapData, sido, sigungu, mlScores] = await Promise.all([
-        fetchJson<MapData>("/data/map-data.json", signal),
-        fetchJson<AdminLayer>("/data/admin-sido.json", signal),
-        fetchJson<AdminLayer>("/data/admin-sigungu.json", signal),
-        fetchJson<SigunguMlScores>("/data/sigungu_ml_scores.json", signal),
-      ]);
+      // 이력 동기화 결과는 backend/data → /api/map/* . Express가 꺼져 있으면 정적 파일 폴백.
+      let core = await loadCoreMapFromApi(signal);
+      if (!core) core = await loadCoreMapFromStatic(signal);
 
-      if (!mapData || !sido || !sigungu) {
-        setError("지도 데이터를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.");
+      const mlScores = await fetchJson<SigunguMlScores>(
+        "/data/sigungu_ml_scores.json",
+        signal,
+      );
+
+      if (!core) {
+        if (!signal.aborted) {
+          setError("지도 데이터를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.");
+        }
         return;
       }
 
       setData({
-        mapData,
-        sido,
-        sigungu,
+        mapData: core.mapData,
+        sido: core.sido,
+        sigungu: core.sigungu,
         emd: EMPTY_EMD,
         mlScores,
       });
 
       // 2차: 고배율에서만 쓰는 읍면동 (가장 큰 파일)
-      const emd = await fetchJson<AdminLayer>("/data/admin-emd.json", signal);
+      const emd = await loadAdminLayer("emd", signal);
       if (emd) {
         setData((prev) => (prev ? { ...prev, emd } : prev));
       }
     };
 
-    void load();
+    void load().catch((e) => {
+      if (signal.aborted) return;
+      if (e instanceof Error && e.name === "AbortError") return;
+      setError("지도 데이터를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.");
+    });
     return () => controller.abort();
   }, []);
 

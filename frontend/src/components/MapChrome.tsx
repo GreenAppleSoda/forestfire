@@ -42,7 +42,7 @@ export function MapChrome({ mapMode, onMapMode, onLogin, onRegister }: Props) {
                   : "bg-white text-[#111827] hover:bg-[#f8fafc]"
               }`}
             >
-              위성지도
+              위성
             </button>
           </div>
           {user ? (

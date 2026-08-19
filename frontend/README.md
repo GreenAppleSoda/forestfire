@@ -22,6 +22,7 @@ npm run dev
 
 `/api/*` 는 `app/api/[...path]/route.ts` 가 Express로 프록시합니다.  
 쿠키(로그인 세션)와 `Set-Cookie`를 양방향으로 전달합니다.  
+PDF 다운로드의 `Content-Disposition`도 그대로 넘깁니다.  
 OAuth 콜백 리다이렉트(`redirect: "manual"`)도 올바르게 전달합니다.  
 `predict` / `wildfires` / `chat` / `report` 는 타임아웃을 넉넉히 둡니다.
 
@@ -37,15 +38,15 @@ OAuth 콜백 리다이렉트(`redirect: "manual"`)도 올바르게 전달합니�
 - 사용자 지정 시나리오 (`ScenarioPredictForm`) — 연/월 통합 선택, 접속월부터 12개월, 기본값 다음 달
 - 지역·산 통합 검색 (`PlaceSearch`) — 결과는 지역/산으로 구분, 기존 선택 핸들러 유지
 - 우측 패널 (`FireHistoryPanel`) — 헤더에 전체 건수·갱신 날짜·갱신 버튼, 미선택 시 전국 평균·최고 위험 시도, 선택 시 이력·산 상세
-- 범례 (`MapLegend`) — 지도 우측 하단, 예측 모드: **산불위험지수 (0~100)** (`ml_risk × 100`)
+- 범례 (`MapLegend`) — 지도 우측 하단, 예측 모드: **산불위험지수 (0~100)** (`ml_risk × 100`). 상단 오버레이(`z-40`)가 범례(`z-20`)보다 위라 보고서 모달이 가리지 않음
 - 위성 지도(카카오) · 일반/위성 · 보고서 · 로그인 (`MapChrome` · `AuthModal`)
 - **로그인 모달** (`AuthModal`) — 아이디/비밀번호 + 구글/카카오 소셜 버튼. 로그인 모드는 `intent=login`(기존 계정만), 회원가입 모드는 `intent=register`(없으면 생성)
 - **유휴 세션 안내** (`SessionIdleHost`) — 30분 유휴 시 안내 모달 (로그아웃 / 시간 연장), 활동 감지 자동 연장
 - 「산불이력 갱신」 — 우측 패널 헤더의 새로고침 버튼 → Express가 MariaDB → `backend/data` 패치 (`useHistorySync` 훅)
 - **안내 챗봇** (`ChatWidget`) — 비로그인 Q&A 가능; 「보고서 만들어줘」는 회원 + PDF 다운로드 버튼
-- **보고서** (`ReportModal`) — 회원 전용 JSON 요약 · 슬라이드형 PDF 다운로드
+- **보고서** (`ReportModal`) — 회원 전용 JSON 요약 · 슬라이드형 PDF는 blob 다운로드(화면 유지)
 
-초기 정적 데이터는 `public/data/` (`map-data.json`, `admin-*.json`, `sigungu_ml_scores.json` 등)에서 로드하고, 예측·이력 동기화·인증·챗봇·보고서는 `/api/*` 로 Express를 호출합니다. 이력 갱신 후에는 `/api/map/*`로 지도를 다시 읽습니다.
+지도 JSON(`map-data.json`, `admin-*.json`)은 첫 로딩부터 `/api/map/*`(`backend/data`)를 읽고, Express가 없으면 `public/data/`로 폴백합니다 (`src/lib/mapBundle.ts`). `sigungu_ml_scores.json`은 계속 `public/data/`입니다. 예측·이력 동기화·인증·챗봇·보고서는 `/api/*`입니다.
 
 `daily_ml_risk.json`은 브라우저가 필수로 읽지 않습니다(당일 예측은 API). 예측 파이프라인이 남겨 두는 스냅샷이며, 서버(`backend/data`) 쪽이 챗봇 폴백·리포트에 쓰입니다.
 
@@ -54,7 +55,7 @@ OAuth 콜백 리다이렉트(`redirect: "manual"`)도 올바르게 전달합니�
 ```
 frontend/
 ├── public/
-│   ├── data/                      # 지도·점수 JSON (ETL·이력 갱신이 갱신)
+│   ├── data/                      # 폴백·ETL 산출물 (첫 로딩은 /api/map/* 우선)
 │   ├── logo-chatbot-circle.png    # 사이드바·챗봇 원형 로고
 │   ├── logo-forestfire-atlas.png  # 원본 로고 잠금(참고)
 │   └── chat-bubble.svg
@@ -67,7 +68,7 @@ frontend/
 │   │   # DailyPredictForm · ScenarioPredictForm · MapLegend
 │   │   # AuthModal · SessionIdleHost · MapChrome · ChatWidget · ReportModal …
 │   └── lib/
-│       # types · apiJson · authContext · authValidation · choropleth · nationalRisk …
+│       # types · apiJson · mapBundle · authContext · authValidation · choropleth · nationalRisk …
 ├── next.config.ts
 └── package.json
 ```

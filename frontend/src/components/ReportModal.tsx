@@ -76,7 +76,19 @@ export function ReportModal({ open, onClose }: Props) {
       if (!res.ok || !json.ok || !json.downloadPath) {
         throw new Error(json.error || "PDF 생성에 실패했습니다.");
       }
-      window.location.href = json.downloadPath;
+      const fileRes = await fetch(json.downloadPath, { credentials: "include" });
+      if (!fileRes.ok) {
+        throw new Error("PDF 다운로드에 실패했습니다.");
+      }
+      const blob = await fileRes.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = json.filename || "report.pdf";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
     } catch (e) {
       setPdfError(e instanceof Error ? e.message : String(e));
     } finally {

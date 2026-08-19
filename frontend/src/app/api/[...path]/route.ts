@@ -53,6 +53,8 @@ async function proxy(
     const outHeaders = new Headers();
     const upstreamCt = upstream.headers.get("content-type");
     if (upstreamCt) outHeaders.set("content-type", upstreamCt);
+    const disposition = upstream.headers.get("content-disposition");
+    if (disposition) outHeaders.set("content-disposition", disposition);
     const location = upstream.headers.get("location");
     if (location) outHeaders.set("location", location);
 

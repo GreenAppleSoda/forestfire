@@ -73,7 +73,7 @@ Flask URL: `ML_SERVICE_URL` (기본 `http://127.0.0.1:5000`)
 
 - `GET /api/report/daily` — JSON 요약
 - `POST /api/report/pdf` — `{ regionQuery? }` → `{ downloadPath, filename, … }`
-- `GET /api/report/download/:id` — PDF 바이너리 (임시 TTL)
+- `GET /api/report/download/:id` — PDF 바이너리 (임시 TTL, `Content-Disposition: attachment`)
 
 PDF 본체는 `lib/reportService.ts` → Flask `POST /report/pdf` (Jinja2 + Playwright)입니다.
 

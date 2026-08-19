@@ -28,9 +28,11 @@ South Korea Wildfire Atlas — 시군구 산불 위험 지도·예측 웹서비�
 ```
 
 `/api/*` 는 `frontend/src/app/api/[...path]/route.ts` 가 Express로 넘깁니다.  
+쿠키·`Set-Cookie`와 PDF의 `Content-Disposition`도 전달합니다.  
 브라우저에는 Express가 필터한 DTO만 전달됩니다. 파이썬 stdout·모델 경로·API 키는 응답에 포함되지 않습니다.
 
-**PDF 보고서:** 회원 세션 확인(Express) → `ml-service` Jinja2+Playwright로 PDF 생성 → 임시 다운로드 URL 발급.
+**PDF 보고서:** 회원 세션 확인(Express) → `ml-service` Jinja2+Playwright로 PDF 생성 → 임시 다운로드 URL 발급.  
+UI는 현재 탭을 이동하지 않고 blob으로 받아 브라우저 다운로드로 저장합니다.
 
 ## 데이터 소스 (현재)
 
@@ -40,7 +42,7 @@ South Korea Wildfire Atlas — 시군구 산불 위험 지도·예측 웹서비�
 | 예측용 당일 기상 | 기상청 ASOS API | `KMA_API_AUTH_KEY` |
 | 예측용 lag 기상 (어제·그저께) | MariaDB `weather_daily_sigungu` | 실패 시 CSV 폴백 |
 | 학습용 기상 | MariaDB 우선 | 동일 테이블 / CSV 폴백 |
-| 지도 JSON | `frontend/public/data` + `backend/data` | 첫 로딩은 프론트 정적 파일. 웹 이력 갱신은 `backend/data`만 패치 |
+| 지도 JSON | `frontend/public/data` + `backend/data` | 첫 로딩은 `/api/map/*`(`backend/data`). Express 불가 시에만 `frontend/public/data` 폴백. 웹 이력 갱신은 `backend/data`만 패치 |
 | 챗봇·리포트용 당일 예측 스냅샷 | `backend/data/daily_ml_risk.json` | Express가 예측 API 성공 시 저장. 챗봇은 예측 API 우선, 실패 시 파일 폴백 |
 
 `refined_wildfire_data.csv` 는 더 이상 주 데이터가 아닙니다. DB가 정상이면 없어도 일상 운영(예측·이력 갱신·학습)이 가능합니다.
@@ -133,14 +135,16 @@ npm run dev
 
 `frontend`와 `backend`는 지도 JSON(`map-data.json`, `admin-*.json`)을 각자 폴더에 **따로** 둡니다.
 
-- `frontend/public/data` — 브라우저 첫 로딩 정적 파일
-- `backend/data` — Express `/api/map/*` · 웹 이력 갱신 · 챗봇 폴백
+- `backend/data` — 브라우저 첫 로딩(`/api/map/*`) · 웹 이력 갱신 · 챗봇 폴백
+- `frontend/public/data` — Express가 꺼져 있을 때의 폴백 · ETL 원본 배포본
 
 원본 지도 JSON은 `etl`이 만듭니다. 오프라인에서 `frontend/public/data`를 갱신할 때
 `etl/paths.py`의 `sync_backend_data()`가 `backend/data`로도 복사합니다.
 
 웹 **산불이력 갱신**(`POST /api/wildfires/sync`)은 Express가 MariaDB를 읽고
 `backend/data`의 건수·색만 패치합니다. `frontend/public/data`는 건드리지 않습니다.
+페이지를 새로고침해도 브라우저는 `/api/map/*`를 다시 읽으므로, 직전에 동기화한
+건수·최근 이력이 유지됩니다.
 
 당일 예측 스냅샷 `daily_ml_risk.json`은 Express가 `backend/data`에 저장합니다.
 
@@ -169,6 +173,7 @@ npm run dev
 - 로그인 회원은 최근 대화를 `user_id` 기준으로 불러와 Gemini·UI에 복원 (게스트는 `sessionId`)
 - 「보고서 만들어줘」류 요청 / UI 보고서 버튼 → Express가 회원 확인 후 Flask `POST /report/pdf` 호출
 - 보고서는 DB에 저장하지 않고, 생성 후 짧은 TTL로 다운로드만 제공합니다
+- UI 보고서 모달의 PDF는 blob 다운로드(화면 유지). 모달은 상단 오버레이가 범례보다 위
 
 자세한 API·폴더 구조는 `backend/README.md` · `frontend/README.md` · `ml-service/README.md` 참고.
 
@@ -196,6 +201,7 @@ python -m predict.daily --kma
 
 웹: 우측 패널 헤더의 새로고침 버튼 클릭  
 API: `POST /api/wildfires/sync` — Express가 MariaDB `forestfire_stats`를 읽어 `backend/data`의 건수·색을 패치합니다.
+웹 첫 화면·F5도 같은 `/api/map/*`를 읽습니다. `frontend/public/data`는 Express 불가 시 폴백입니다.
 
 오프라인에서 `frontend/public/data`까지 맞추려면:
 
@@ -231,7 +237,7 @@ python etl/pipeline/sync_wildfire_history.py
 - `GET /api/chat/history` — 최근 대화 복원 (회원=`user_id`, 게스트=`sessionId`)
 - `GET /api/report/daily` — JSON 요약 (**회원**)
 - `POST /api/report/pdf` — body: `{ regionQuery? }` → 다운로드 메타 (**회원**)
-- `GET /api/report/download/:id` — PDF 바이너리 (**회원**, 임시)
+- `GET /api/report/download/:id` — PDF 바이너리 (**회원**, 임시, `Content-Disposition: attachment`)
 
 ## Flask API (내부)
 
