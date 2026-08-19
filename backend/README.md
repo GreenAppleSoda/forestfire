@@ -57,7 +57,8 @@ Flask URL: `ML_SERVICE_URL` (기본 `http://127.0.0.1:5000`)
 
 - `POST /api/auth/register` · `login` · `extend` · `logout`
 - `GET /api/auth/me`
-- `GET /api/auth/google` · `/kakao` · `/google/callback` · `/kakao/callback`
+- `GET /api/auth/google` · `/kakao` · `/google/callback` · `/kakao/callback`  
+  (`?intent=login|register`. 로그인 모드는 기존 계정만, 회원가입 모드에서만 신규 생성)
 
 **챗봇**
 
@@ -80,7 +81,7 @@ PDF 본체는 `lib/reportService.ts` → Flask `POST /report/pdf` (Jinja2 + Play
 
 - **아이디:** 영문 소문자로 시작, 소문자+숫자만, 4~20자 (`lib/authValidation.ts`)
 - **비밀번호:** 8~20자, 대문자/소문자/숫자/특수문자 중 2종 이상, 비밀번호 확인 일치
-- **소셜 로그인:** 구글/카카오 OAuth → 자동 가입 (비밀번호 없음)
+- **소셜:** 구글/카카오 OAuth. `intent=login`이면 미가입 계정은 거절(`social_not_registered`), `intent=register`일 때만 신규 생성 (비밀번호 없음)
 
 ### 유휴 세션 (30분)
 

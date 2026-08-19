@@ -14,6 +14,7 @@ import {
 export const OAUTH_STATE_COOKIE = "ff_oauth_state";
 
 export type OAuthProvider = "google" | "kakao";
+export type OAuthIntent = "login" | "register";
 
 export type SocialProfile = {
   socialId: string;
@@ -34,14 +35,21 @@ export function oauthCallbackUrl(provider: OAuthProvider): string {
   return `${OAUTH_REDIRECT_BASE}/api/auth/${provider}/callback`;
 }
 
-export function newOAuthState(provider: OAuthProvider): string {
-  return `${provider}.${randomBytes(16).toString("hex")}`;
+export function normalizeOAuthIntent(v: unknown): OAuthIntent {
+  return String(v || "").toLowerCase() === "register" ? "register" : "login";
 }
 
-export function parseOAuthState(state: string): OAuthProvider | null {
-  if (state.startsWith("google.")) return "google";
-  if (state.startsWith("kakao.")) return "kakao";
-  return null;
+export function newOAuthState(provider: OAuthProvider, intent: OAuthIntent): string {
+  return `${provider}.${intent}.${randomBytes(16).toString("hex")}`;
+}
+
+export function parseOAuthState(
+  state: string,
+): { provider: OAuthProvider; intent: OAuthIntent } | null {
+  const [provider, intent] = state.split(".", 3);
+  if (provider !== "google" && provider !== "kakao") return null;
+  if (intent !== "login" && intent !== "register") return null;
+  return { provider, intent };
 }
 
 export function oauthStateCookieOptions() {

@@ -39,7 +39,7 @@ OAuth 콜백 리다이렉트(`redirect: "manual"`)도 올바르게 전달합니�
 - 우측 패널 (`FireHistoryPanel`) — 헤더에 전체 건수·갱신 날짜·갱신 버튼, 미선택 시 전국 평균·최고 위험 시도, 선택 시 이력·산 상세
 - 범례 (`MapLegend`) — 지도 우측 하단, 예측 모드: **산불위험지수 (0~100)** (`ml_risk × 100`)
 - 위성 지도(카카오) · 일반/위성 · 보고서 · 로그인 (`MapChrome` · `AuthModal`)
-- **로그인 모달** (`AuthModal`) — 아이디/비밀번호 + 구글/카카오 소셜 로그인 (로고 버튼)
+- **로그인 모달** (`AuthModal`) — 아이디/비밀번호 + 구글/카카오 소셜 버튼. 로그인 모드는 `intent=login`(기존 계정만), 회원가입 모드는 `intent=register`(없으면 생성)
 - **유휴 세션 안내** (`SessionIdleHost`) — 30분 유휴 시 안내 모달 (로그아웃 / 시간 연장), 활동 감지 자동 연장
 - 「산불이력 갱신」 — 우측 패널 헤더의 새로고침 버튼 → Express가 MariaDB → `backend/data` 패치 (`useHistorySync` 훅)
 - **안내 챗봇** (`ChatWidget`) — 비로그인 Q&A 가능; 「보고서 만들어줘」는 회원 + PDF 다운로드 버튼

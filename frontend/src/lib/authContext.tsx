@@ -69,6 +69,8 @@ const OAUTH_ERROR_MESSAGES: Record<string, string> = {
   db_not_configured: "회원 DB가 설정되지 않았습니다.",
   state_mismatch: "소셜 로그인 검증에 실패했습니다. 다시 시도해 주세요.",
   profile_failed: "소셜 계정 정보를 가져오지 못했습니다.",
+  social_not_registered:
+    "가입되지 않은 소셜 계정입니다. 회원가입으로 진행해 주세요.",
   inactive: "비활성화된 계정입니다.",
 };
 

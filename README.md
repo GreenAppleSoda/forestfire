@@ -156,7 +156,7 @@ npm run dev
 
 - **아이디:** 영문 소문자로 시작, 소문자+숫자만, 4~20자, 공백·특수문자 불가
 - **비밀번호:** 8~20자, 영문 대문자/소문자/숫자/특수문자 중 2가지 이상 조합, 비밀번호 확인 일치 필수
-- **소셜 로그인:** 구글/카카오 동의 → 자동 가입 (비밀번호 없음, 닉네임 자동 배정)
+- **소셜 로그인:** 구글/카카오 — **로그인 모달**에서는 기존 소셜 계정만 허용, **회원가입 모달**에서만 신규 생성 (비밀번호 없음, 닉네임 자동 배정). `intent=login|register`
 
 ### 유휴 세션
 
@@ -222,7 +222,8 @@ python etl/pipeline/sync_wildfire_history.py
 
 - `POST /api/auth/register` · `login` · `extend` · `logout`
 - `GET /api/auth/me`
-- `GET /api/auth/google` · `/kakao` · `/google/callback` · `/kakao/callback`
+- `GET /api/auth/google` · `/kakao` · `/google/callback` · `/kakao/callback`  
+  (`?intent=login|register`. 로그인은 기존 소셜 계정만, 회원가입에서만 신규 생성)
 
 **챗봇 · 보고서**
 

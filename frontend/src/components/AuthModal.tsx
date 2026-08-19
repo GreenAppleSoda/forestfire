@@ -72,6 +72,7 @@ export function AuthModal({ open, mode, onClose }: Props) {
   };
 
   const title = mode === "login" ? "로그인" : "회원가입";
+  const oauthIntent = mode === "register" ? "register" : "login";
 
   return (
     <div
@@ -187,7 +188,7 @@ export function AuthModal({ open, mode, onClose }: Props) {
         </div>
         <div className="mt-3 space-y-2">
           <a
-            href="/api/auth/google"
+            href={`/api/auth/google?intent=${oauthIntent}`}
             className="flex w-full items-center justify-center gap-2 rounded-xl border border-[#e5e7eb] bg-white px-3 py-2.5 text-[13px] font-semibold text-[#111827] transition hover:bg-[#f9fafb]"
           >
             <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden>
@@ -211,7 +212,7 @@ export function AuthModal({ open, mode, onClose }: Props) {
             Google로 시작
           </a>
           <a
-            href="/api/auth/kakao"
+            href={`/api/auth/kakao?intent=${oauthIntent}`}
             className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#FEE500] px-3 py-2.5 text-[13px] font-semibold text-[#191919] transition hover:bg-[#f6dc00]"
           >
             <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden>

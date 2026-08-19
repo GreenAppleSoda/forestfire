@@ -14,9 +14,11 @@ import {
   isKakaoConfigured,
   kakaoAuthorizeUrl,
   newOAuthState,
+  normalizeOAuthIntent,
   OAUTH_STATE_COOKIE,
   oauthStateCookieOptions,
   parseOAuthState,
+  type OAuthIntent,
   type OAuthProvider,
 } from "../lib/oauth.js";
 import { attachSessionCookie } from "../lib/session.js";
@@ -37,7 +39,7 @@ function redirectHome(res: Response, params: Record<string, string>) {
   return res.redirect(url.toString());
 }
 
-function startOAuth(res: Response, provider: OAuthProvider) {
+function startOAuth(res: Response, provider: OAuthProvider, intentRaw: unknown) {
   if (!isDbConfigured()) {
     return redirectHome(res, { auth_error: "db_not_configured" });
   }
@@ -47,7 +49,8 @@ function startOAuth(res: Response, provider: OAuthProvider) {
   if (provider === "kakao" && !isKakaoConfigured()) {
     return redirectHome(res, { auth_error: "kakao_not_configured" });
   }
-  const state = newOAuthState(provider);
+  const intent = normalizeOAuthIntent(intentRaw);
+  const state = newOAuthState(provider, intent);
   res.cookie(OAUTH_STATE_COOKIE, state, oauthStateCookieOptions() as CookieOptions);
   const dest =
     provider === "google" ? googleAuthorizeUrl(state) : kakaoAuthorizeUrl(state);
@@ -68,9 +71,17 @@ async function finishOAuth(
   }
   const state = String(query.state || "");
   const expected = String(cookieState || "");
-  if (!state || !expected || state !== expected || parseOAuthState(state) !== provider) {
+  const parsed = parseOAuthState(state);
+  if (
+    !state ||
+    !expected ||
+    state !== expected ||
+    !parsed ||
+    parsed.provider !== provider
+  ) {
     return redirectHome(res, { auth_error: "state_mismatch" });
   }
+  const intent: OAuthIntent = parsed.intent;
   const code = String(query.code || "");
   if (!code) {
     return redirectHome(res, { auth_error: "cancelled" });
@@ -84,6 +95,9 @@ async function finishOAuth(
     const dbProvider = provider === "google" ? "GOOGLE" : "KAKAO";
     let row = await findUserBySocial(dbProvider, profile.socialId);
     if (!row) {
+      if (intent === "login") {
+        return redirectHome(res, { auth_error: "social_not_registered" });
+      }
       row = await createSocialUser({
         provider: dbProvider,
         socialId: profile.socialId,
@@ -103,8 +117,12 @@ async function finishOAuth(
   }
 }
 
-router.get("/auth/google", (_req, res) => startOAuth(res, "google"));
-router.get("/auth/kakao", (_req, res) => startOAuth(res, "kakao"));
+router.get("/auth/google", (req, res) =>
+  startOAuth(res, "google", req.query?.intent),
+);
+router.get("/auth/kakao", (req, res) =>
+  startOAuth(res, "kakao", req.query?.intent),
+);
 
 router.get("/auth/google/callback", (req, res) => {
   void finishOAuth(res, "google", req.query, req.cookies?.[OAUTH_STATE_COOKIE]);
