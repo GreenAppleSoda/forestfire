@@ -4,9 +4,9 @@
 ----
   frontend/     Next.js UI
   backend/      Express 공개 API
-  ml-service/   Flask 예측
+  ml-service/   Flask 예측 (models/ · reference/)
   etl/          오프라인 ETL · 분석 · 학습
-  db/           서버 배포용 (XGBoost 예측 런타임)
+  db/           로컬 대용량 CSV 등 (Git 제외)
   db-archive/   ETL·분석 원본·중간 산출물 보관
 """
 
@@ -20,7 +20,10 @@ ETL = ROOT / "etl"
 FRONTEND = ROOT / "frontend"
 FRONTEND_PUBLIC_DATA = FRONTEND / "public" / "data"
 FRONTEND_ENV_LOCAL = FRONTEND / ".env.local"
-ML_SERVICE_ENV = ROOT / "ml-service" / ".env"
+ML_SERVICE = ROOT / "ml-service"
+ML_SERVICE_ENV = ML_SERVICE / ".env"
+MODELS_DIR = ML_SERVICE / "models"
+REFERENCE_DIR = ML_SERVICE / "reference"
 
 # backend가 자기 폴더 안에서 읽을 수 있도록 지도 JSON을 복사해 두는 위치.
 # backend는 frontend 폴더를 직접 읽지 않고 이 사본(backend/data)을 읽는다.
@@ -32,7 +35,7 @@ WEB_MIRROR_FILES = (
     "admin-emd.json",
 )
 
-# 서버 배포용 (예측 런타임)
+# 로컬 대용량 산출물 (Git 제외). 런타임 모델·lookup 은 ml-service/
 DB = ROOT / "db"
 DATA_PROCESSED = DB / "processed"
 DATA_OUTPUT = DB / "output"
@@ -61,10 +64,10 @@ MOUNTAIN_IMAGES_PUBLIC_PREFIX = "/data/mountain-images"
 # 기상 (ASOS)
 RAW_ASOS_DAILY = DATA_RAW / "weather" / "asos_daily_2011_2026.csv"
 ASOS_STATION_SIGUNGU_MAP = DATA_PROCESSED_ETL / "asos_station_sigungu_map.csv"
-# 예측 런타임에 필요 → db/
+# 대용량 시군구×일 기상 (로컬 CSV 폴백, Git 제외)
 WEATHER_DAILY_SIGUNGU = DATA_PROCESSED / "weather_daily_sigungu.csv"
 WEATHER_DAILY_ASOS = DATA_PROCESSED_ETL / "weather_daily_asos.csv"
-SIGUNGU_ASOS_STATION = DATA_PROCESSED / "sigungu_asos_station.csv"
+SIGUNGU_ASOS_STATION = REFERENCE_DIR / "sigungu_asos_station.csv"
 
 # 분석 결과 (archive)
 CITY_RISK = DATA_OUTPUT_ETL / "city_wildfire_risk.csv"
@@ -74,14 +77,14 @@ WILDFIRE_WITH_MOUNTAINS = DATA_OUTPUT_ETL / "wildfire_with_mountains.csv"
 WILDFIRE_BY_MOUNTAIN = DATA_OUTPUT_ETL / "wildfire_by_mountain.csv"
 WILDFIRE_MOUNTAIN_EVENTS_SUMMARY = DATA_OUTPUT_ETL / "wildfire_mountain_events_summary.json"
 
-# XGBoost — 모델·번들은 서버용 db/, 학습 로그는 archive
+# XGBoost — 모델·lookup 은 ml-service/, 학습 로그는 archive
 ML_TRAIN_SIGUNGU_DAILY_1Y = DATA_PROCESSED_ETL / "ml_train_sigungu_daily_1y.csv"
 WILDFIRE_XGB_METRICS = DATA_OUTPUT_ETL / "wildfire_xgb_metrics.json"
 SIGUNGU_ML_RISK_SCORES = DATA_OUTPUT_ETL / "sigungu_ml_risk_scores.csv"
 WILDFIRE_XGB_IMPORTANCE = DATA_OUTPUT_ETL / "wildfire_xgb_feature_importance.csv"
-WILDFIRE_XGB_MODEL = DATA_OUTPUT / "wildfire_xgb_model.json"
-WILDFIRE_XGB_BUNDLE = DATA_OUTPUT / "wildfire_xgb_bundle.json"
-SIGUNGU_HIST_STATE = DATA_PROCESSED / "sigungu_hist_state.csv"
+WILDFIRE_XGB_MODEL = MODELS_DIR / "wildfire_xgb_model.json"
+WILDFIRE_XGB_BUNDLE = MODELS_DIR / "wildfire_xgb_bundle.json"
+SIGUNGU_HIST_STATE = REFERENCE_DIR / "sigungu_hist_state.csv"
 DAILY_ML_RISK = FRONTEND_PUBLIC_DATA / "daily_ml_risk.json"
 ADMIN_SIDO_JSON = FRONTEND_PUBLIC_DATA / "admin-sido.json"
 ADMIN_SIGUNGU_JSON = FRONTEND_PUBLIC_DATA / "admin-sigungu.json"
@@ -100,6 +103,8 @@ def ensure_dirs() -> None:
         DATA_RAW,
         DATA_PROCESSED,
         DATA_OUTPUT,
+        MODELS_DIR,
+        REFERENCE_DIR,
         DATA_PROCESSED_ETL,
         DATA_OUTPUT_ETL,
         GEO_DIR,

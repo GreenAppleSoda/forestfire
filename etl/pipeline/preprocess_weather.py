@@ -4,8 +4,8 @@ ASOS 일자료 전처리 + 관측지점→시군구 매핑 + 시군구×일 기�
 입력: db-archive/raw/weather/asos_daily_2011_2026.csv (cp949)
 출력:
   db-archive/processed/asos_station_sigungu_map.csv # 지점↔대표 시군구
-  db/processed/weather_daily_sigungu.csv            # 시군구×일 (예측 런타임)
-  db/processed/sigungu_asos_station.csv             # 시군구→지점 (예측 런타임)
+  db/processed/weather_daily_sigungu.csv            # 시군구×일 (로컬 CSV 폴백)
+  ml-service/reference/sigungu_asos_station.csv     # 시군구→지점 (예측 런타임)
 """
 
 from __future__ import annotations

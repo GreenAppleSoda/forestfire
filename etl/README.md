@@ -9,17 +9,19 @@
 
 | 루트 | 용도 |
 |------|------|
-| `db/` | 서버 배포용 예측 런타임 (weather · hist · model) |
+| `ml-service/models/` | XGBoost 모델 JSON (예측 런타임) |
+| `ml-service/reference/` | 시군구 hist · ASOS 매핑 CSV (예측 런타임) |
+| `db/` | 로컬 대용량 CSV (Git 제외, weather 폴백) |
 | `db-archive/` | 원본·중간 산출물·학습 메트릭·분석 CSV |
 | `frontend/public/data/` | 지도·점수 JSON (웹 정적 파일) → `backend/data`에도 동기화 |
 
-주요 런타임 파일 (`db/`):
+주요 런타임 파일:
 
-- `processed/weather_daily_sigungu.csv` (폴백 — 학습·lag는 MariaDB 우선)
-- `processed/sigungu_hist_state.csv`
-- `processed/sigungu_asos_station.csv`
-- `output/wildfire_xgb_model.json`
-- `output/wildfire_xgb_bundle.json`
+- `ml-service/models/wildfire_xgb_model.json`
+- `ml-service/models/wildfire_xgb_bundle.json`
+- `ml-service/reference/sigungu_hist_state.csv`
+- `ml-service/reference/sigungu_asos_station.csv`
+- `db/processed/weather_daily_sigungu.csv` (폴백 — 학습·lag는 MariaDB 우선)
 
 산불 원본: MariaDB `forestfire_stats` 우선.  
 공통 로더: `pipeline/load_wildfire_history.py` (실패 시 `db-archive/processed/refined_wildfire_data.csv`).

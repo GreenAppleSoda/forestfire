@@ -61,11 +61,13 @@ ForestFire/
 │   ├── migrations/    챗봇 세션·소셜 로그인 등 SQL
 │   └── src/
 ├── ml-service/        Flask (:5000, localhost)
+│   ├── models/        XGBoost 모델 JSON
+│   ├── reference/     시군구 hist · 관측소 매핑 CSV
 │   ├── predict/       예측 엔진 + weather_db · fire_db (MariaDB)
 │   ├── report/        지역별 PDF (Jinja2 + Playwright)
 │   └── routes/        health · predict · report · sync
 ├── etl/               오프라인 ETL · 분석 · 학습
-├── db/                서버 배포용 (모델·hist_state 등)
+├── db/                로컬 대용량 CSV (Git 제외)
 ├── db-archive/        ETL·분석 원본·중간 산출물
 └── docs/
 ```
@@ -189,7 +191,7 @@ npm run dev
 |------|------|
 | 학습 | `etl/ml/train_wildfire_xgb.py` (기상·산불: MariaDB 우선) |
 | 추론 | `ml-service/predict/daily.py` |
-| 산출물 | `db/output/wildfire_xgb_*.json`, `db/processed/sigungu_hist_state.csv` 등 |
+| 산출물 | `ml-service/models/wildfire_xgb_*.json`, `ml-service/reference/sigungu_hist_state.csv` 등 |
 
 CLI 예측:
 

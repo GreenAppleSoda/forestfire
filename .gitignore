@@ -14,6 +14,9 @@ db/
 db-archive/
 법정동코드 전체자료.txt
 법정동코드*.txt
+
+# 대용량 기상 CSV (reference에 복사해도 Git에 올리지 않음)
+ml-service/reference/weather_daily_sigungu.csv
 # Frontend
 frontend/public/data/mountain-images/*
 !frontend/public/data/mountain-images/.gitkeep

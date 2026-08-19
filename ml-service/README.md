@@ -82,6 +82,8 @@ ml-service/
 ├── app.py
 ├── config.py              # .env · HOST/PORT
 ├── ml_paths.py            # 예측용 경로
+├── models/                # XGBoost JSON
+├── reference/             # 시군구 hist · ASOS 매핑 CSV
 ├── requirements.txt
 ├── predict/
 │   ├── daily.py
@@ -101,4 +103,5 @@ ml-service/
     └── weather.py
 ```
 
-런타임 모델·hist 등은 저장소 루트 `db/` 를 읽습니다.
+런타임 모델은 `models/`, 시군구 lookup CSV는 `reference/` 를 읽습니다.
+(Railway에서 Root Directory가 `ml-service`이면 이 폴더가 컨테이너 `/app`이 됩니다.)
