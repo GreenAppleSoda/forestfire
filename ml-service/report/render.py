@@ -27,16 +27,17 @@ def render_html(context: dict, template_name: str = "wildfire_report.html.j2") -
 
 def _header_footer(title_label: str, predict_date: str) -> tuple[str, str]:
     """Playwright page.pdf()의 header/footer는 별도 격리 컨텍스트라 인라인 스타일만 먹는다."""
+    font = '"Noto Sans KR", "Noto Sans CJK KR", sans-serif'
     header = f"""
-    <div style="font-size:9px; width:100%; padding:0 40px; color:#7a7568;
-                display:flex; justify-content:space-between; font-family:sans-serif;">
-      <span>{title_label} 산불위험 브리핑</span>
+    <div style="font-size:9px; width:100%; padding:0 40px; color:#6b7280;
+                display:flex; justify-content:space-between; font-family:{font};">
+      <span>산불발생위험도 보고서</span>
       <span>{predict_date}</span>
     </div>
     """
-    footer = """
-    <div style="font-size:9px; width:100%; padding:0 40px; color:#7a7568;
-                display:flex; justify-content:flex-end; font-family:sans-serif;">
+    footer = f"""
+    <div style="font-size:9px; width:100%; padding:0 40px; color:#6b7280;
+                display:flex; justify-content:flex-end; font-family:{font};">
       <span class="pageNumber"></span>&nbsp;/&nbsp;<span class="totalPages"></span>
     </div>
     """
@@ -69,6 +70,7 @@ def render_pdf(
         try:
             page = browser.new_page()
             page.set_content(html, wait_until="networkidle")
+            page.evaluate("() => document.fonts.ready")
             page.pdf(
                 path=str(out_path),
                 format="A4",

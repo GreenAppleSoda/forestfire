@@ -49,6 +49,22 @@ function fmtNum(v: number | null | undefined, unit = ""): string {
   return `${v}${unit}`;
 }
 
+async function savePdfToDownloads(downloadPath: string, filename: string): Promise<void> {
+  const fileRes = await fetch(downloadPath, { credentials: "include" });
+  if (!fileRes.ok) {
+    throw new Error("PDF 다운로드에 실패했습니다. 다시 시도해 주세요.");
+  }
+  const blob = await fileRes.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename || "산불위험_보고서.pdf";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 /** 회원 전용 당일 위험 요약 보고서 (모달 표시, DB 저장 없음) */
 export function ReportModal({ open, onClose }: Props) {
   const [loading, setLoading] = useState(false);
@@ -76,19 +92,7 @@ export function ReportModal({ open, onClose }: Props) {
       if (!res.ok || !json.ok || !json.downloadPath) {
         throw new Error(json.error || "PDF 생성에 실패했습니다.");
       }
-      const fileRes = await fetch(json.downloadPath, { credentials: "include" });
-      if (!fileRes.ok) {
-        throw new Error("PDF 다운로드에 실패했습니다.");
-      }
-      const blob = await fileRes.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = json.filename || "report.pdf";
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
+      await savePdfToDownloads(json.downloadPath, json.filename || "산불위험_보고서.pdf");
     } catch (e) {
       setPdfError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -241,7 +245,7 @@ export function ReportModal({ open, onClose }: Props) {
                 onClick={() => void downloadPdf()}
                 className="w-full rounded-xl bg-[#166534] px-3 py-2.5 text-[12px] font-semibold text-white hover:bg-[#14532d] disabled:opacity-50"
               >
-                {pdfBusy ? "PDF 생성 중…" : "슬라이드형 PDF 다운로드"}
+                {pdfBusy ? "생성 중…" : "슬라이드형 PDF 다운로드"}
               </button>
               {pdfError && <p className="text-[11px] text-[#e03131]">{pdfError}</p>}
             </div>
