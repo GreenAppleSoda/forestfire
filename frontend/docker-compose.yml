@@ -1,0 +1,12 @@
+# Lightsail: docker compose --env-file .env.local up -d --build
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_KAKAO_MAP_KEY: ${NEXT_PUBLIC_KAKAO_MAP_KEY}
+        EXPRESS_URL: ${EXPRESS_URL}
+    ports:
+      - "80:3000"
+    restart: unless-stopped

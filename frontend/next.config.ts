@@ -5,6 +5,8 @@ import type { NextConfig } from "next";
  * (rewrite 실패 시 plain "Internal Server Error" 가 나오던 문제 회피)
  * EXPRESS_URL 은 가능하면 127.0.0.1 사용 (Windows localhost→IPv6 이슈).
  */
-const nextConfig: NextConfig = {};
+const nextConfig: NextConfig = {
+    output: "standalone",
+  };
 
 export default nextConfig;
