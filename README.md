@@ -175,6 +175,7 @@ npm run dev
 
 - 챗봇: 예측 API(`runPredictDaily`) 우선 → 실패 시 `backend/data/daily_ml_risk.json`
 - 로그인 회원은 최근 대화를 `user_id` 기준으로 Gemini 맥락에 포함 (게스트는 `sessionId`). 로그인 직후 게스트로 쓰던 `sessionId`는 계정 히스토리에 합쳐집니다
+- 게스트 세션 ID는 브라우저 `localStorage`. HTTPS·localhost가 아니면 `crypto.randomUUID`가 없을 수 있어, 프론트에서 UUID v4 폴백으로 발급 (`frontend/src/components/ChatWidget.tsx`)
 - UI는 열 때 인삿말만 보이고, **「이전 대화내역 불러오기」**로 화면 복원. 헤더에 닉네임·회원/게스트 뱃지
 - 「보고서/PDF 만들어줘」: **로그인 필수**. `regionFocus`가 확신 있는 지명만 추출(잡음·예시·따옴표 문장 제외). 순서는 현재 문장 → 최근 유저 발화 → 어시스턴트. 「전국」도 가능. 없으면 지역을 되물은 뒤 Flask `POST /report/pdf`
 - 보고서는 DB에 저장하지 않고, 생성 후 30분 TTL로 다운로드만 제공합니다

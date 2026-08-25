@@ -21,11 +21,28 @@ const PANEL_H = 512; // 32rem
 const FAB_SIZE = 56;
 const EDGE = 20;
 
+/** HTTP(비보안 컨텍스트) 등에서 crypto.randomUUID 가 없을 때를 대비한 UUID v4. */
+function createId(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  const bytes = new Uint8Array(16);
+  if (typeof crypto !== "undefined" && typeof crypto.getRandomValues === "function") {
+    crypto.getRandomValues(bytes);
+  } else {
+    for (let i = 0; i < 16; i++) bytes[i] = Math.floor(Math.random() * 256);
+  }
+  bytes[6] = (bytes[6]! & 0x0f) | 0x40;
+  bytes[8] = (bytes[8]! & 0x3f) | 0x80;
+  const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
 function getSessionId(): string {
   if (typeof window === "undefined") return "";
   let id = window.localStorage.getItem(SESSION_KEY);
   if (!id) {
-    id = crypto.randomUUID();
+    id = createId();
     window.localStorage.setItem(SESSION_KEY, id);
   }
   return id;
@@ -336,7 +353,7 @@ export function ChatWidget() {
           </div>
 
           <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto px-3.5 py-3">
-            {!historyLoaded && (
+            {user && !historyLoaded && (
               <div className="flex items-center gap-2 py-1">
                 <div className="h-px flex-1 bg-[#e5e7eb]" />
                 <button

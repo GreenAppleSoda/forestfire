@@ -43,7 +43,7 @@ OAuth 콜백 리다이렉트(`redirect: "manual"`)도 올바르게 전달합니�
 - **로그인 모달** (`AuthModal`) — 아이디/비밀번호 + 구글/카카오 소셜 버튼. 로그인 모드는 `intent=login`(기존 계정만), 회원가입 모드는 `intent=register`(없으면 생성)
 - **유휴 세션 안내** (`SessionIdleHost`) — 30분 유휴 시 안내 모달 (로그아웃 / 시간 연장), 활동 감지 자동 연장
 - 「산불이력 갱신」 — 우측 패널 헤더의 새로고침 버튼 → Express가 MariaDB → `backend/data` 패치 (`useHistorySync` 훅)
-- **안내 챗봇** (`ChatWidget`) — 비로그인 Q&A 가능; 헤더에 닉네임·회원/게스트 뱃지; 열면 인삿말 + 「이전 대화내역 불러오기」(클릭 시 복원); 로그인 전환 시 화면은 인삿말로 리셋; 「보고서/PDF」는 회원 전용(대화 맥락으로 지역 추론) + 다운로드 링크; 헤더 드래그로 창 이동; `logo-chatbot-circle.png`
+- **안내 챗봇** (`ChatWidget`) — 비로그인 Q&A 가능; 헤더에 닉네임·회원/게스트 뱃지; 열면 인삿말 + 「이전 대화내역 불러오기」(클릭 시 복원); 로그인 전환 시 화면은 인삿말로 리셋; 「보고서/PDF」는 회원 전용(대화 맥락으로 지역 추론) + 다운로드 링크; 헤더 드래그로 창 이동; `logo-chatbot-circle.png`. 게스트 `sessionId`는 `localStorage`(`ff_chat_session_id`). `crypto.randomUUID`가 없으면(`http://LAN-IP` 등 비보안 컨텍스트) UUID v4 폴백
 - **보고서** (`ReportModal`) — 회원 전용 JSON 요약 · 슬라이드형 PDF는 blob 다운로드(화면 유지). 빈 `regionQuery` = 전국
 
 지도 JSON(`map-data.json`, `admin-*.json`)은 첫 로딩부터 `/api/map/*`(`backend/data`)를 읽고, Express가 없으면 `public/data/`로 폴백합니다 (`src/lib/mapBundle.ts`). 시도·시군구를 먼저 그린 뒤 읍면동(`admin-emd`)은 2차로 불러옵니다. `sigungu_ml_scores.json`은 계속 `public/data/`입니다. 예측·이력 동기화·인증·챗봇·보고서는 `/api/*`입니다.

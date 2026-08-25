@@ -41,7 +41,7 @@ type Tab = "fires" | "linked" | "catalog";
 
 function formatWhen(value: string) {
   if (!value) return "-";
-  return value.replace("T", " ").slice(0, 16);
+  return value.replace("T", " ").slice(0, 10);
 }
 
 function resolveMountains(
