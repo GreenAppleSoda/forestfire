@@ -100,5 +100,5 @@ export function formatRegionPath(
   lookup?: LegalDongLookup | null,
 ): string {
   const parts = region.split(/\s*>\s*/).map((s) => s.trim());
-  return collapseRedundantParts(normalizeRegionParts(parts, lookup)).join(" > ");
+  return collapseRedundantParts(normalizeRegionParts(parts, lookup)).join(" ");
 }

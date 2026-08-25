@@ -1,6 +1,6 @@
 /** 행정구역 법정동명 매칭 — 접미사(시/군/구/읍/면/동)로 동명을 분별한다. */
 
-import type { AdminLevel } from "./types";
+import type { AdminLevel, AdminRegion } from "./types";
 
 const ADMIN_SUFFIXES = [
   "특별자치시",
@@ -174,4 +174,53 @@ export function eventMatchesSelection(
   if (parent && !cityMatchesEvent(ev, parent)) return false;
   if (!parent) return false;
   return townMatchesEvent(ev, opts.name);
+}
+
+/** 산불 이력 → 가장 구체적인 행정구역 (읍면동 > 시군구 > 시도) */
+export function findAdminForFireEvent(
+  ev: FireEventLike,
+  opts: {
+    emd: AdminRegion[];
+    sigungu: AdminRegion[];
+    sido: AdminRegion[];
+    sigunguByCode: Map<string, AdminRegion>;
+  },
+): { region: AdminRegion; level: AdminLevel } | null {
+  for (const r of opts.emd) {
+    const parent =
+      r.code.length >= 5 ? opts.sigunguByCode.get(r.code.slice(0, 5)) : undefined;
+    if (
+      eventMatchesSelection(ev, {
+        level: "emd",
+        province: r.province_name || r.province,
+        name: r.name,
+        parentName: parent?.name ?? null,
+      })
+    ) {
+      return { region: r, level: "emd" };
+    }
+  }
+  for (const r of opts.sigungu) {
+    if (
+      eventMatchesSelection(ev, {
+        level: "sigungu",
+        province: r.province_name || r.province,
+        name: r.name,
+      })
+    ) {
+      return { region: r, level: "sigungu" };
+    }
+  }
+  for (const r of opts.sido) {
+    if (
+      eventMatchesSelection(ev, {
+        level: "sido",
+        province: r.province_name || r.province || r.name,
+        name: r.name,
+      })
+    ) {
+      return { region: r, level: "sido" };
+    }
+  }
+  return null;
 }

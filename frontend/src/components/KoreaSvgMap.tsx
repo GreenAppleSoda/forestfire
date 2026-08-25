@@ -22,6 +22,7 @@ import {
   svgToWgs84,
   svgViewToKakao,
   viewFromCenterSvg,
+  wgs84ToSvg,
 } from "@/lib/svgProjection";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/lib/authContext";
@@ -39,7 +40,7 @@ import {
   linkMountainToRegions,
   type MountainRegionLink,
 } from "@/lib/mountainSearch";
-import { eventMatchesSelection, stripAdmin } from "@/lib/adminMatch";
+import { eventMatchesSelection, findAdminForFireEvent, stripAdmin } from "@/lib/adminMatch";
 import {
   fontSizeForRing,
   largestRing,
@@ -286,6 +287,11 @@ export function KoreaSvgMap({
   const [pinnedMountain, setPinnedMountain] = useState<MountainInfo | null>(
     null,
   );
+  const [pinnedFire, setPinnedFire] = useState<{
+    x: number;
+    y: number;
+    label: string;
+  } | null>(null);
   /** 검색바로 열었을 때만 우측 검색 결과 패널 표시 */
   const [searchPanelMountain, setSearchPanelMountain] =
     useState<MountainInfo | null>(null);
@@ -780,6 +786,10 @@ export function KoreaSvgMap({
     setMountainLink(null);
   }, []);
 
+  const clearFirePin = useCallback(() => {
+    setPinnedFire(null);
+  }, []);
+
   const zoomToMountainLink = useCallback(
     (link: MountainRegionLink) => {
       if (link.marker) {
@@ -836,19 +846,105 @@ export function KoreaSvgMap({
     ],
   );
 
+  const firePinLabel = (ev: FireEvent) => {
+    const parts = (ev.region || "")
+      .split(/\s*>\s*/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    return (
+      ev.town?.trim() ||
+      ev.village?.trim() ||
+      ev.city?.trim() ||
+      parts[parts.length - 1] ||
+      "산불 발생지"
+    );
+  };
+
+  const onSelectFire = useCallback(
+    (ev: FireEvent, opts?: { selectRegion?: boolean }) => {
+      clearMountainPin();
+      setMobileNavOpen(false);
+
+      const mt = (ev.mountain_list || []).find(
+        (m) =>
+          (m.svg_x != null && m.svg_y != null) ||
+          (m.lat != null && m.lon != null),
+      );
+      let x: number | null = null;
+      let y: number | null = null;
+      let zoomScale = 4.2;
+
+      if (mt?.svg_x != null && mt.svg_y != null) {
+        x = mt.svg_x;
+        y = mt.svg_y;
+        zoomScale = 4.8;
+      } else if (
+        mt?.lat != null &&
+        mt.lon != null &&
+        Number.isFinite(mt.lat) &&
+        Number.isFinite(mt.lon)
+      ) {
+        const svg = wgs84ToSvg(mt.lat, mt.lon);
+        x = svg[0];
+        y = svg[1];
+        zoomScale = 4.8;
+      } else {
+        const hit = findAdminForFireEvent(ev, {
+          emd: layers.emd.regions,
+          sigungu: layers.sigungu.regions,
+          sido: layers.sido.regions,
+          sigunguByCode,
+        });
+        if (hit) {
+          const center =
+            hit.level === "sido"
+              ? hit.region.label
+              : (visualCenterFromPath(hit.region.d, hit.region.code) ??
+                hit.region.label);
+          x = center[0];
+          y = center[1];
+          zoomScale = hit.level === "emd" ? 4.2 : hit.level === "sigungu" ? 3.2 : 2.4;
+          if (opts?.selectRegion !== false) {
+            setSelectedAdmin(hit.region);
+            setSelected(toStat(hit.region, hit.level));
+          }
+        }
+      }
+
+      if (x == null || y == null) return;
+      setPinnedFire({ x, y, label: firePinLabel(ev) });
+      const [vbW0, vbH0] = layers.sido.viewBox;
+      const next = viewFromCenterSvg(x, y, zoomScale, vbW0, vbH0);
+      setView(next);
+      setSatView(svgViewToKakao(next, vbW0, vbH0));
+      setSatSyncKey((k) => k + 1);
+    },
+    [
+      clearMountainPin,
+      layers.emd.regions,
+      layers.sigungu.regions,
+      layers.sido.regions,
+      layers.sido.viewBox,
+      sigunguByCode,
+      toStat,
+    ],
+  );
+
   const onRegionClick = useCallback(
     (admin: AdminRegion) => {
       if (suppressClickRef.current) return;
       clearMountainPin();
+      clearFirePin();
       setSelectedAdmin(admin);
       setSelected(toStat(admin));
     },
-    [toStat, clearMountainPin],
+    [toStat, clearMountainPin, clearFirePin],
   );
 
   const onRegionSearchSelect = useCallback(
     (admin: AdminRegion, atLevel: AdminLevel) => {
       clearMountainPin();
+      clearFirePin();
       setMobileNavOpen(false);
       setSelectedAdmin(admin);
       setSelected(toStat(admin, atLevel));
@@ -870,12 +966,13 @@ export function KoreaSvgMap({
       setSatView(svgViewToKakao(next, vbW0, vbH0));
       setSatSyncKey((k) => k + 1);
     },
-    [clearMountainPin, toStat, layers.sido.viewBox],
+    [clearMountainPin, clearFirePin, toStat, layers.sido.viewBox],
   );
 
   /** 검색바: 마커 + 검색 결과 패널 + 당일 예측 */
   const onMountainSelect = useCallback(
     (mountain: MountainInfo) => {
+      clearFirePin();
       const { full, link } = locateMountainOnMap(mountain);
       setSearchPanelMountain(full);
       setRiskMode("daily");
@@ -888,15 +985,16 @@ export function KoreaSvgMap({
         setSelectedAdmin(null);
       }
     },
-    [locateMountainOnMap, toStat, fetchKmaPredict],
+    [locateMountainOnMap, toStat, fetchKmaPredict, clearFirePin],
   );
 
   /** 산도감 등: 지도 마커만 (지역 패널 유지) */
   const onLocateMountain = useCallback(
     (mountain: MountainInfo) => {
+      clearFirePin();
       locateMountainOnMap(mountain);
     },
-    [locateMountainOnMap],
+    [locateMountainOnMap, clearFirePin],
   );
 
   useEffect(() => {
@@ -986,6 +1084,12 @@ export function KoreaSvgMap({
     return null;
   }, [pinnedMountain, mountainLink]);
 
+  const satFirePin = useMemo(() => {
+    if (!pinnedFire) return null;
+    const ll = svgToWgs84(pinnedFire.x, pinnedFire.y);
+    return { ...ll, name: pinnedFire.label };
+  }, [pinnedFire]);
+
   const satColorOf = useCallback(
     (r: AdminRegion) => fillOf(r, level),
     [fillOf, level],
@@ -1026,11 +1130,13 @@ export function KoreaSvgMap({
     recentFires,
     onSelectMountain: onMountainSelect,
     onSelectRegion: onRegionSearchSelect,
+    onSelectFire,
     onGoHome: () => {
       setSelected(null);
       setSelectedAdmin(null);
       setHovered(null);
       clearMountainPin();
+      clearFirePin();
       setView(INITIAL_VIEW);
       setMapMode("choropleth");
       setSatView(svgViewToKakao(INITIAL_VIEW));
@@ -1139,12 +1245,14 @@ export function KoreaSvgMap({
                 syncKey={satSyncKey}
                 syncView={satView}
                 mountainPin={satMountainPin}
+                firePin={satFirePin}
                 onRegionClick={onRegionClick}
                 onRegionHover={setHovered}
                 onViewChange={onSatViewChange}
                 onMapClickEmpty={() => {
                   setSelected(null);
                   setSelectedAdmin(null);
+                  clearFirePin();
                 }}
               />
             ) : (
@@ -1355,6 +1463,40 @@ export function KoreaSvgMap({
                       style={{ fontFamily: "var(--font-sans)" }}
                     >
                       {pinnedMountain.name}
+                    </text>
+                  </g>
+                )}
+                {pinnedFire && (
+                  <g
+                    className="pointer-events-none"
+                    transform={`translate(${pinnedFire.x} ${pinnedFire.y}) scale(${1 / view.scale})`}
+                  >
+                    <path
+                      d="M0 0c-1.1-8-15.5-22.5-15.5-34.5a15.5 15.5 0 1 1 31 0C15.5-22.5 1.1-8 0 0z"
+                      fill="#e03131"
+                      stroke="#9b1c1c"
+                      strokeWidth={1.2}
+                      strokeLinejoin="round"
+                    />
+                    <circle cx={0} cy={-34.5} r={6.2} fill="#ffffff" />
+                    <path
+                      d="M0 -31.1 L-3.2 -36.4 L3.2 -36.4 Z"
+                      fill="#e03131"
+                    />
+                    <text
+                      x={0}
+                      y={-62}
+                      textAnchor="middle"
+                      fill="#ffffff"
+                      fontSize={23}
+                      fontWeight={700}
+                      stroke="#1c1917"
+                      strokeWidth={3.8}
+                      paintOrder="stroke"
+                      strokeLinejoin="round"
+                      style={{ fontFamily: "var(--font-sans)" }}
+                    >
+                      {pinnedFire.label}
                     </text>
                   </g>
                 )}
@@ -1591,6 +1733,7 @@ export function KoreaSvgMap({
               predictRegions={isPredictMode ? activePredict?.regions : null}
               riskMode={riskMode}
               onLocateMountain={onLocateMountain}
+              onSelectFire={(ev) => onSelectFire(ev, { selectRegion: false })}
               syncLastAt={syncLastAt}
               syncing={syncing}
               onSync={runSync}
@@ -1648,6 +1791,7 @@ export function KoreaSvgMap({
             predictRegions={isPredictMode ? activePredict?.regions : null}
             riskMode={riskMode}
             onLocateMountain={onLocateMountain}
+            onSelectFire={(ev) => onSelectFire(ev, { selectRegion: false })}
             syncLastAt={syncLastAt}
             syncing={syncing}
             onSync={runSync}

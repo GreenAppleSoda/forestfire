@@ -7,6 +7,7 @@ import type {
   MountainInfo,
   RiskMode,
 } from "@/lib/types";
+import { formatRegionPath } from "@/lib/legalDong";
 import { PlaceSearch } from "./PlaceSearch";
 
 type Props = {
@@ -18,6 +19,7 @@ type Props = {
   recentFires?: FireEvent[];
   onSelectMountain: (mountain: MountainInfo) => void;
   onSelectRegion: (region: AdminRegion, level: AdminLevel) => void;
+  onSelectFire?: (ev: FireEvent) => void;
   onRiskMode: (mode: RiskMode) => void;
   onGoHome?: () => void;
   onCloseMobile?: () => void;
@@ -67,6 +69,7 @@ export function AppSidebar({
   recentFires,
   onSelectMountain,
   onSelectRegion,
+  onSelectFire,
   onRiskMode,
   onGoHome,
   onCloseMobile,
@@ -151,25 +154,28 @@ export function AppSidebar({
             </p>
             <ul className="mt-2 space-y-1.5">
               {recentFires.map((ev, i) => (
-                <li
-                  key={`${ev.datetime}-${ev.region}-${i}`}
-                  className="rounded-lg bg-[#fafafa] px-3 py-2 ring-1 ring-[#f0f0f0]"
-                >
-                  <div className="flex items-start gap-2">
-                    <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded bg-[#fff1f0] text-[#e03131]">
-                      <svg viewBox="0 0 24 24" className="h-3 w-3" fill="currentColor" aria-hidden>
-                        <path d="M12 2c.4 2.2-.3 3.8-1.4 5.2-.9 1.1-1.6 2-1.6 3.4 0 1.7 1.2 3 2.8 3.4-.6-1.3-.4-2.5.5-3.6 1.2-1.5 2.9-2.4 3.5-4.6.8 1.4 1.2 2.8 1.2 4.3 0 4.3-3 7.9-7 7.9S3 16.1 3 11.8C3 7.6 6.2 4.2 12 2z" />
-                      </svg>
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-[12px] font-medium text-[#111827]">
-                        {ev.region} {ev.city}
-                      </p>
-                      <p className="mt-0.5 text-[10px] text-[#9ca3af]">
-                        {ev.datetime?.slice(0, 10) || "—"}
-                      </p>
+                <li key={`${ev.datetime}-${ev.region}-${i}`}>
+                  <button
+                    type="button"
+                    onClick={() => onSelectFire?.(ev)}
+                    className="w-full rounded-lg bg-[#fafafa] px-3 py-2 text-left ring-1 ring-[#f0f0f0] transition hover:bg-[#fff1f0] hover:ring-[#fecaca]"
+                  >
+                    <div className="flex items-start gap-2">
+                      <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded bg-[#fff1f0] text-[#e03131]">
+                        <svg viewBox="0 0 24 24" className="h-3 w-3" fill="currentColor" aria-hidden>
+                          <path d="M12 2c.4 2.2-.3 3.8-1.4 5.2-.9 1.1-1.6 2-1.6 3.4 0 1.7 1.2 3 2.8 3.4-.6-1.3-.4-2.5.5-3.6 1.2-1.5 2.9-2.4 3.5-4.6.8 1.4 1.2 2.8 1.2 4.3 0 4.3-3 7.9-7 7.9S3 16.1 3 11.8C3 7.6 6.2 4.2 12 2z" />
+                        </svg>
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-[12px] font-medium text-[#111827]">
+                          {formatRegionPath(ev.region)}
+                        </p>
+                        <p className="mt-0.5 text-[10px] text-[#9ca3af]">
+                          {ev.datetime?.slice(0, 10) || "—"}
+                        </p>
+                      </div>
                     </div>
-                  </div>
+                  </button>
                 </li>
               ))}
             </ul>
