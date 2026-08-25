@@ -24,7 +24,7 @@ export type SatelliteViewState = {
   level: number;
 };
 
-type MountainPin = {
+type MapPin = {
   lat: number;
   lng: number;
   name: string;
@@ -41,7 +41,8 @@ type Props = {
   selectedCode: string | null;
   syncKey: number;
   syncView: SatelliteViewState;
-  mountainPin?: MountainPin | null;
+  mountainPin?: MapPin | null;
+  firePin?: MapPin | null;
   onRegionClick: (r: AdminRegion) => void;
   onRegionHover: (r: AdminRegion | null) => void;
   onViewChange: (view: SatelliteViewState) => void;
@@ -61,6 +62,28 @@ const SIDO_LABEL_CENTER: Record<string, [number, number]> = {
   "48": [385, 525],
   "12": [262, 582],
 };
+
+function firePinContent(name: string): HTMLElement {
+  const wrap = document.createElement("div");
+  wrap.style.cssText =
+    "display:flex;flex-direction:column;align-items:center;pointer-events:none;transform:translateY(2px)";
+  const label = document.createElement("div");
+  label.style.cssText =
+    "padding:3px 7px;margin-bottom:4px;border-radius:6px;background:rgba(28,25,23,.92);color:#fff;font-size:12px;font-weight:600;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,.25)";
+  label.textContent = name;
+  wrap.appendChild(label);
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("width", "31");
+  svg.setAttribute("height", "50");
+  svg.setAttribute("viewBox", "-16 -50 32 50");
+  svg.setAttribute("aria-hidden", "true");
+  svg.innerHTML =
+    '<path d="M0 0c-1.1-8-15.5-22.5-15.5-34.5a15.5 15.5 0 1 1 31 0C15.5-22.5 1.1-8 0 0z" fill="#e03131" stroke="#9b1c1c" stroke-width="1.2" stroke-linejoin="round"/>' +
+    '<circle cx="0" cy="-34.5" r="6.2" fill="#ffffff"/>' +
+    '<path d="M0 -31.1 L-3.2 -36.4 L3.2 -36.4 Z" fill="#e03131"/>';
+  wrap.appendChild(svg);
+  return wrap;
+}
 
 function regionLabelText(name: string, level: AdminLevel) {
   if (level === "sido") {
@@ -120,6 +143,7 @@ export function SatelliteMap({
   syncKey,
   syncView,
   mountainPin,
+  firePin,
   onRegionClick,
   onRegionHover,
   onViewChange,
@@ -132,6 +156,9 @@ export function SatelliteMap({
   const outlineRef = useRef<KakaoPolygon[]>([]);
   const markerRef = useRef<KakaoMarker | null>(null);
   const overlayRef = useRef<{ setMap: (m: KakaoMap | null) => void } | null>(
+    null,
+  );
+  const fireOverlayRef = useRef<{ setMap: (m: KakaoMap | null) => void } | null>(
     null,
   );
   const labelOverlayRef = useRef<{
@@ -292,6 +319,8 @@ export function SatelliteMap({
       markerRef.current = null;
       overlayRef.current?.setMap(null);
       overlayRef.current = null;
+      fireOverlayRef.current?.setMap(null);
+      fireOverlayRef.current = null;
       labelOverlayRef.current?.setMap(null);
       labelOverlayRef.current = null;
       labelElRef.current = null;
@@ -557,6 +586,27 @@ export function SatelliteMap({
       zIndex: 11,
     });
   }, [ready, mountainPin]);
+
+  // 최근 산불 빨간 핀
+  useEffect(() => {
+    const map = mapRef.current;
+    const maps = mapsRef.current;
+    if (!map || !maps || !ready) return;
+
+    fireOverlayRef.current?.setMap(null);
+    fireOverlayRef.current = null;
+
+    if (!firePin) return;
+    const pos = new maps.LatLng(firePin.lat, firePin.lng);
+    fireOverlayRef.current = new maps.CustomOverlay({
+      map,
+      position: pos,
+      content: firePinContent(firePin.name),
+      xAnchor: 0.5,
+      yAnchor: 1,
+      zIndex: 12,
+    });
+  }, [ready, firePin]);
 
   if (error) {
     return (

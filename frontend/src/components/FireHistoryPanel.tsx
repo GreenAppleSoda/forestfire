@@ -30,6 +30,7 @@ type Props = {
   riskMode?: RiskMode;
   /** 산 클릭 시 지도에 마커 표시 */
   onLocateMountain?: (mountain: MountainInfo) => void;
+  onSelectFire?: (ev: FireEvent) => void;
   onClose: () => void;
   syncLastAt?: string | null;
   syncing?: boolean;
@@ -92,6 +93,7 @@ export function FireHistoryPanel({
   predictRegions,
   riskMode,
   onLocateMountain,
+  onSelectFire,
   onClose,
 }: Props) {
   const nationalRisk = useMemo(
@@ -313,40 +315,54 @@ export function FireHistoryPanel({
                   {events.map((ev, i) => {
                     const mountains = resolveMountains(ev, mountainIndex);
                     return (
-                      <li
-                        key={`${ev.datetime}-${ev.region}-${i}`}
-                        className="rounded-xl bg-[#f9fafb] px-3 py-3 ring-1 ring-[#eef2f6]"
-                      >
-                        <div className="flex items-start gap-3">
-                          <FlameTiny />
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-baseline justify-between gap-3">
-                              <time className="text-sm font-medium text-[#111827]">
-                                {formatWhen(ev.datetime)}
-                              </time>
-                              <span className="shrink-0 text-xs font-medium tabular-nums text-[#6b7280]">
-                                {ev.damage_area.toLocaleString()} ha
-                              </span>
-                            </div>
-                            <p className="mt-1 text-[13px] leading-snug text-[#4b5563]">
-                              {formatRegionPath(ev.region, legalDong)}
-                            </p>
-                            {mountains.length > 0 && (
-                              <div className="mt-2 flex flex-wrap gap-1">
-                                {mountains.map((m) => (
-                                  <button
-                                    key={m.id || m.name}
-                                    type="button"
-                                    onClick={() => openMountain(m)}
-                                    className="rounded-lg bg-[#111827] px-2 py-0.5 text-[11px] text-white transition hover:bg-[#374151]"
-                                  >
-                                    {m.name}
-                                  </button>
-                                ))}
+                      <li key={`${ev.datetime}-${ev.region}-${i}`}>
+                        <button
+                          type="button"
+                          onClick={() => onSelectFire?.(ev)}
+                          className="w-full rounded-xl bg-[#f9fafb] px-3 py-3 text-left ring-1 ring-[#eef2f6] transition hover:bg-white hover:ring-[#fecaca]"
+                        >
+                          <div className="flex items-start gap-3">
+                            <FlameTiny />
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-baseline justify-between gap-3">
+                                <time className="text-sm font-medium text-[#111827]">
+                                  {formatWhen(ev.datetime)}
+                                </time>
+                                <span className="shrink-0 text-xs font-medium tabular-nums text-[#6b7280]">
+                                  {ev.damage_area.toLocaleString()} ha
+                                </span>
                               </div>
-                            )}
+                              <p className="mt-1 text-[13px] leading-snug text-[#4b5563]">
+                                {formatRegionPath(ev.region, legalDong)}
+                              </p>
+                              {mountains.length > 0 && (
+                                <div className="mt-2 flex flex-wrap gap-1">
+                                  {mountains.map((m) => (
+                                    <span
+                                      key={m.id || m.name}
+                                      role="button"
+                                      tabIndex={0}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        openMountain(m);
+                                      }}
+                                      onKeyDown={(e) => {
+                                        if (e.key === "Enter" || e.key === " ") {
+                                          e.preventDefault();
+                                          e.stopPropagation();
+                                          openMountain(m);
+                                        }
+                                      }}
+                                      className="rounded-lg bg-[#111827] px-2 py-0.5 text-[11px] text-white transition hover:bg-[#374151]"
+                                    >
+                                      {m.name}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
                           </div>
-                        </div>
+                        </button>
                       </li>
                     );
                   })}

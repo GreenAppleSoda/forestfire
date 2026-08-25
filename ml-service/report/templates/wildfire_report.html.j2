@@ -10,7 +10,7 @@
   :root {
     --bg: #ffffff;
     --surface: #ffffff;
-    --surface-2: #f4f4f5;
+    --surface-2: #f4f6f5;
     --ink: #111827;
     --ink-soft: #4b5563;
     --muted: #6b7280;
@@ -18,9 +18,13 @@
     --accent: #111827;
     --accent-strong: #111827;
     --accent-ink: #ffffff;
+    --danger: #111827;
   }
 
   * { box-sizing: border-box; font-family: "Noto Sans KR", "Noto Sans CJK KR", sans-serif; }
+
+  @page { background: var(--bg); }
+  html { background: var(--bg); }
 
   body {
     margin: 0;
@@ -114,7 +118,7 @@
     text-align: center;
     pointer-events: none;
   }
-  .gauge-number { font-size: 58px; font-weight: 800; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; line-height: 1; }
+  .gauge-number { font-size: 58px; font-weight: 800; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; line-height: 1; color: var(--danger); }
   .gauge-scale { font-size: 15px; color: var(--muted); margin-top: 6px; }
   .gauge-band-label { margin-top: 8px; font-size: 14px; font-weight: 700; padding: 4px 13px; border-radius: 999px; }
 
@@ -140,11 +144,15 @@
   .kpi-val small { font-size: 12.5px; font-weight: 600; color: var(--muted); }
 
   /* ---------- Ranking ---------- */
+  .rank-block {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
   .rank-list { column-count: 2; column-gap: 20px; }
   .rank-list.compact { column-count: 2; }
   .rank-section {
     break-inside: avoid;
-    margin-bottom: 10px;
+    margin-bottom: 8px;
   }
   .rank-section-label {
     font-size: 12.5px;
@@ -156,11 +164,11 @@
   }
   .rank-row {
     display: grid; grid-template-columns: 24px 122px minmax(0, 1fr) 42px;
-    align-items: center; gap: 7px; padding: 3px 2px; break-inside: avoid;
+    align-items: center; gap: 7px; padding: 2px; break-inside: avoid;
   }
   .rank-row .r { font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
   .rank-row .name { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .rank-row.top .name { color: var(--accent-strong); font-weight: 800; }
+  .rank-row.top .name { color: var(--danger); font-weight: 800; }
   .rank-row.highlight .name { text-decoration: underline; text-decoration-color: var(--accent); text-underline-offset: 2px; }
   .rank-track { position: relative; height: 8px; background: var(--surface-2); border-radius: 999px; overflow: hidden; }
   .rank-fill { position: absolute; inset: 0 auto 0 0; border-radius: 999px; }
@@ -171,12 +179,14 @@
     align-items: center;
     justify-content: space-between;
     gap: 12px;
-    margin-top: 10px;
-    padding: 7px 11px;
+    margin-top: 8px;
+    padding: 6px 11px;
     background: var(--surface-2);
     border-radius: 6px;
     font-size: 11.5px;
     color: var(--muted);
+    break-before: avoid;
+    page-break-before: avoid;
     break-inside: avoid;
     page-break-inside: avoid;
   }
@@ -237,21 +247,21 @@
   .prov-chart-meta .keys { display: inline-flex; align-items: center; gap: 12px; }
   .prov-chart-meta .key { display: inline-flex; align-items: center; gap: 5px; }
   .prov-chart-meta .swatch-bar {
-    width: 14px; height: 8px; border-radius: 2px; background: #1e3a5f;
+    width: 14px; height: 8px; border-radius: 2px; background: var(--accent);
   }
   .prov-chart-meta .swatch-line {
-    width: 14px; height: 0; border-top: 2px dashed #c2410c;
+    width: 14px; height: 0; border-top: 2px dashed var(--danger);
   }
   .prov-chart-row {
     display: grid;
     grid-template-columns: 84px minmax(0, 1fr) 46px;
     align-items: center;
     gap: 9px;
-    padding: 4px 11px;
+    padding: 3px 11px;
     break-inside: avoid;
   }
   .prov-chart-row.alt { background: #f9fafb; }
-  .prov-chart-row.target { background: #eff6ff; }
+  .prov-chart-row.target { background: #ecfdf5; }
   .prov-chart-row .name {
     font-size: 13px; font-weight: 600;
     display: flex; align-items: center; gap: 5px; white-space: nowrap;
@@ -260,62 +270,96 @@
   .prov-chart-track {
     position: relative;
     height: 16px;
-    background: #eef2f7;
+    background: #eef2f0;
     border-radius: 3px;
     overflow: hidden;
   }
   .prov-chart-fill {
     position: absolute; inset: 0 auto 0 0; border-radius: 3px;
-    background: #1e3a5f;
+    background: var(--accent);
     min-width: 2px;
   }
-  .prov-chart-row.target .prov-chart-fill { background: #0f172a; }
+  .prov-chart-row.target .prov-chart-fill { background: var(--danger); }
   .prov-chart-avg {
     position: absolute; top: 0; bottom: 0; width: 0;
-    border-left: 1.5px dashed #c2410c;
+    border-left: 1.5px dashed var(--danger);
     z-index: 2;
   }
   .prov-chart-row .val {
     font-size: 12.5px; text-align: right; font-variant-numeric: tabular-nums; color: var(--ink-soft); font-weight: 700;
   }
+  .prov-chart-note {
+    margin: 0;
+    padding: 6px 11px 8px;
+    border-top: 1px solid var(--line);
+    font-size: 12px;
+    color: var(--muted);
+    break-before: avoid;
+    page-break-before: avoid;
+  }
   .badge { font-size: 10.5px; font-weight: 800; background: var(--accent); color: var(--accent-ink); border-radius: 999px; padding: 2px 7px; }
 
-  /* ---------- Spotlight rows ---------- */
+  /* 순위·시·도 비교는 범례/각주가 혼자 다음 장으로 가지 않게 한 덩어리로 유지 */
+  #p2, #p3 {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  /* ---------- Spotlight rows (A4 가로 1페이지, 세로 가운데) ---------- */
+  #p4 {
+    break-before: page;
+    page-break-before: always;
+    break-after: page;
+    page-break-after: always;
+    break-inside: avoid;
+    page-break-inside: avoid;
+    min-height: 178mm;
+    margin-top: 0;
+    border-top: none;
+    padding: 10px 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+  #p4 .page-title { font-size: 23px; }
+  #p4 .lede { font-size: 14px; margin-bottom: 10px; }
+  #p4 .sec-head { margin-bottom: 10px; }
   .spot-list {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 8px;
   }
   .spot-row {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 240px;
+    grid-template-columns: minmax(0, 1fr) 236px;
     gap: 14px;
     align-items: center;
     border: 1px solid var(--accent);
     border-radius: 8px;
-    padding: 10px 14px 12px;
+    padding: 8px 14px 10px;
     background: var(--surface);
     break-inside: avoid;
+    page-break-inside: avoid;
   }
   .spot-main { min-width: 0; }
   .spot-head {
     display: flex;
     align-items: baseline;
     gap: 9px;
-    margin-bottom: 3px;
+    margin-bottom: 2px;
   }
   .spot-rank { font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; font-weight: 700; }
   .spot-name { font-size: 17px; font-weight: 800; letter-spacing: -0.02em; }
   .spot-head .chip { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 700; color: var(--muted); }
   .spot-head .swatch { width: 9px; height: 9px; border-radius: 50%; }
-  .spot-idx { font-size: 24px; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--accent-strong); line-height: 1; margin: 3px 0 8px; }
-  .spot-idx small { font-size: 11.5px; color: var(--muted); font-weight: 600; }
-  .compare { position: relative; height: 5px; background: var(--surface-2); border-radius: 999px; margin: 18px 2px 20px; }
-  .compare i { position: absolute; top: -5px; width: 2px; height: 15px; background: var(--muted); }
-  .compare i.self { background: var(--accent-strong); width: 3px; }
-  .compare em { position: absolute; top: -18px; transform: translateX(-50%); font-style: normal; font-size: 10.5px; color: var(--muted); white-space: nowrap; }
-  .compare em.self { color: var(--accent-strong); font-weight: 800; }
-  .compare em.below { top: auto; bottom: -16px; }
+  .spot-idx { font-size: 22px; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--danger); line-height: 1; margin: 3px 0 6px; }
+  .spot-idx small { font-size: 11.5px; color: var(--ink); font-weight: 600; }
+  .compare { position: relative; height: 5px; background: var(--surface-2); border-radius: 999px; margin: 16px 2px 18px; }
+  .compare i { position: absolute; top: -5px; width: 2px; height: 15px; background: var(--ink); }
+  .compare i.self { background: var(--ink); width: 3px; }
+  .compare em { position: absolute; top: -17px; transform: translateX(-50%); font-style: normal; font-size: 10.5px; color: var(--ink); white-space: nowrap; }
+  .compare em.self { color: var(--ink); font-weight: 800; }
+  .compare em.below { top: auto; bottom: -15px; }
 
   .wx-mini {
     width: 100%;
@@ -326,20 +370,20 @@
     overflow: hidden;
   }
   .wx-mini th {
-    font-size: 10.5px;
+    font-size: 11px;
     font-weight: 700;
     color: var(--muted);
     text-align: center;
-    padding: 6px 3px 2px;
+    padding: 7px 3px 2px;
   }
   .wx-mini td {
-    font-size: 14px;
+    font-size: 15px;
     font-weight: 800;
     font-variant-numeric: tabular-nums;
     text-align: center;
     padding: 2px 3px 8px;
   }
-  .wx-mini td small { font-size: 10.5px; font-weight: 600; color: var(--muted); }
+  .wx-mini td small { font-size: 11px; font-weight: 600; color: var(--muted); }
 
   /* ---------- Methodology ---------- */
   .method-grid {
@@ -373,14 +417,21 @@
   .report-footer strong { color: var(--ink-soft); }
 
   /* ---------- Cover sheet ---------- */
+  section.spread.cover-page {
+    margin-left: -28px;
+    margin-right: -28px;
+    padding: 0;
+    overflow: hidden;
+  }
   .cover-sheet {
     position: relative;
     min-height: 178mm;
-    padding: 12px 0 16px 18px;
+    padding: 18px 48px 28px 48px;
     display: flex;
     flex-direction: row;
     align-items: center;
     gap: 12px;
+    background: var(--bg);
   }
   .cover-accent {
     position: absolute;
@@ -388,10 +439,12 @@
     top: 0;
     bottom: 0;
     width: 8px;
-    background: linear-gradient(180deg, #166534 0%, #166534 48%, #b91c1c 52%, #b91c1c 100%);
+    background: linear-gradient(180deg, var(--accent) 0%, var(--accent) 48%, var(--danger) 52%, var(--danger) 100%);
     border-radius: 2px;
   }
   .cover-left {
+    position: relative;
+    z-index: 1;
     flex: 1 1 auto;
     min-width: 0;
     display: flex;
@@ -399,6 +452,8 @@
     justify-content: center;
   }
   .cover-right {
+    position: relative;
+    z-index: 1;
     flex: none;
     display: flex;
     flex-direction: column;
@@ -409,31 +464,31 @@
   .cover-banner {
     display: inline-block;
     align-self: flex-start;
-    background: #111827;
-    color: #fff;
-    font-size: 15px;
-    font-weight: 600;
+    background: var(--accent);
+    color: var(--accent-ink);
+    font-size: 14px;
+    font-weight: 700;
     letter-spacing: 0.02em;
-    padding: 10px 20px;
-    margin: 10px 0 24px;
+    padding: 8px 16px;
+    margin: 4px 0 18px;
   }
   .cover-main-title {
     margin: 0 0 12px;
     font-size: 44px;
     font-weight: 800;
     letter-spacing: -0.03em;
-    color: #111827;
+    color: var(--ink);
     line-height: 1.2;
   }
   .cover-sub {
     margin: 0 0 18px;
     font-size: 17px;
     font-weight: 600;
-    color: #166534;
+    color: var(--accent);
   }
   .cover-rule {
     border: 0;
-    border-top: 1px solid #e5e7eb;
+    border-top: 1px solid var(--line);
     margin: 0 0 20px;
   }
   .cover-meta {
@@ -445,12 +500,12 @@
   }
   .cover-meta dt {
     margin: 0;
-    color: #6b7280;
+    color: var(--muted);
     font-weight: 600;
   }
   .cover-meta dd {
     margin: 0;
-    color: #111827;
+    color: var(--ink);
     font-weight: 600;
   }
   .cover-summary {
@@ -458,7 +513,7 @@
     max-width: 42ch;
     font-size: 16px;
     line-height: 1.55;
-    color: #4b5563;
+    color: var(--ink-soft);
     word-break: keep-all;
   }
 </style>
@@ -491,13 +546,11 @@
             {% for arc in gauge.arcs %}
             <path d="{{ arc.path }}" stroke="{{ arc.color }}" stroke-width="22" fill="none" stroke-linecap="round"/>
             {% endfor %}
-            <line x1="150" y1="150" x2="{{ gauge.needle.x }}" y2="{{ gauge.needle.y }}" stroke="var(--ink)" stroke-width="4" stroke-linecap="round"/>
-            <circle cx="150" cy="150" r="8" fill="var(--ink)"/>
             {% for t in gauge.ticks %}
             <text x="{{ t.x }}" y="{{ t.y + 4 }}" text-anchor="middle" font-size="10" fill="var(--muted)">{{ t.v }}</text>
             {% endfor %}
             {% for c in gauge.captions %}
-            <line x1="{{ c.dot_x }}" y1="{{ c.dot_y }}" x2="{{ c.bx }}" y2="{{ c.by }}" stroke="#4b5563" stroke-width="1.3"/>
+            <line x1="{{ c.dot_x }}" y1="{{ c.dot_y }}" x2="{{ c.bx }}" y2="{{ c.by }}" stroke="#6b7280" stroke-width="1.3"/>
             <circle cx="{{ c.dot_x }}" cy="{{ c.dot_y }}" r="4.5" fill="#fff" stroke="#111827" stroke-width="2"/>
             <rect x="{{ c.rx }}" y="{{ c.ry }}" width="{{ c.rw }}" height="{{ c.rh }}" rx="12" fill="#fff" stroke="#111827" stroke-width="1.5"/>
             <text x="{{ c.bx }}" y="{{ c.ty }}" text-anchor="middle" font-size="12" font-weight="700" fill="#111827">{{ c.text }}</text>
@@ -659,8 +712,8 @@
         <span class="val">{{ "%.1f"|format(row.avg) }}</span>
       </div>
       {% endfor %}
+      <p class="footnote prov-chart-note">지수는 기상 4개 + 시군구 이력 2개 + 건조지수 + 강수파생 3개 변수를 결합한 상대값입니다. 점선은 전국 시군구 평균({{ "%.1f"|format(national.avg) }})입니다.</p>
     </div>
-    <p class="footnote">지수는 기상 4개 + 시군구 이력 2개 + 건조지수 + 강수파생 3개 변수를 결합한 상대값입니다. 점선은 전국 시군구 평균({{ "%.1f"|format(national.avg) }})입니다.</p>
   </section>
 
   <!-- 4: 상위 지역 상세 -->
