@@ -7,9 +7,9 @@ South Korea Wildfire Atlas — 시군구 산불 위험 지도·예측 웹서비�
 
 ## 주요 화면
 
-- 좌측: FORESTFIRE ATLAS KOREA 브랜드, 지역·산 통합 검색, 위험 표시(당일 예측 / 사용자 지정 / 과거 이력), 최근 산불 발생 피드
-- 지도: SVG 행정구역 + 카카오 위성, 범례는 우측 하단(예측 모드: 산불위험지수 0~100 · 예측일 · AUC)
-- 우측: 접을 수 있는 패널. 전체 산불 건수·갱신 날짜·갱신 버튼, 지역 미선택 시 전국 평균·최고 위험 시도 요약 → 선택 시 이력·산 상세. 로그인 시 지도 상단에 보고서 버튼
+- 좌측: FORESTFIRE ATLAS KOREA 브랜드, 지역·산 통합 검색, 위험 표시(당일 예측 / 사용자 지정 / 과거 이력), **최근 산불 발생** 피드(날짜만, 클릭 시 지도에 빨간 핀)
+- 지도: SVG 행정구역 + 카카오 위성. 산 검색은 **파란 핀**, 산불 이력 클릭은 **빨간 핀**. 범례는 우측 하단(예측 모드: 산불위험지수 0~100 · 예측일 · AUC)
+- 우측: 접을 수 있는 패널. 전체 산불 건수·갱신 날짜·갱신 버튼, 지역 미선택 시 전국 평균·최고 위험 시도 요약 → 선택 시 이력(날짜만)·산 상세(산림청 이미지). 로그인 시 지도 상단에 보고서 버튼
 - 사용자 지정: 접속월부터 12개월만 선택(기본값 다음 달). 월별 평년 기상에 프리셋(평년 / 건조·강풍 / 고온·건조 / 습함·비 많음)을 더해 슬라이더로 조정. API는 `year`/`month`/`weather` 그대로 전달
 - 기상 카드: 선택 지역이 있으면 해당 시군구(또는 시도 평균) 기상
 
@@ -17,10 +17,10 @@ South Korea Wildfire Atlas — 시군구 산불 위험 지도·예측 웹서비�
 
 | 프로세스 | 폴더 | 포트 | 역할 |
 |----------|------|------|------|
-| Next.js | `frontend/` | 3000 | UI · `/api` → Express 프록시 · 챗봇·로그인·보고서 모달 |
+| Next.js | `frontend/` | 3000 | UI · `/api` → Express 프록시 · 챗봇·로그인·보고서 모달 · 산 이미지 정적 파일 |
 | Express | `backend/` | 4000 | 공개 API · 회원/세션 · 챗봇 · 산불이력 맵 갱신 · 보고서 게이트 · Flask 프록시 · DTO 화이트리스트 |
-| Flask | `ml-service/` | 5000 | 예측 · PDF 렌더(Playwright) · localhost 전용 |
-| 배치 ETL | `etl/` | — | 전처리·학습 스크립트 (웹 요청에서 실행하지 않음) |
+| Flask | `ml-service/` | 5000 | 예측 · PDF 렌더(Playwright) · localhost 전용 · 당일 예측 DB 스냅샷 |
+| 배치 ETL | `etl/` | — | 전처리·학습·산 이미지·법정동 lookup (웹 요청에서 실행하지 않음) |
 
 ```
 브라우저 → Next(:3000) ─Route Handler─→ Express(:4000) → Flask(:5000)
@@ -43,7 +43,9 @@ South Korea Wildfire Atlas — 시군구 산불 위험 지도·예측 웹서비�
 | 예측용 lag 기상 (어제·그저께) | MariaDB `weather_daily_sigungu` | 실패 시 CSV 폴백 |
 | 학습용 기상 | MariaDB 우선 | 동일 테이블 / CSV 폴백 |
 | 지도 JSON | `frontend/public/data` + `backend/data` | 첫 로딩은 `/api/map/*`(`backend/data`). Express 불가 시에만 `frontend/public/data` 폴백. 웹 이력 갱신은 `backend/data`만 패치 |
-| 챗봇·리포트용 당일 예측 스냅샷 | `backend/data/daily_ml_risk.json` | Express가 예측 API 성공 시 저장. 챗봇은 예측 API 우선, 실패 시 파일 폴백 |
+| 챗봇·리포트용 당일 예측 스냅샷 | `backend/data/daily_ml_risk.json` | Express가 예측 API 성공 시 저장. Flask는 같은 결과를 MariaDB `daily_ml_risk_runs` / `daily_ml_risk_regions`에도 적재. 챗봇은 예측 API 우선, 실패 시 파일 폴백 |
+| 산 썸네일 | `frontend/public/data/mountain-images/` | 오프라인 `etl/pipeline/fetch_mountain_images.py` (산림청 산정보 OpenAPI). 런타임에 API를 치지 않음 |
+| 지역명 정규화 | `legal-dong-lookup.json` | UI는 `frontend/public/data`. Express는 `backend/data` → frontend 경로 폴백 |
 
 `refined_wildfire_data.csv` 는 더 이상 주 데이터가 아닙니다. DB가 정상이면 없어도 일상 운영(예측·이력 갱신·학습)이 가능합니다.
 
@@ -54,19 +56,20 @@ South Korea Wildfire Atlas — 시군구 산불 위험 지도·예측 웹서비�
 
 ```
 ForestFire/
-├── frontend/          Next.js UI (:3000)
+├── frontend/          Next.js UI (:3000, Docker standalone)
+│   ├── public/data/   폴백 지도 JSON · legal-dong-lookup · mountain-images
 │   └── src/           app · components · lib · app/api/[...path] 프록시
 ├── backend/           Express 공개 API (:4000, TypeScript)
 │   ├── data/          지도·daily_ml_risk JSON 사본
-│   ├── migrations/    챗봇 세션·소셜 로그인 등 SQL
+│   ├── migrations/    챗봇 세션·소셜 로그인·당일 예측 테이블 SQL
 │   └── src/
 ├── ml-service/        Flask (:5000, localhost)
 │   ├── models/        XGBoost 모델 JSON
 │   ├── reference/     시군구 hist · 관측소 매핑 CSV
-│   ├── predict/       예측 엔진 + weather_db · fire_db (MariaDB)
+│   ├── predict/       예측 엔진 + weather_db · fire_db · risk_snapshot_db
 │   ├── report/        지역별 PDF (Jinja2 + Playwright)
 │   └── routes/        health · predict · report
-├── etl/               오프라인 ETL · 분석 · 학습
+├── etl/               오프라인 ETL · 분석 · 학습 · 산 이미지
 ├── db/                로컬 대용량 CSV (Git 제외)
 └── db-archive/        ETL·분석 원본·중간 산출물 (Git 제외)
 ```
@@ -96,6 +99,8 @@ npm install
 npm run dev
 ```
 
+기동 시 당일 예측을 몇 번 재시도해 캐시에 올려 둡니다(Flask가 늦게 떠도 대비).
+
 ### 3) Next.js (`frontend`)
 
 ```powershell
@@ -108,14 +113,26 @@ npm run dev
 브라우저: http://localhost:3000  
 헬스: http://localhost:4000/api/health
 
+### Frontend Docker (선택)
+
+`next.config.ts` 는 `output: "standalone"` 입니다. Lightsail 등에서 UI만 컨테이너로 올릴 때:
+
+```powershell
+cd frontend
+docker compose --env-file .env.local up -d --build
+```
+
+빌드 인자로 `NEXT_PUBLIC_KAKAO_MAP_KEY` · `EXPRESS_URL` 이 들어갑니다. 호스트 80 → 컨테이너 3000. Express·Flask는 별도 프로세스입니다.
+
 ## 환경변수
 
 | 위치 | 키 | 용도 |
 |------|-----|------|
 | `ml-service/.env` | `KMA_API_AUTH_KEY` | 기상청 ASOS (당일 예측) |
-| `ml-service/.env` | `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME` | MariaDB (산불·lag 기상) |
+| `ml-service/.env` | `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME` | MariaDB (산불·lag 기상·당일 예측 스냅샷) |
 | `ml-service/.env` | `ML_HOST`, `ML_PORT` | 바인딩 (기본 `127.0.0.1:5000`) |
 | `ml-service/.env` | `FOREST_FIRE_SERVICE_KEY` | (선택) 레거시 OpenAPI 스크립트용 |
+| `etl/.env` 또는 루트 `.env` | `FOREST_MOUNTAIN_SERVICE_KEY` | 산림청 산정보·산 이미지 수집 (오프라인 ETL만) |
 | `backend/.env` | `PORT`, `FRONTEND_ORIGIN`, `ML_SERVICE_URL`, `PREDICT_CACHE_MS`, `DATA_DIR` | CORS · Flask URL · 예측 캐시 · 지도 데이터 폴더 |
 | `backend/.env` | `GEMINI_API_KEY`, `GEMINI_MODEL`(선택) | 안내 챗봇 (`/api/chat`) |
 | `backend/.env` | `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME` | 회원·챗봇·산불이력 동기화 (ml-service 와 동일 MariaDB 권장) |
@@ -131,14 +148,14 @@ npm run dev
 - 구글: `http://localhost:3000/api/auth/google/callback`
 - 카카오: **앱 → 플랫폼 키 → REST API 키** 하위에 `http://localhost:3000/api/auth/kakao/callback`
 
-`KMA_API_AUTH_KEY` / `DB_*` / `FOREST_FIRE_SERVICE_KEY` / `GEMINI_API_KEY` / `SESSION_SECRET` / `GOOGLE_CLIENT_SECRET` / `KAKAO_*` 는 프론트 `.env.local`에 두지 마세요.
+`KMA_API_AUTH_KEY` / `DB_*` / `FOREST_FIRE_SERVICE_KEY` / `FOREST_MOUNTAIN_SERVICE_KEY` / `GEMINI_API_KEY` / `SESSION_SECRET` / `GOOGLE_CLIENT_SECRET` / `KAKAO_*` 는 프론트 `.env.local`에 두지 마세요.
 
 ### backend와 frontend가 지도 데이터를 나눠 갖는 이유
 
 `frontend`와 `backend`는 지도 JSON(`map-data.json`, `admin-*.json`)을 각자 폴더에 **따로** 둡니다.
 
 - `backend/data` — 브라우저 첫 로딩(`/api/map/*`) · 웹 이력 갱신 · 챗봇 폴백
-- `frontend/public/data` — Express가 꺼져 있을 때의 폴백 · ETL 원본 배포본
+- `frontend/public/data` — Express가 꺼져 있을 때의 폴백 · ETL 원본 배포본 · 산 이미지 · 법정동 lookup
 
 원본 지도 JSON은 `etl`이 만듭니다. 오프라인에서 `frontend/public/data`를 갱신할 때
 `etl/paths.py`의 `sync_backend_data()`가 `backend/data`로도 복사합니다.
@@ -150,11 +167,14 @@ npm run dev
 
 당일 예측 스냅샷 `daily_ml_risk.json`은 Express가 `backend/data`에 저장합니다.
 
+산 이미지 파일은 Next 정적 경로(`/data/mountain-images/{산코드}.jpg`)입니다. Git에는 `.gitkeep`만 두고 이미지는 제외합니다.
+
 ## 회원 · 챗봇 · 보고서 (요약)
 
 | 기능 | 비회원 | 회원(로그인) |
 |------|--------|----------------|
 | 지도 · 당일/시나리오 예측 · 챗봇 Q&A | ✅ | ✅ |
+| 챗봇 「이전 대화내역 불러오기」 | ❌ | ✅ |
 | PDF 보고서 생성·다운로드 | ❌ | ✅ |
 | 챗봇 대화 DB 저장 | DB 설정 시 게스트 세션 | `user_id`로 묶여 기기 무관 이어짐 |
 
@@ -176,7 +196,7 @@ npm run dev
 - 챗봇: 예측 API(`runPredictDaily`) 우선 → 실패 시 `backend/data/daily_ml_risk.json`
 - 로그인 회원은 최근 대화를 `user_id` 기준으로 Gemini 맥락에 포함 (게스트는 `sessionId`). 로그인 직후 게스트로 쓰던 `sessionId`는 계정 히스토리에 합쳐집니다
 - 게스트 세션 ID는 브라우저 `localStorage`. HTTPS·localhost가 아니면 `crypto.randomUUID`가 없을 수 있어, 프론트에서 UUID v4 폴백으로 발급 (`frontend/src/components/ChatWidget.tsx`)
-- UI는 열 때 인삿말만 보이고, **「이전 대화내역 불러오기」**로 화면 복원. 헤더에 닉네임·회원/게스트 뱃지
+- UI는 열 때 인삿말만 보임. **「이전 대화내역 불러오기」는 로그인 회원만** 표시. 헤더에 닉네임·회원/게스트 뱃지
 - 「보고서/PDF 만들어줘」: **로그인 필수**. `regionFocus`가 확신 있는 지명만 추출(잡음·예시·따옴표 문장 제외). 순서는 현재 문장 → 최근 유저 발화 → 어시스턴트. 「전국」도 가능. 없으면 지역을 되물은 뒤 Flask `POST /report/pdf`
 - 보고서는 DB에 저장하지 않고, 생성 후 30분 TTL로 다운로드만 제공합니다
 - 지도 **보고서** 모달의 PDF는 blob 다운로드(화면 유지). 모달은 상단 오버레이가 범례보다 위. 챗봇 PDF는 다운로드 링크
@@ -196,6 +216,7 @@ npm run dev
 | 학습 | `etl/ml/train_wildfire_xgb.py` (기상·산불: MariaDB 우선) |
 | 추론 | `ml-service/predict/daily.py` |
 | 산출물 | `ml-service/models/wildfire_xgb_*.json`, `ml-service/reference/sigungu_hist_state.csv` 등 |
+| DB 스냅샷 | `daily_ml_risk_runs` + `daily_ml_risk_regions` (`backend/migrations/002_daily_ml_risk.sql`) |
 
 CLI 예측:
 
@@ -203,6 +224,8 @@ CLI 예측:
 cd ml-service
 python -m predict.daily --kma
 ```
+
+당일 KMA 예측이 끝나면 Flask가 MariaDB에도 UPSERT 합니다(시나리오 예측은 넣지 않음). 테이블이 없거나 `DB_*`가 비어 있으면 로그만 남기고 예측 HTTP는 그대로 응답합니다.
 
 ## 산불 이력 갱신 (MariaDB)
 
@@ -241,7 +264,7 @@ python etl/pipeline/sync_wildfire_history.py
 **챗봇 · 보고서**
 
 - `POST /api/chat` — body: `{ message, sessionId? }` (비로그인 가능; 보고서 요청은 회원; 회원은 user 기준 히스토리; PDF 지역은 대화 맥락·`regionFocus`)
-- `GET /api/chat/history` — 최근 대화 (회원=`user_id`, 게스트=`sessionId`; UI는 버튼으로 불러오기)
+- `GET /api/chat/history` — 최근 대화 (회원=`user_id`, 게스트=`sessionId`). **UI 불러오기 버튼은 회원만**
 - `GET /api/report/daily` — JSON 요약 (**회원**)
 - `POST /api/report/pdf` — body: `{ regionQuery? }` → 다운로드 메타 (**회원**, 비우면 전국)
 - `GET /api/report/download/:id` — PDF 바이너리 (**회원**, 메모리 TTL 30분, `Content-Disposition: attachment`)
@@ -261,9 +284,12 @@ python etl/pipeline/sync_wildfire_history.py
 python etl/pipeline/preprocess.py
 python etl/pipeline/preprocess_weather.py
 python etl/pipeline/load_korea_mountains.py
+python etl/pipeline/build_legal_dong_lookup.py
 python etl/analyze/analyze_wildfire_mountain_events.py
 python etl/map/build_admin_layers.py
 python etl/map/export_map_data.py
+python etl/pipeline/fetch_mountain_images.py
+python etl/map/compress_web_data.py
 python etl/ml/train_wildfire_xgb.py
 cd ml-service; python -m predict.daily --kma
 ```

@@ -14,6 +14,8 @@ npm run dev
 기본 포트: `4000`  
 Flask URL: `ML_SERVICE_URL` (기본 `http://127.0.0.1:5000`)
 
+기동 직후 당일 예측을 몇 번 재시도해 메모리 캐시에 올려 둡니다(`src/index.ts` warmup). Flask가 늦게 떠도 프론트가 바로 실패하지 않게 하기 위함입니다.
+
 ## 환경변수 (`backend/.env`)
 
 | 키 | 기본 | 용도 |
@@ -48,9 +50,11 @@ Flask URL: `ML_SERVICE_URL` (기본 `http://127.0.0.1:5000`)
 **맵 · 예측 · 동기화**
 
 - `GET /api/health`
-- `GET /api/map/data` · `/api/map/admin/:level`
+- `GET /api/map/data` · `/api/map/admin/:level`  
+  (`sido` \| `sigungu` \| `emd`. JSON은 `readJsonCached` — 파일 mtime 기준 인메모리 캐시. 응답 `Cache-Control: public, max-age=60`)
 - `POST /api/predict/daily` · `POST /api/predict/scenario`  
-  (`scenario` body: `{ year, month, weather }`. UI는 접속월부터 12개월, 월별 평년 + 프리셋으로 슬라이더를 채움)
+  (`scenario` body: `{ year, month, weather }`. UI는 접속월부터 12개월, 월별 평년 + 프리셋으로 슬라이더를 채움)  
+  당일 예측 성공 시 `DATA_DIR/daily_ml_risk.json`에 스냅샷 저장 (챗봇 폴백)
 - `POST /api/wildfires/sync` · `GET /api/wildfires/sync/status` — MariaDB → `backend/data` 이력 패치
 
 **회원** (로컬 아이디/비밀번호, 구글/카카오 OAuth)
@@ -69,7 +73,8 @@ Flask URL: `ML_SERVICE_URL` (기본 `http://127.0.0.1:5000`)
   - 「보고서/PDF」요청: **로그인 필수** → `lib/regionFocus.ts` `extractRegionLabel`이 확신 있는 지명만 추출  
     (잡음·「예시)」·따옴표 문장 제외. 「전국」가능)  
     순서: 현재 메시지 → 최근 유저 발화 → 어시스턴트 → 없으면 되묻기 → PDF 생성 후 `pdf.downloadPath` 반환
-- `GET /api/chat/history` — 최근 대화 조회 (회원=`user_id`, 게스트=`?sessionId=`; UI는 「이전 대화내역 불러오기」로 호출)
+- `GET /api/chat/history` — 최근 대화 조회 (회원=`user_id`, 게스트=`?sessionId=`)  
+  **프론트 UI의 「이전 대화내역 불러오기」는 로그인 회원만 표시**합니다. 비회원은 인삿말만 보고 세션 중 대화만 이어갑니다.
 
 **보고서** (로그인 필수, DB에 파일 저장 안 함)
 
@@ -79,6 +84,8 @@ Flask URL: `ML_SERVICE_URL` (기본 `http://127.0.0.1:5000`)
 - `GET /api/report/download/:id` — PDF 바이너리 (메모리 보관, TTL 30분, `Content-Disposition: attachment`)
 
 PDF 본체는 `lib/reportService.ts` → Flask `POST /report/pdf` (Jinja2 + Playwright)입니다.
+
+산 썸네일 파일은 Express가 서빙하지 않습니다. `map-data.json`의 `image_url`은 Next 정적 경로(`/data/mountain-images/…`)입니다. 화이트리스트는 `mountains` 객체를 그대로 통과시킵니다.
 
 ### 회원가입 규칙
 
@@ -92,12 +99,17 @@ PDF 본체는 `lib/reportService.ts` → Flask `POST /report/pdf` (Jinja2 + Play
 - `GET /api/auth/me` 응답에 `expiresAt` 포함 → 프론트가 타이머·안내 모달 표시
 - `POST /api/auth/extend` — 세션 연장 (새 쿠키 발급)
 
+### 지역명 정규화
+
+산불 이력의 `region` 약칭은 `lib/regionPath.ts`가 법정동 lookup으로 공식명에 가깝게 맞춥니다.  
+lookup 탐색 순서: `DATA_DIR/legal-dong-lookup.json` → `frontend/public/data/legal-dong-lookup.json` → `db-archive/processed/legal_dong_lookup.json`.
+
 ### DB 마이그레이션
 
 | 파일 | 내용 |
 |------|------|
 | `001_membership_chatbot.sql` | 챗봇 세션·메시지 테이블 |
-| `002_daily_ml_risk.sql` | 당일 예측 캐시 |
+| `002_daily_ml_risk.sql` | 당일 예측 캐시 (`daily_ml_risk_runs` · `daily_ml_risk_regions`). **적재는 Flask** `predict/risk_snapshot_db.py` |
 | `003_users_drop_unused_columns.sql` | 미사용 컬럼 정리 |
 | `005_users_social_oauth.sql` | `login_id` NULL 허용, `email`·`social_id` 추가, 소셜 유니크 인덱스 |
 

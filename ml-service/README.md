@@ -22,7 +22,7 @@ python app.py
 | 키 | 용도 |
 |----|------|
 | `KMA_API_AUTH_KEY` | 기상청 ASOS (당일 예측) |
-| `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME` | MariaDB (산불 `forestfire_stats`, 기상 `weather_daily_sigungu`) |
+| `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME` | MariaDB (산불 `forestfire_stats`, 기상 `weather_daily_sigungu`, 당일 스냅샷 `daily_ml_risk_*`) |
 | `ML_HOST` | 기본 `127.0.0.1` |
 | `ML_PORT` | 기본 `5000` |
 | `FOREST_FIRE_SERVICE_KEY` | (선택) 레거시 OpenAPI ETL 스크립트용 — 웹 동기화에는 불필요 |
@@ -31,6 +31,10 @@ python app.py
 예측(`predict/daily.py` 등)은 `ml_paths.py`, `predict/kma_client.py`로 `etl/` 없이도 동작합니다.  
 웹 산불이력 갱신은 Express(`POST /api/wildfires/sync`)가 처리합니다.  
 챗봇·웹 리포트가 읽는 당일 스냅샷은 Express가 `backend/data/daily_ml_risk.json`에 저장합니다. Flask CLI(`python -m predict.daily`)가 남기는 파일은 위의 `WEB_DATA_DIR`입니다.
+
+당일 KMA 예측이 끝나면 `predict/risk_snapshot_db.py`가 같은 MariaDB에  
+`daily_ml_risk_runs` 1행 + `daily_ml_risk_regions`(시군구)를 UPSERT 합니다.  
+스키마는 `backend/migrations/002_daily_ml_risk.sql`. 테이블이 없거나 `DB_*`가 비어 있으면 로그만 남기고 예측 응답은 막지 않습니다. **시나리오 예측은 DB에 넣지 않습니다.**
 
 ## 예측 시 기상 출처
 
@@ -94,6 +98,7 @@ ml-service/
 │   ├── daily.py
 │   ├── weather_db.py      # MariaDB lag/학습 기상
 │   ├── fire_db.py         # MariaDB forestfire_stats
+│   ├── risk_snapshot_db.py  # 당일 예측 → daily_ml_risk_runs / regions
 │   ├── dwi.py · precip_features.py
 │   ├── kma_client.py
 │   └── scenario_weather.py
