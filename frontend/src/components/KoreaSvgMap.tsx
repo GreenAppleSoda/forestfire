@@ -1095,7 +1095,7 @@ export function KoreaSvgMap({
     [fillOf, level],
   );
 
-  const satPaletteKey = `${riskMode}:${daily?.predict_date ?? ""}:${scenario?.predict_date ?? ""}:${level}:${blankPredictMap ? "blank" : "filled"}`;
+  const satPaletteKey = `${riskMode}:${daily?.predict_date ?? ""}:${scenario?.predict_date ?? ""}:${scenario?.scenario_summary ?? ""}:${level}:${blankPredictMap ? "blank" : "filled"}`;
 
   const probLabel =
     riskMode === "daily"
