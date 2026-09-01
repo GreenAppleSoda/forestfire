@@ -1,4 +1,4 @@
-"""MariaDB weather_daily_sigungu — 전체 로드(학습) · lag 조회(예측)"""
+"""MariaDB weather_daily_sigungu — 전체 로드(학습) · lag 조회(예측) · 월 평년."""
 
 from __future__ import annotations
 
@@ -13,6 +13,8 @@ logger = logging.getLogger(__name__)
 _lag_cache: dict[str, dict[str, dict[date, tuple[float | None, float | None]]]] = {}
 # pred_date|lookback → sigungu_code → {obs_date → precip}
 _precip_hist_cache: dict[str, dict[str, dict[date, float]]] = {}
+# MONTH(obs_date) 1..12 → 기온·습도·바람·강수 전 기간 평균 (성공 시에만 채움)
+_month_clim_cache: dict[int, dict[str, Any]] | None = None
 
 
 def _load_root_env() -> None:
@@ -165,8 +167,184 @@ def fetch_lag_index_for_pred_date(
 
 
 def clear_lag_cache() -> None:
+    global _month_clim_cache
     _lag_cache.clear()
     _precip_hist_cache.clear()
+    _month_clim_cache = None
+
+
+def fetch_month_climatology(month: int | None = None) -> dict[int, dict[str, Any]]:
+    """weather_daily_sigungu 해당 월 · 전 기간 평균과 10·90분위.
+
+    month를 주면 그달만 조회해 캐시에 넣는다. 평균(mean)과 p10/p90을 같이 둔다.
+    반환: month(1..12) → {
+      temp_avg, humidity_avg, wind_avg, precip,
+      temp_p10, temp_p90, humidity_p10, humidity_p90,
+      wind_p10, wind_p90, precip_p10, precip_p90,
+      start_date, end_date, n_rows, n_years
+    }
+    DB 미설정·실패 시 해당 월은 비어 있음 (호출측 폴백).
+    """
+    global _month_clim_cache
+    if _month_clim_cache is None:
+        _month_clim_cache = {}
+    if month is None:
+        return _month_clim_cache
+    m = int(month)
+    if m < 1 or m > 12:
+        return _month_clim_cache
+    if m in _month_clim_cache:
+        return _month_clim_cache
+    row = _query_month_climatology(m)
+    if row:
+        _month_clim_cache[m] = row
+    return _month_clim_cache
+
+
+def _query_month_climatology(month: int) -> dict[str, Any] | None:
+    cfg = db_config()
+    if cfg is None:
+        logger.warning("DB_* 환경변수 없음 — 월 평년은 DB에서 읽지 않음")
+        return None
+
+    try:
+        import pymysql
+    except ImportError:
+        logger.warning("PyMySQL 미설치 — 월 평년 미조회")
+        return None
+
+    try:
+        conn = pymysql.connect(**{**cfg, "read_timeout": 60})
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT
+                      AVG(temp_avg) AS temp_avg,
+                      MIN(temp_p10) AS temp_p10,
+                      MIN(temp_p90) AS temp_p90,
+                      AVG(humidity_avg) AS humidity_avg,
+                      MIN(humidity_p10) AS humidity_p10,
+                      MIN(humidity_p90) AS humidity_p90,
+                      AVG(wind_avg) AS wind_avg,
+                      MIN(wind_p10) AS wind_p10,
+                      MIN(wind_p90) AS wind_p90,
+                      AVG(precip) AS precip,
+                      MIN(precip_p10) AS precip_p10,
+                      MIN(precip_p90) AS precip_p90,
+                      MIN(obs_date) AS start_date,
+                      MAX(obs_date) AS end_date,
+                      COUNT(*) AS n_rows,
+                      COUNT(DISTINCT y) AS n_years
+                    FROM (
+                      SELECT
+                        temp_avg,
+                        humidity_avg,
+                        wind_avg,
+                        COALESCE(precip, 0) AS precip,
+                        obs_date,
+                        YEAR(obs_date) AS y,
+                        PERCENTILE_CONT(0.1) WITHIN GROUP (ORDER BY temp_avg)
+                          OVER () AS temp_p10,
+                        PERCENTILE_CONT(0.9) WITHIN GROUP (ORDER BY temp_avg)
+                          OVER () AS temp_p90,
+                        PERCENTILE_CONT(0.1) WITHIN GROUP (ORDER BY humidity_avg)
+                          OVER () AS humidity_p10,
+                        PERCENTILE_CONT(0.9) WITHIN GROUP (ORDER BY humidity_avg)
+                          OVER () AS humidity_p90,
+                        PERCENTILE_CONT(0.1) WITHIN GROUP (ORDER BY wind_avg)
+                          OVER () AS wind_p10,
+                        PERCENTILE_CONT(0.9) WITHIN GROUP (ORDER BY wind_avg)
+                          OVER () AS wind_p90,
+                        PERCENTILE_CONT(0.1) WITHIN GROUP (ORDER BY COALESCE(precip, 0))
+                          OVER () AS precip_p10,
+                        PERCENTILE_CONT(0.9) WITHIN GROUP (ORDER BY COALESCE(precip, 0))
+                          OVER () AS precip_p90
+                      FROM weather_daily_sigungu
+                      WHERE MONTH(obs_date) = %s
+                    ) t
+                    """,
+                    (month,),
+                )
+                rec = cur.fetchone()
+        finally:
+            conn.close()
+    except Exception as e:
+        logger.warning("MariaDB 월 평년·분위 조회 실패 month=%s: %s", month, e)
+        return None
+
+    if not rec:
+        return None
+
+    (
+        temp_avg,
+        temp_p10,
+        temp_p90,
+        humidity_avg,
+        humidity_p10,
+        humidity_p90,
+        wind_avg,
+        wind_p10,
+        wind_p90,
+        precip,
+        precip_p10,
+        precip_p90,
+        start_date,
+        end_date,
+        n_rows,
+        n_years,
+    ) = rec
+    t = _as_float(temp_avg)
+    h = _as_float(humidity_avg)
+    w = _as_float(wind_avg)
+    p = _as_float(precip)
+    if t is None or h is None or w is None or p is None:
+        return None
+
+    sd = _as_date(start_date)
+    ed = _as_date(end_date)
+    out = {
+        "temp_avg": round(t, 1),
+        "humidity_avg": round(h, 1),
+        "wind_avg": round(w, 1),
+        "precip": round(max(0.0, p), 1),
+        "temp_p10": _as_float(temp_p10),
+        "temp_p90": _as_float(temp_p90),
+        "humidity_p10": _as_float(humidity_p10),
+        "humidity_p90": _as_float(humidity_p90),
+        "wind_p10": _as_float(wind_p10),
+        "wind_p90": _as_float(wind_p90),
+        "precip_p10": _as_float(precip_p10),
+        "precip_p90": _as_float(precip_p90),
+        "start_date": sd.isoformat() if sd else None,
+        "end_date": ed.isoformat() if ed else None,
+        "n_rows": int(n_rows or 0),
+        "n_years": int(n_years or 0),
+    }
+    for key in (
+        "temp_p10",
+        "temp_p90",
+        "humidity_p10",
+        "humidity_p90",
+        "wind_p10",
+        "wind_p90",
+        "precip_p10",
+        "precip_p90",
+    ):
+        val = out[key]
+        if val is not None:
+            if key.startswith("precip"):
+                out[key] = round(max(0.0, float(val)), 1)
+            else:
+                out[key] = round(float(val), 1)
+
+    logger.info(
+        "MariaDB 월 평년·분위 month=%s years=%s n=%s",
+        month,
+        out["n_years"],
+        out["n_rows"],
+    )
+    return out
 
 
 def fetch_precip_history_for_pred_date(

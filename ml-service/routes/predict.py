@@ -56,6 +56,28 @@ def predict_daily():
         return jsonify({"ok": False, "error": "predict_failed", "detail": str(e)}), 500
 
 
+@bp.get("/scenario/baseline")
+def scenario_baseline():
+    """지정 월의 weather_daily_sigungu 전 기간 평균 (슬라이더 평년값)."""
+    from predict.scenario_weather import month_baseline_payload
+
+    try:
+        month = int(request.args.get("month"))
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "error": "month required"}), 400
+    try:
+        data = month_baseline_payload(month)
+    except ValueError as e:
+        return jsonify({"ok": False, "error": "invalid_month", "detail": str(e)}), 400
+    log.info(
+        "scenario baseline month=%s source=%s n_years=%s",
+        data.get("month"),
+        data.get("source"),
+        data.get("n_years"),
+    )
+    return jsonify({"ok": True, "data": data})
+
+
 @bp.post("/scenario")
 def predict_scenario():
     """연·월 + 가정 기상 → 시군구 산불 확률 (사용자 지정 탭)."""

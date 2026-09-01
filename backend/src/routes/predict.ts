@@ -1,5 +1,6 @@
 import { Router } from "express";
 import {
+  getScenarioBaseline,
   runPredictDaily,
   runPredictScenario,
 } from "../lib/predictService.js";
@@ -58,6 +59,26 @@ router.post("/predict/scenario", async (req, res) => {
     return res.json({ ok: true, data: result.data, cached: result.cached });
   } catch (e) {
     console.error("[predict/scenario]", e);
+    return res.status(502).json({
+      ok: false,
+      error: "예측 서버에 연결할 수 없습니다.",
+    });
+  }
+});
+
+router.get("/predict/scenario/baseline", async (req, res) => {
+  try {
+    const month = Number(req.query.month);
+    const result = await getScenarioBaseline(month);
+    if (!result.ok) {
+      return res.status(result.status || 502).json({
+        ok: false,
+        error: result.error,
+      });
+    }
+    return res.json({ ok: true, data: result.data });
+  } catch (e) {
+    console.error("[predict/scenario/baseline]", e);
     return res.status(502).json({
       ok: false,
       error: "예측 서버에 연결할 수 없습니다.",

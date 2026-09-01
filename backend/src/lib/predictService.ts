@@ -4,8 +4,10 @@ import type {
   PredictDailyBody,
   PredictResult,
   PredictScenarioBody,
+  ScenarioBaselineDto,
+  ScenarioBaselineWeather,
 } from "../types.js";
-import { callFlaskPredict, callFlaskScenario } from "./mlClient.js";
+import { callFlaskPredict, callFlaskScenario, callFlaskScenarioBaseline } from "./mlClient.js";
 import { saveDailyMlRiskToFile } from "./riskSnapshot.js";
 import { whitelistDailyRisk } from "./whitelist.js";
 
@@ -54,6 +56,81 @@ export async function runPredictScenario(
     cached: false,
     status: 200,
   };
+}
+
+function parseWeather(raw: unknown): ScenarioBaselineWeather | null {
+  if (!raw || typeof raw !== "object") return null;
+  const w = raw as Record<string, unknown>;
+  const temp = Number(w.temp_avg);
+  const humidity = Number(w.humidity_avg);
+  const wind = Number(w.wind_avg);
+  const precip = Number(w.precip);
+  if (![temp, humidity, wind, precip].every(Number.isFinite)) return null;
+  return {
+    temp_avg: temp,
+    humidity_avg: humidity,
+    wind_avg: wind,
+    precip: precip,
+  };
+}
+
+export async function getScenarioBaseline(month: number): Promise<
+  | { ok: true; data: ScenarioBaselineDto; status: 200 }
+  | { ok: false; error: string; status: number }
+> {
+  if (!Number.isInteger(month) || month < 1 || month > 12) {
+    return { ok: false, error: "월을 입력해 주세요.", status: 400 };
+  }
+
+  const { status, json } = await callFlaskScenarioBaseline(month);
+  const raw = json.data;
+  if (!json.ok || status >= 400 || !raw || typeof raw !== "object") {
+    console.error(
+      "[predict/scenario/baseline] ml-service error",
+      status,
+      json.error,
+      json.detail,
+    );
+    return {
+      ok: false,
+      error: "평년 기상을 불러오지 못했습니다.",
+      status: 502,
+    };
+  }
+
+  const obj = raw as Record<string, unknown>;
+  const weather = parseWeather(obj.weather);
+  if (!weather) {
+    return {
+      ok: false,
+      error: "평년 기상을 불러오지 못했습니다.",
+      status: 502,
+    };
+  }
+
+  const presets: Record<string, ScenarioBaselineWeather> = {};
+  if (obj.presets && typeof obj.presets === "object") {
+    for (const [id, value] of Object.entries(
+      obj.presets as Record<string, unknown>,
+    )) {
+      const parsed = parseWeather(value);
+      if (parsed) presets[id] = parsed;
+    }
+  }
+  if (!presets.normal) presets.normal = weather;
+
+  const data: ScenarioBaselineDto = {
+    month: Number(obj.month) || month,
+    weather,
+    presets,
+    source: typeof obj.source === "string" ? obj.source : "fallback",
+    start_date: typeof obj.start_date === "string" ? obj.start_date : null,
+    end_date: typeof obj.end_date === "string" ? obj.end_date : null,
+    n_rows: typeof obj.n_rows === "number" ? obj.n_rows : undefined,
+    n_years: typeof obj.n_years === "number" ? obj.n_years : undefined,
+  };
+
+  return { ok: true, data, status: 200 };
 }
 
 export async function runPredictDaily(

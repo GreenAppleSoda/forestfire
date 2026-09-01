@@ -48,6 +48,42 @@ export async function callFlaskScenario(
   return postJson(`${ML_SERVICE_URL}/predict/scenario`, body, 120_000);
 }
 
+async function getJson(url: string, timeoutMs: number): Promise<FlaskResponse> {
+  try {
+    const r = await fetch(url, {
+      method: "GET",
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    const text = await r.text();
+    let json: FlaskJson = {};
+    try {
+      json = JSON.parse(text) as FlaskJson;
+    } catch {
+      json = {
+        ok: false,
+        error: "ml_service_non_json",
+        detail: text.slice(0, 200),
+      };
+    }
+    return { status: r.status, json };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return {
+      status: 502,
+      json: { ok: false, error: "ml_service_unreachable", detail: msg },
+    };
+  }
+}
+
+export async function callFlaskScenarioBaseline(
+  month: number,
+): Promise<FlaskResponse> {
+  return getJson(
+    `${ML_SERVICE_URL}/predict/scenario/baseline?month=${month}`,
+    90_000,
+  );
+}
+
 export type FlaskReportPdfResult =
   | { ok: true; status: number; buffer: Buffer; filename: string; regionLabel: string }
   | { ok: false; status: number; json: FlaskJson };

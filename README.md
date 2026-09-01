@@ -10,7 +10,7 @@ South Korea Wildfire Atlas — 시군구 산불 위험 지도·예측 웹서비�
 - 좌측: FORESTFIRE ATLAS KOREA 브랜드, 지역·산 통합 검색, 위험 표시(당일 예측 / 사용자 지정 / 과거 이력), **최근 산불 발생** 피드(날짜만, 클릭 시 지도에 빨간 핀)
 - 지도: SVG 행정구역 + 카카오 위성. 산 검색은 **파란 핀**, 산불 이력 클릭은 **빨간 핀**. 범례는 우측 하단(예측 모드: 산불위험지수 0~100 · 예측일 · AUC)
 - 우측: 접을 수 있는 패널. 전체 산불 건수·갱신 날짜·갱신 버튼, 지역 미선택 시 전국 평균·최고 위험 시도 요약 → 선택 시 이력(날짜만)·산 상세(산림청 이미지). 로그인 시 지도 상단에 보고서 버튼
-- 사용자 지정: 접속월부터 12개월만 선택(기본값 다음 달). 월별 평년 기상에 프리셋(평년 / 건조·강풍 / 고온·건조 / 습함·비 많음)을 더해 슬라이더로 조정. API는 `year`/`month`/`weather` 그대로 전달
+- 사용자 지정: 접속월부터 12개월(기본값 다음 달). 슬라이더 평년은 MariaDB `weather_daily_sigungu`에서 선택한 달의 전 기간·전국 시군구 일자료 평균. 건조·강풍 / 고온·건조 / 습함·비 많음은 같은 달 분포의 10·90분위(모드를 정의하는 변수만, 나머지는 평년). 예측은 `year`/`month`/`weather`를 그대로 전달
 - 기상 카드: 선택 지역이 있으면 해당 시군구(또는 시도 평균) 기상
 
 ## 런타임 구조 (역할 분리)
@@ -249,8 +249,9 @@ python etl/pipeline/sync_wildfire_history.py
 - `GET /api/map/data`
 - `GET /api/map/admin/:level` (`sido` \| `sigungu` \| `emd`)
 - `POST /api/predict/daily` — body: `{ source, force, date?, weather? }`
+- `GET /api/predict/scenario/baseline?month=9` — 해당 월 평년·프리셋 기상 (`weather_daily_sigungu` 월평균 + 10·90분위)
 - `POST /api/predict/scenario` — body: `{ year, month, weather: { temp_avg, humidity_avg, wind_avg, precip } }`  
-  (UI는 접속월부터 12개월, 기본 다음 달. 월별 평년 + 프리셋으로 기상 슬라이더를 채움)
+  (UI는 접속월부터 12개월, 기본 다음 달. baseline API로 슬라이더를 채움)
 - `POST /api/wildfires/sync` — MariaDB 산불 이력 → 맵 갱신
 - `GET /api/wildfires/sync/status`
 
@@ -273,6 +274,7 @@ python etl/pipeline/sync_wildfire_history.py
 
 - `GET /health`
 - `POST /predict/daily` — Express만 호출
+- `GET /predict/scenario/baseline?month=` — 월 평년·프리셋 기상. Express만 호출
 - `POST /predict/scenario` — Express만 호출
 - `POST /report/pdf` — body: `{ region }` — Express만 호출 (PDF 바이트)
 

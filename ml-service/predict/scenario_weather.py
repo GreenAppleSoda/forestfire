@@ -1,10 +1,10 @@
-"""사용자 지정(시나리오) 기상 — 월 평년 + 슬라이더 값 → cli_weather."""
+"""사용자 지정(시나리오) 기상 — 월 평년(DB) + 슬라이더 값 → cli_weather."""
 
 from __future__ import annotations
 
 from typing import Any
 
-# 한국 월별 대략 평년 (전국 평균 근사) — 슬라이더 기본값
+# DB 조회 실패 시 슬라이더 폴백 — 한국 월별 대략 평년 (전국 평균 근사)
 # temp_avg℃, humidity_avg%, wind_avg m/s, precip mm/day
 MONTH_BASELINE: dict[int, dict[str, float]] = {
     1: {"temp_avg": 0.0, "humidity_avg": 58.0, "wind_avg": 2.4, "precip": 0.8},
@@ -28,24 +28,48 @@ SLIDER_RANGES = {
     "precip": {"min": 0, "max": 40, "step": 0.5},
 }
 
-# 프리셋: baseline 대비 가산 (월 무관 델타) 또는 absolute 키 혼용
-PRESETS: dict[str, dict[str, Any]] = {
+# 프리셋: 그달 DB 분포. mean=평년, p10/p90=WMO 기후극한(10·90분위).
+# 모드를 정의하는 변수만 분위, 나머지는 평년.
+PRESET_IDS = ("normal", "dry_windy", "hot_dry", "wet")
+PRESET_LABELS = {
+    "normal": "평년",
+    "dry_windy": "건조·강풍",
+    "hot_dry": "고온·건조",
+    "wet": "습함·비 많음",
+}
+PRESET_STATS: dict[str, dict[str, str]] = {
     "normal": {
-        "label": "평년",
-        "deltas": {"temp_avg": 0, "humidity_avg": 0, "wind_avg": 0, "precip": 0},
+        "temp_avg": "mean",
+        "humidity_avg": "mean",
+        "wind_avg": "mean",
+        "precip": "mean",
     },
     "dry_windy": {
-        "label": "건조·강풍",
-        "deltas": {"temp_avg": 2, "humidity_avg": -20, "wind_avg": 3.5, "precip": -1},
+        "temp_avg": "mean",
+        "humidity_avg": "p10",
+        "wind_avg": "p90",
+        "precip": "p10",
     },
     "hot_dry": {
-        "label": "고온·건조",
-        "deltas": {"temp_avg": 5, "humidity_avg": -25, "wind_avg": 1.5, "precip": -1},
+        "temp_avg": "p90",
+        "humidity_avg": "p10",
+        "wind_avg": "mean",
+        "precip": "p10",
     },
     "wet": {
-        "label": "습함·비 많음",
-        "deltas": {"temp_avg": -1, "humidity_avg": 15, "wind_avg": -0.5, "precip": 12},
+        "temp_avg": "mean",
+        "humidity_avg": "p90",
+        "wind_avg": "mean",
+        "precip": "p90",
     },
+}
+
+# DB 실패 시에만 쓰는 가산치
+_FALLBACK_DELTAS: dict[str, dict[str, float]] = {
+    "normal": {"temp_avg": 0, "humidity_avg": 0, "wind_avg": 0, "precip": 0},
+    "dry_windy": {"temp_avg": 0, "humidity_avg": -20, "wind_avg": 3.5, "precip": -1},
+    "hot_dry": {"temp_avg": 5, "humidity_avg": -25, "wind_avg": 0, "precip": -1},
+    "wet": {"temp_avg": 0, "humidity_avg": 15, "wind_avg": 0, "precip": 12},
 }
 
 
@@ -53,17 +77,79 @@ def clamp(v: float, lo: float, hi: float) -> float:
     return max(lo, min(hi, v))
 
 
+def _weather_only(row: dict[str, Any]) -> dict[str, float]:
+    return {
+        "temp_avg": float(row["temp_avg"]),
+        "humidity_avg": float(row["humidity_avg"]),
+        "wind_avg": float(row["wind_avg"]),
+        "precip": float(row["precip"]),
+    }
+
+
+def _stat_key(col: str, stat: str) -> str:
+    if stat == "mean":
+        return col
+    suffix = "p10" if stat == "p10" else "p90"
+    if col.endswith("_avg"):
+        return f"{col[:-4]}_{suffix}"
+    return f"{col}_{suffix}"
+
+
+def _pick_stat(row: dict[str, Any], col: str, stat: str) -> float | None:
+    key = _stat_key(col, stat)
+    val = row.get(key)
+    if val is None:
+        val = row.get(col)
+    try:
+        return float(val)
+    except (TypeError, ValueError):
+        return None
+
+
+def _weather_from_row(row: dict[str, Any], preset_id: str) -> dict[str, float] | None:
+    specs = PRESET_STATS.get(preset_id) or PRESET_STATS["normal"]
+    out: dict[str, float] = {}
+    for col, stat in specs.items():
+        v = _pick_stat(row, col, stat)
+        if v is None:
+            return None
+        if col == "precip":
+            v = max(0.0, v)
+        out[col] = v
+    return _clamp_weather(out)
+
+
 def month_baseline(month: int) -> dict[str, float]:
+    """지정 월 평년 기상. weather_daily_sigungu 월평균, 없으면 고정 표."""
     m = int(month)
     if m < 1 or m > 12:
         raise ValueError("month must be 1..12")
+    try:
+        from predict.weather_db import fetch_month_climatology
+
+        row = fetch_month_climatology(m).get(m)
+        if row:
+            return _weather_only(row)
+    except Exception:
+        pass
     return dict(MONTH_BASELINE[m])
 
 
 def apply_preset(month: int, preset_id: str) -> dict[str, float]:
-    base = month_baseline(month)
-    preset = PRESETS.get(preset_id) or PRESETS["normal"]
-    deltas = preset["deltas"]
+    pid = preset_id if preset_id in PRESET_STATS else "normal"
+    m = int(month)
+    try:
+        from predict.weather_db import fetch_month_climatology
+
+        row = fetch_month_climatology(m).get(m)
+        if row:
+            built = _weather_from_row(row, pid)
+            if built:
+                return built
+    except Exception:
+        pass
+    base = dict(MONTH_BASELINE[m])
+    deltas = _FALLBACK_DELTAS.get(pid) or _FALLBACK_DELTAS["normal"]
     out = {
         "temp_avg": base["temp_avg"] + float(deltas["temp_avg"]),
         "humidity_avg": base["humidity_avg"] + float(deltas["humidity_avg"]),
@@ -71,6 +157,50 @@ def apply_preset(month: int, preset_id: str) -> dict[str, float]:
         "precip": max(0.0, base["precip"] + float(deltas["precip"])),
     }
     return _clamp_weather(out)
+
+
+def month_baseline_payload(month: int) -> dict[str, Any]:
+    """프론트 슬라이더용: 월 평년·프리셋 + 출처(기간)."""
+    m = int(month)
+    if m < 1 or m > 12:
+        raise ValueError("month must be 1..12")
+
+    source = "fallback"
+    meta: dict[str, Any] = {}
+    try:
+        from predict.weather_db import fetch_month_climatology
+
+        row = fetch_month_climatology(m).get(m)
+        if row:
+            source = "weather_daily_sigungu"
+            meta = {
+                "start_date": row.get("start_date"),
+                "end_date": row.get("end_date"),
+                "n_rows": row.get("n_rows"),
+                "n_years": row.get("n_years"),
+            }
+            presets = {
+                pid: _weather_from_row(row, pid) or apply_preset(m, pid)
+                for pid in PRESET_IDS
+            }
+            return {
+                "month": m,
+                "weather": presets["normal"],
+                "presets": presets,
+                "source": source,
+                **meta,
+            }
+    except Exception:
+        pass
+
+    presets = {pid: apply_preset(m, pid) for pid in PRESET_IDS}
+    return {
+        "month": m,
+        "weather": presets["normal"],
+        "presets": presets,
+        "source": source,
+        **meta,
+    }
 
 
 def _clamp_weather(w: dict[str, float]) -> dict[str, float]:

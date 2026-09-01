@@ -51,6 +51,24 @@ export type PredictScenarioBody = {
   preset?: string;
 };
 
+export type ScenarioBaselineWeather = {
+  temp_avg: number;
+  humidity_avg: number;
+  wind_avg: number;
+  precip: number;
+};
+
+export type ScenarioBaselineDto = {
+  month: number;
+  weather: ScenarioBaselineWeather;
+  presets?: Record<string, ScenarioBaselineWeather>;
+  source: string;
+  start_date?: string | null;
+  end_date?: string | null;
+  n_rows?: number;
+  n_years?: number;
+};
+
 export type PredictResult =
   | { ok: true; data: DailyRiskDto | null; cached: boolean; status: 200 }
   | { ok: false; error: string; status: number };

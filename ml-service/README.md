@@ -42,6 +42,10 @@ python app.py
 |------|------|
 | 예측일 당일 | 기상청 ASOS API |
 | lag-1 · lag-2 (어제·그저께) | MariaDB `weather_daily_sigungu` (실패 시 CSV) |
+| 사용자 지정 평년 | 같은 테이블에서 **선택한 달**의 전 기간·전국 시군구 일자료 평균. 연도는 평균에 넣지 않음 |
+| 사용자 지정 프리셋 | 같은 달 분포의 10·90분위. 모드를 정의하는 변수만 분위, 나머지는 평년 (WMO ETCCDI 관례). 건조·강풍: 습도·강수 P10 · 바람 P90. 고온·건조: 기온 P90 · 습도·강수 P10. 습함·비 많음: 습도·강수 P90. DB 실패 시 코드의 월별 근사 표 + 가산치 폴백 |
+
+`GET /predict/scenario/baseline?month=` 가 평년·프리셋 숫자를 돌려 주고, UI가 슬라이더를 채운 뒤 `POST /predict/scenario`에 `weather`를 넘깁니다. 월별 조회는 프로세스 메모리에 캐시합니다.
 
 ## 예측 엔진 (`predict/`)
 
@@ -81,6 +85,7 @@ python -m report.generate --region "부산 중구"
 |--------|------|------|
 | `GET` | `/health` | 헬스 |
 | `POST` | `/predict/daily` | 당일 예측 |
+| `GET` | `/predict/scenario/baseline` | 월 평년·프리셋 기상 (`?month=1..12`) |
 | `POST` | `/predict/scenario` | 가정 기상 시나리오 예측 |
 | `POST` | `/report/pdf` | 지역별 산불위험 PDF (body: `{region}`) |
 
@@ -96,12 +101,12 @@ ml-service/
 ├── requirements.txt
 ├── predict/
 │   ├── daily.py
-│   ├── weather_db.py      # MariaDB lag/학습 기상
+│   ├── weather_db.py      # MariaDB lag/학습 기상 · 월 평년·10/90분위
 │   ├── fire_db.py         # MariaDB forestfire_stats
 │   ├── risk_snapshot_db.py  # 당일 예측 → daily_ml_risk_runs / regions
 │   ├── dwi.py · precip_features.py
 │   ├── kma_client.py
-│   └── scenario_weather.py
+│   └── scenario_weather.py  # 시나리오 평년·프리셋 → cli_weather
 ├── routes/
 │   ├── health.py
 │   ├── predict.py

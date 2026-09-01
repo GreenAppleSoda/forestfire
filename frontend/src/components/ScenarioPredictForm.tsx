@@ -2,7 +2,7 @@
 
 import type { DailyMlRisk } from "@/lib/types";
 import { readApiJson } from "@/lib/apiJson";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 type Props = {
   onPredicted: (data: DailyMlRisk) => void;
@@ -15,7 +15,8 @@ type WeatherSliders = {
   precip: number;
 };
 
-const MONTH_BASELINE: Record<number, WeatherSliders> = {
+/** DB 조회 전·실패 시 슬라이더 폴백 */
+const FALLBACK_BASELINE: Record<number, WeatherSliders> = {
   1: { temp_avg: 0, humidity_avg: 58, wind_avg: 2.4, precip: 0.8 },
   2: { temp_avg: 2, humidity_avg: 56, wind_avg: 2.6, precip: 1.0 },
   3: { temp_avg: 7.5, humidity_avg: 55, wind_avg: 2.8, precip: 1.5 },
@@ -30,38 +31,78 @@ const MONTH_BASELINE: Record<number, WeatherSliders> = {
   12: { temp_avg: 2, humidity_avg: 58, wind_avg: 2.5, precip: 1.0 },
 };
 
-const PRESETS: { id: string; label: string; deltas: WeatherSliders }[] = [
-  { id: "normal", label: "평년", deltas: { temp_avg: 0, humidity_avg: 0, wind_avg: 0, precip: 0 } },
-  {
-    id: "dry_windy",
-    label: "건조·강풍",
-    deltas: { temp_avg: 2, humidity_avg: -20, wind_avg: 3.5, precip: -1 },
-  },
-  {
-    id: "hot_dry",
-    label: "고온·건조",
-    deltas: { temp_avg: 5, humidity_avg: -25, wind_avg: 1.5, precip: -1 },
-  },
-  {
-    id: "wet",
-    label: "습함·비 많음",
-    deltas: { temp_avg: -1, humidity_avg: 15, wind_avg: -0.5, precip: 12 },
-  },
+const PRESETS: { id: string; label: string }[] = [
+  { id: "normal", label: "평년" },
+  { id: "dry_windy", label: "건조·강풍" },
+  { id: "hot_dry", label: "고온·건조" },
+  { id: "wet", label: "습함·비 많음" },
 ];
+
+/** DB 실패 시에만 평년 폴백에 더함 */
+const FALLBACK_DELTAS: Record<string, WeatherSliders> = {
+  normal: { temp_avg: 0, humidity_avg: 0, wind_avg: 0, precip: 0 },
+  dry_windy: { temp_avg: 0, humidity_avg: -20, wind_avg: 3.5, precip: -1 },
+  hot_dry: { temp_avg: 5, humidity_avg: -25, wind_avg: 0, precip: -1 },
+  wet: { temp_avg: 0, humidity_avg: 15, wind_avg: 0, precip: 12 },
+};
+
+const PRESET_NOTES: Record<string, string> = {
+  dry_windy: "습도·강수 하위 10% · 바람 상위 10%",
+  hot_dry: "기온 상위 10% · 습도·강수 하위 10%",
+  wet: "습도·강수 상위 10%",
+};
 
 function clamp(v: number, lo: number, hi: number) {
   return Math.max(lo, Math.min(hi, v));
 }
 
-function applyPreset(month: number, presetId: string): WeatherSliders {
-  const base = MONTH_BASELINE[month] ?? MONTH_BASELINE[3];
-  const preset = PRESETS.find((p) => p.id === presetId) ?? PRESETS[0];
+function clampWeather(w: WeatherSliders): WeatherSliders {
   return {
-    temp_avg: clamp(base.temp_avg + preset.deltas.temp_avg, -10, 38),
-    humidity_avg: clamp(base.humidity_avg + preset.deltas.humidity_avg, 15, 95),
-    wind_avg: clamp(base.wind_avg + preset.deltas.wind_avg, 0.5, 12),
-    precip: clamp(Math.max(0, base.precip + preset.deltas.precip), 0, 40),
+    temp_avg: clamp(w.temp_avg, -10, 38),
+    humidity_avg: clamp(w.humidity_avg, 15, 95),
+    wind_avg: clamp(w.wind_avg, 0.5, 12),
+    precip: clamp(Math.max(0, w.precip), 0, 40),
   };
+}
+
+function applyFallbackPreset(base: WeatherSliders, presetId: string): WeatherSliders {
+  const d = FALLBACK_DELTAS[presetId] ?? FALLBACK_DELTAS.normal;
+  return clampWeather({
+    temp_avg: base.temp_avg + d.temp_avg,
+    humidity_avg: base.humidity_avg + d.humidity_avg,
+    wind_avg: base.wind_avg + d.wind_avg,
+    precip: Math.max(0, base.precip + d.precip),
+  });
+}
+
+function weatherFromPreset(
+  presets: Record<string, WeatherSliders> | null,
+  base: WeatherSliders,
+  presetId: string,
+): WeatherSliders {
+  const fromDb = presets?.[presetId];
+  if (fromDb) return clampWeather(fromDb);
+  return applyFallbackPreset(base, presetId);
+}
+
+function parseWeather(raw: WeatherSliders | undefined): WeatherSliders | null {
+  if (!raw) return null;
+  const w: WeatherSliders = {
+    temp_avg: Number(raw.temp_avg),
+    humidity_avg: Number(raw.humidity_avg),
+    wind_avg: Number(raw.wind_avg),
+    precip: Number(raw.precip),
+  };
+  if (
+    ![w.temp_avg, w.humidity_avg, w.wind_avg, w.precip].every(Number.isFinite)
+  ) {
+    return null;
+  }
+  return w;
+}
+
+function fallbackFor(month: number): WeatherSliders {
+  return FALLBACK_BASELINE[month] ?? FALLBACK_BASELINE[3];
 }
 
 function addMonths(year: number, month: number, offset: number) {
@@ -85,16 +126,119 @@ const YEAR_MONTH_OPTIONS = (() => {
   return Array.from({ length: 12 }, (_, i) => addMonths(startYear, startMonth, i));
 })();
 
+type BaselineMeta = {
+  source: string;
+  start_date?: string | null;
+  end_date?: string | null;
+  n_years?: number;
+};
+
 export function ScenarioPredictForm({ onPredicted }: Props) {
   const initial = defaultYearMonth();
   const [year, setYear] = useState(initial.year);
   const [month, setMonth] = useState(initial.month);
   const [presetId, setPresetId] = useState("normal");
+  const [baseline, setBaseline] = useState<WeatherSliders>(() =>
+    fallbackFor(initial.month),
+  );
+  const [presets, setPresets] = useState<Record<string, WeatherSliders> | null>(
+    null,
+  );
+  const [baselineMeta, setBaselineMeta] = useState<BaselineMeta | null>(null);
   const [weather, setWeather] = useState<WeatherSliders>(() =>
-    applyPreset(initial.month, "normal"),
+    applyFallbackPreset(fallbackFor(initial.month), "normal"),
   );
   const [loading, setLoading] = useState(false);
+  const [baselineLoading, setBaselineLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const presetIdRef = useRef(presetId);
+  presetIdRef.current = presetId;
+  const baselineCache = useRef<
+    Record<
+      number,
+      {
+        weather: WeatherSliders;
+        presets: Record<string, WeatherSliders>;
+        meta: BaselineMeta;
+      }
+    >
+  >({});
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const applyLoaded = (
+      base: WeatherSliders,
+      nextPresets: Record<string, WeatherSliders> | null,
+      meta: BaselineMeta | null,
+    ) => {
+      setBaseline(base);
+      setPresets(nextPresets);
+      setBaselineMeta(meta);
+      setWeather(weatherFromPreset(nextPresets, base, presetIdRef.current));
+    };
+
+    const cached = baselineCache.current[month];
+    if (cached) {
+      applyLoaded(cached.weather, cached.presets, cached.meta);
+      setBaselineLoading(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setBaselineLoading(true);
+    applyLoaded(fallbackFor(month), null, null);
+
+    void (async () => {
+      try {
+        const res = await fetch(
+          `/api/predict/scenario/baseline?month=${month}`,
+        );
+        const json = await readApiJson<{
+          ok?: boolean;
+          error?: string;
+          data?: {
+            weather?: WeatherSliders;
+            presets?: Record<string, WeatherSliders>;
+            source?: string;
+            start_date?: string | null;
+            end_date?: string | null;
+            n_years?: number;
+          };
+        }>(res);
+        if (cancelled) return;
+        const weatherIn = parseWeather(json.data?.weather);
+        if (!res.ok || !json.ok || !weatherIn) return;
+        const parsedPresets: Record<string, WeatherSliders> = {};
+        for (const [id, value] of Object.entries(json.data?.presets ?? {})) {
+          const w = parseWeather(value);
+          if (w) parsedPresets[id] = w;
+        }
+        if (!parsedPresets.normal) parsedPresets.normal = weatherIn;
+        const meta: BaselineMeta = {
+          source: json.data?.source || "weather_daily_sigungu",
+          start_date: json.data?.start_date,
+          end_date: json.data?.end_date,
+          n_years: json.data?.n_years,
+        };
+        baselineCache.current[month] = {
+          weather: weatherIn,
+          presets: parsedPresets,
+          meta,
+        };
+        applyLoaded(weatherIn, parsedPresets, meta);
+      } catch {
+        /* 폴백 유지 */
+      } finally {
+        if (!cancelled) setBaselineLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [month]);
 
   const summary = useMemo(
     () =>
@@ -102,16 +246,31 @@ export function ScenarioPredictForm({ onPredicted }: Props) {
     [year, month, weather],
   );
 
+  const baselineNote = useMemo(() => {
+    if (baselineMeta?.source !== "weather_daily_sigungu") return null;
+    const y0 = baselineMeta.start_date?.slice(0, 4);
+    const y1 = baselineMeta.end_date?.slice(0, 4);
+    const span = y0 && y1 ? `${y0}–${y1}년 ${month}월` : `${month}월`;
+    const years =
+      typeof baselineMeta.n_years === "number"
+        ? ` · ${baselineMeta.n_years}개년`
+        : "";
+    if (presetId === "normal" || presetId === "custom") {
+      return `평년: DB ${span} 평균${years}`;
+    }
+    const extra = PRESET_NOTES[presetId];
+    return extra ? `DB ${span}${years} · ${extra}` : `DB ${span}${years}`;
+  }, [baselineMeta, month, presetId]);
+
   const setYearMonth = (y: number, m: number) => {
     setYear(y);
     setMonth(m);
     setPresetId("normal");
-    setWeather(applyPreset(m, "normal"));
   };
 
   const pickPreset = (id: string) => {
     setPresetId(id);
-    setWeather(applyPreset(month, id));
+    setWeather(weatherFromPreset(presets, baseline, id));
   };
 
   const patchSlider = (key: keyof WeatherSliders, value: number) => {
@@ -249,6 +408,15 @@ export function ScenarioPredictForm({ onPredicted }: Props) {
       </div>
 
       <p className="mt-2 text-[10px] leading-snug text-[#6b7280]">{summary}</p>
+      {baselineLoading ? (
+        <p className="mt-0.5 text-[9px] leading-snug text-[#9ca3af]">
+          DB 월 분포 불러오는 중…
+        </p>
+      ) : baselineNote ? (
+        <p className="mt-0.5 text-[9px] leading-snug text-[#9ca3af]">
+          {baselineNote}
+        </p>
+      ) : null}
 
       <button
         type="button"

@@ -52,9 +52,11 @@ Flask URL: `ML_SERVICE_URL` (기본 `http://127.0.0.1:5000`)
 - `GET /api/health`
 - `GET /api/map/data` · `/api/map/admin/:level`  
   (`sido` \| `sigungu` \| `emd`. JSON은 `readJsonCached` — 파일 mtime 기준 인메모리 캐시. 응답 `Cache-Control: public, max-age=60`)
-- `POST /api/predict/daily` · `POST /api/predict/scenario`  
-  (`scenario` body: `{ year, month, weather }`. UI는 접속월부터 12개월, 월별 평년 + 프리셋으로 슬라이더를 채움)  
+- `POST /api/predict/daily`  
   당일 예측 성공 시 `DATA_DIR/daily_ml_risk.json`에 스냅샷 저장 (챗봇 폴백)
+- `GET /api/predict/scenario/baseline?month=` — 월 평년·프리셋 기상 (Flask 프록시)
+- `POST /api/predict/scenario` — body: `{ year, month, weather }`  
+  (UI는 접속월부터 12개월. 슬라이더는 baseline API의 DB 월평균·10·90분위)
 - `POST /api/wildfires/sync` · `GET /api/wildfires/sync/status` — MariaDB → `backend/data` 이력 패치
 
 **회원** (로컬 아이디/비밀번호, 구글/카카오 OAuth)
